@@ -4,7 +4,10 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
 const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const technicalDomain = 'app.omegadistribuidora.com.br'
+
 const sellerOrigin = 'oracle_sellers'
+const supervisorOrigin = 'oracle_supervisors'
+const coordinatorOrigin = 'oracle_coordinators'
 
 type SellerPayload = {
   code: string
@@ -16,8 +19,17 @@ type SellerPayload = {
   coordinatorName?: string
 }
 
+type NamedRolePayload = {
+  code: string
+  displayName: string
+}
+
 function technicalEmailFromCode(code: string) {
   return `${code.trim().toLowerCase()}@${technicalDomain}`
+}
+
+function technicalEmailFromLogin(login: string) {
+  return `${login.trim().toLowerCase()}@${technicalDomain}`
 }
 
 function sanitizeDigits(value: string) {
@@ -30,6 +42,39 @@ function sellerInitialPassword(cpf: string) {
     throw new Error('CPF inválido para geração da senha inicial do vendedor.')
   }
   return digits.slice(0, 3)
+}
+
+function placeholderPassword() {
+  return `Tmp-${crypto.randomUUID()}-A1!`
+}
+
+function normalizeText(value: string) {
+  return value.trim()
+}
+
+function normalizeCompare(value: string) {
+  return normalizeText(value).toLowerCase()
+}
+
+function extractFirstLoginToken(displayName: string) {
+  const beforeSlash = normalizeText(displayName).split('/')[0] ?? ''
+  return normalizeText(beforeSlash).split(/\s+/)[0] ?? ''
+}
+
+function isAutoManagedProfileSlug(profileSlug: string) {
+  return (
+    profileSlug === 'vendedor' ||
+    profileSlug === 'supervisor' ||
+    profileSlug === 'coordenador'
+  )
+}
+
+function isCodeBasedProfileSlug(profileSlug: string) {
+  return (
+    profileSlug === 'vendedor' ||
+    profileSlug === 'supervisor' ||
+    profileSlug === 'coordenador'
+  )
 }
 
 async function requireProfileSlug(
@@ -49,20 +94,99 @@ async function requireProfileSlug(
   return String(profile.slug ?? '').trim().toLowerCase()
 }
 
-async function requireSellerProfileId(
+async function requireProfileIdBySlug(
   adminClient: ReturnType<typeof createClient>,
+  slug: string,
 ) {
   const { data: profile, error } = await adminClient
     .from('app_profiles')
     .select('id')
-    .eq('slug', 'vendedor')
+    .eq('slug', slug)
     .single()
 
   if (error || !profile) {
-    throw new Error('Perfil vendedor não encontrado.')
+    throw new Error(`Perfil ${slug} não encontrado.`)
   }
 
   return String(profile.id)
+}
+
+async function ensureLoginAliasAvailable(
+  adminClient: ReturnType<typeof createClient>,
+  {
+    loginAlias,
+    currentUserId,
+  }: {
+    loginAlias: string
+    currentUserId?: string
+  },
+) {
+  const normalizedAlias = normalizeCompare(loginAlias)
+  if (!normalizedAlias) {
+    return
+  }
+
+  const { data: users, error } = await adminClient
+    .from('app_users')
+    .select(
+      'auth_user_id, code, display_name, login_alias, profile:app_profiles!app_users_profile_id_fkey(slug)',
+    )
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  for (const row of users ?? []) {
+    const user = row as Record<string, unknown>
+    const userId = String(user.auth_user_id ?? '')
+    if (currentUserId && userId === currentUserId) {
+      continue
+    }
+
+    const code = String(user.code ?? '').trim()
+    const displayName = String(user.display_name ?? '').trim()
+    const existingAlias = String(user.login_alias ?? '').trim()
+    const profileSlug = String(
+      (user.profile as Record<string, unknown> | null)?.slug ?? '',
+    ).trim()
+
+    if (
+      (profileSlug === 'vendedor' || profileSlug === 'admin') &&
+      normalizeCompare(code) === normalizedAlias
+    ) {
+      throw new Error(
+        `O login personalizado entra em conflito com o código de login do usuário ${code}.`,
+      )
+    }
+
+    if (existingAlias && normalizeCompare(existingAlias) === normalizedAlias) {
+      throw new Error(
+        `O login personalizado entra em conflito com o login já configurado para ${code}${displayName ? ` - ${displayName}` : ''}.`,
+      )
+    }
+
+    if (
+      profileSlug !== 'vendedor' &&
+      displayName &&
+      normalizeCompare(displayName) === normalizedAlias
+    ) {
+      throw new Error(
+        `O login personalizado entra em conflito com o nome de exibição de ${code} - ${displayName}.`,
+      )
+    }
+
+    if (
+      (profileSlug === 'supervisor' || profileSlug === 'coordenador') &&
+      !existingAlias
+    ) {
+      const firstToken = extractFirstLoginToken(displayName)
+      if (firstToken && normalizeCompare(firstToken) === normalizedAlias) {
+        throw new Error(
+          `O login personalizado entra em conflito com o primeiro nome usado no login de ${code} - ${displayName}.`,
+        )
+      }
+    }
+  }
 }
 
 function json(body: unknown, init?: ResponseInit) {
@@ -113,17 +237,18 @@ async function createUser(payload: Record<string, unknown>) {
   const code = String(payload.code ?? '').trim()
   const password = String(payload.password ?? '').trim()
   const displayName = String(payload.displayName ?? '').trim()
+  const loginAlias = String(payload.loginAlias ?? '').trim()
   const profileId = String(payload.profileId ?? '').trim()
   const isActive = Boolean(payload.isActive ?? true)
 
-  if (!code || !password || !profileId) {
+  if (!password || !profileId) {
     throw new Error('Código, senha e perfil são obrigatórios.')
   }
 
   const profileSlug = await requireProfileSlug(adminClient, profileId)
-  if (profileSlug === 'vendedor') {
+  if (isAutoManagedProfileSlug(profileSlug)) {
     throw new Error(
-      'Vendedores devem ser sincronizados pelo script automático do Oracle.',
+      'Usuários de vendedor, supervisor e coordenador devem ser sincronizados pelo script automático do Oracle.',
     )
   }
   if (!displayName) {
@@ -132,7 +257,24 @@ async function createUser(payload: Record<string, unknown>) {
     )
   }
 
-  const technicalEmail = technicalEmailFromCode(code)
+  if (isCodeBasedProfileSlug(profileSlug) && !code) {
+    throw new Error('Codigo obrigatorio para este perfil.')
+  }
+
+  const effectiveLoginAlias = profileSlug === 'admin' ? 'admin' : loginAlias
+  if (!isCodeBasedProfileSlug(profileSlug) && !effectiveLoginAlias) {
+    throw new Error('Login obrigatorio para este perfil.')
+  }
+
+  if (profileSlug !== 'vendedor' && effectiveLoginAlias) {
+    await ensureLoginAliasAvailable(adminClient, {
+      loginAlias: effectiveLoginAlias,
+    })
+  }
+
+  const technicalEmail = isCodeBasedProfileSlug(profileSlug)
+    ? technicalEmailFromCode(code)
+    : technicalEmailFromLogin(effectiveLoginAlias)
 
   const { data, error } = await adminClient.auth.admin.createUser({
     email: technicalEmail,
@@ -148,12 +290,19 @@ async function createUser(payload: Record<string, unknown>) {
   const { data: updatedUser, error: updateError } = await adminClient
     .from('app_users')
     .update({
-      code,
+      code: isCodeBasedProfileSlug(profileSlug)
+        ? code
+        : profileSlug === 'admin'
+        ? 'admin'
+        : null,
       technical_email: technicalEmail,
       display_name: displayName,
+      login_alias:
+        profileSlug === 'vendedor' ? null : effectiveLoginAlias || null,
       profile_id: profileId,
       is_active: isActive,
       origin: 'manual',
+      requires_admin_password_definition: false,
     })
     .eq('auth_user_id', data.user.id)
     .select()
@@ -171,11 +320,12 @@ async function updateUser(payload: Record<string, unknown>) {
   const userId = String(payload.userId ?? '').trim()
   const code = String(payload.code ?? '').trim()
   const displayName = String(payload.displayName ?? '').trim()
+  const loginAlias = String(payload.loginAlias ?? '').trim()
   const profileId = String(payload.profileId ?? '').trim()
   const isActive = Boolean(payload.isActive ?? true)
   const newPassword = String(payload.newPassword ?? '').trim()
 
-  if (!userId || !code || !profileId) {
+  if (!userId || !profileId) {
     throw new Error('Usuário, código e perfil são obrigatórios.')
   }
 
@@ -186,7 +336,25 @@ async function updateUser(payload: Record<string, unknown>) {
     )
   }
 
-  const technicalEmail = technicalEmailFromCode(code)
+  if (isCodeBasedProfileSlug(profileSlug) && !code) {
+    throw new Error('Codigo obrigatorio para este perfil.')
+  }
+
+  const effectiveLoginAlias = profileSlug === 'admin' ? 'admin' : loginAlias
+  if (!isCodeBasedProfileSlug(profileSlug) && !effectiveLoginAlias) {
+    throw new Error('Login obrigatorio para este perfil.')
+  }
+
+  if (profileSlug !== 'vendedor' && effectiveLoginAlias) {
+    await ensureLoginAliasAvailable(adminClient, {
+      loginAlias: effectiveLoginAlias,
+      currentUserId: userId,
+    })
+  }
+
+  const technicalEmail = isCodeBasedProfileSlug(profileSlug)
+    ? technicalEmailFromCode(code)
+    : technicalEmailFromLogin(effectiveLoginAlias)
   const updateAuthPayload: Record<string, unknown> = {
     email: technicalEmail,
     user_metadata: { display_name: displayName },
@@ -205,15 +373,27 @@ async function updateUser(payload: Record<string, unknown>) {
     throw new Error(authError.message)
   }
 
+  const updatePayload: Record<string, unknown> = {
+    code: isCodeBasedProfileSlug(profileSlug)
+      ? code
+      : profileSlug === 'admin'
+      ? 'admin'
+      : null,
+    technical_email: technicalEmail,
+    display_name: displayName,
+    login_alias:
+      profileSlug === 'vendedor' ? null : effectiveLoginAlias || null,
+    profile_id: profileId,
+    is_active: isActive,
+  }
+
+  if (newPassword) {
+    updatePayload.requires_admin_password_definition = false
+  }
+
   const { data: updatedUser, error: updateError } = await adminClient
     .from('app_users')
-    .update({
-      code,
-      technical_email: technicalEmail,
-      display_name: displayName,
-      profile_id: profileId,
-      is_active: isActive,
-    })
+    .update(updatePayload)
     .eq('auth_user_id', userId)
     .select()
     .single()
@@ -241,25 +421,11 @@ async function deleteUser(payload: Record<string, unknown>) {
   return { success: true }
 }
 
-async function syncSellers(payload: Record<string, unknown>) {
-  const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey)
-  const rawSellers = Array.isArray(payload.sellers) ? payload.sellers : []
-  const deactivateMissing = Boolean(payload.deactivateMissing ?? true)
-  const sellerProfileId = await requireSellerProfileId(adminClient)
-
-  const sellers = rawSellers
-    .filter((item): item is Record<string, unknown> => item !== null && typeof item === 'object')
-    .map((item) => ({
-      code: String(item.code ?? '').trim(),
-      displayName: String(item.displayName ?? '').trim(),
-      cpf: sanitizeDigits(String(item.cpf ?? '')),
-      supervisorCode: String(item.supervisorCode ?? '').trim(),
-      supervisorName: String(item.supervisorName ?? '').trim(),
-      coordinatorCode: String(item.coordinatorCode ?? '').trim(),
-      coordinatorName: String(item.coordinatorName ?? '').trim(),
-    }))
-    .filter((item) => item.code && item.displayName && item.cpf.length >= 3)
-
+async function syncSellerUsers(
+  adminClient: ReturnType<typeof createClient>,
+  sellers: SellerPayload[],
+) {
+  const sellerProfileId = await requireProfileIdBySlug(adminClient, 'vendedor')
   const codes = [...new Set(sellers.map((item) => item.code))]
   const activeCodeSet = new Set(codes)
   const existingUsersByCode = new Map<string, Record<string, unknown>>()
@@ -267,7 +433,9 @@ async function syncSellers(payload: Record<string, unknown>) {
   if (codes.length > 0) {
     const { data: existingUsers, error } = await adminClient
       .from('app_users')
-      .select('auth_user_id, code, profile_id, origin')
+      .select(
+        'auth_user_id, code, display_name, profile_id, origin, requires_admin_password_definition',
+      )
       .in('code', codes)
 
     if (error) {
@@ -282,6 +450,7 @@ async function syncSellers(payload: Record<string, unknown>) {
   let created = 0
   let updated = 0
   let skipped = 0
+  let nameResets = 0
 
   for (const seller of sellers) {
     const technicalEmail = technicalEmailFromCode(seller.code)
@@ -289,12 +458,23 @@ async function syncSellers(payload: Record<string, unknown>) {
 
     if (existing) {
       const userId = String(existing.auth_user_id)
+      const currentDisplayName = String(existing.display_name ?? '')
+      const nameChanged =
+        currentDisplayName.trim() !== '' &&
+        normalizeCompare(currentDisplayName) !==
+          normalizeCompare(seller.displayName)
+
+      const authPayload: Record<string, unknown> = {
+        email: technicalEmail,
+        user_metadata: { display_name: seller.displayName },
+      }
+      if (nameChanged) {
+        authPayload.password = sellerInitialPassword(seller.cpf)
+      }
+
       const { error: authError } = await adminClient.auth.admin.updateUserById(
         userId,
-        {
-          email: technicalEmail,
-          user_metadata: { display_name: seller.displayName },
-        },
+        authPayload,
       )
 
       if (authError) {
@@ -315,6 +495,7 @@ async function syncSellers(payload: Record<string, unknown>) {
           coordinator_code: seller.coordinatorCode || null,
           coordinator_name: seller.coordinatorName || null,
           origin: sellerOrigin,
+          requires_admin_password_definition: false,
         })
         .eq('auth_user_id', userId)
 
@@ -323,19 +504,26 @@ async function syncSellers(payload: Record<string, unknown>) {
       }
 
       updated += 1
+      if (nameChanged) {
+        nameResets += 1
+      }
       continue
     }
 
     const initialPassword = sellerInitialPassword(seller.cpf)
-    const { data, error: createError } = await adminClient.auth.admin.createUser({
-      email: technicalEmail,
-      password: initialPassword,
-      email_confirm: true,
-      user_metadata: { display_name: seller.displayName },
-    })
+    const { data, error: createError } = await adminClient.auth.admin.createUser(
+      {
+        email: technicalEmail,
+        password: initialPassword,
+        email_confirm: true,
+        user_metadata: { display_name: seller.displayName },
+      },
+    )
 
     if (createError || !data.user) {
-      if (createError?.message?.toLowerCase().includes('already been registered')) {
+      if (
+        createError?.message?.toLowerCase().includes('already been registered')
+      ) {
         skipped += 1
         continue
       }
@@ -356,6 +544,7 @@ async function syncSellers(payload: Record<string, unknown>) {
         coordinator_code: seller.coordinatorCode || null,
         coordinator_name: seller.coordinatorName || null,
         origin: sellerOrigin,
+        requires_admin_password_definition: false,
       })
       .eq('auth_user_id', data.user.id)
 
@@ -367,44 +556,285 @@ async function syncSellers(payload: Record<string, unknown>) {
   }
 
   let deactivated = 0
-  if (deactivateMissing) {
-    const { data: syncedSellers, error } = await adminClient
+  const { data: syncedUsers, error } = await adminClient
+    .from('app_users')
+    .select('auth_user_id, code')
+    .eq('profile_id', sellerProfileId)
+    .eq('origin', sellerOrigin)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  for (const row of syncedUsers ?? []) {
+    const code = String(row.code ?? '').trim()
+    if (!code || activeCodeSet.has(code)) {
+      continue
+    }
+
+    const { error: updateError } = await adminClient
       .from('app_users')
-      .select('auth_user_id, code')
-      .eq('profile_id', sellerProfileId)
-      .eq('origin', sellerOrigin)
+      .update({ is_active: false })
+      .eq('auth_user_id', String(row.auth_user_id))
+
+    if (updateError) {
+      throw new Error(updateError.message)
+    }
+
+    deactivated += 1
+  }
+
+  return { created, updated, skipped, deactivated, nameResets }
+}
+
+async function syncNamedRoleUsers({
+  adminClient,
+  rawUsers,
+  profileSlug,
+  origin,
+}: {
+  adminClient: ReturnType<typeof createClient>
+  rawUsers: NamedRolePayload[]
+  profileSlug: 'supervisor' | 'coordenador'
+  origin: string
+}) {
+  const profileId = await requireProfileIdBySlug(adminClient, profileSlug)
+  const dedupedByCode = new Map<string, NamedRolePayload>()
+
+  for (const rawUser of rawUsers) {
+    const code = normalizeText(rawUser.code)
+    const displayName = normalizeText(rawUser.displayName)
+    if (!code || !displayName) {
+      continue
+    }
+    dedupedByCode.set(code, { code, displayName })
+  }
+
+  const users = [...dedupedByCode.values()]
+  const codes = users.map((item) => item.code)
+  const activeCodeSet = new Set(codes)
+  const existingUsersByCode = new Map<string, Record<string, unknown>>()
+
+  if (codes.length > 0) {
+    const { data: existingUsers, error } = await adminClient
+      .from('app_users')
+      .select(
+        'auth_user_id, code, display_name, requires_admin_password_definition',
+      )
+      .in('code', codes)
 
     if (error) {
       throw new Error(error.message)
     }
 
-    for (const row of syncedSellers ?? []) {
-      const code = String(row.code ?? '').trim()
-      if (!code || activeCodeSet.has(code)) {
-        continue
+    for (const row of existingUsers ?? []) {
+      existingUsersByCode.set(String(row.code), row as Record<string, unknown>)
+    }
+  }
+
+  let created = 0
+  let updated = 0
+  let nameResets = 0
+  let skipped = 0
+
+  for (const user of users) {
+    const technicalEmail = technicalEmailFromCode(user.code)
+    const existing = existingUsersByCode.get(user.code)
+
+    if (existing) {
+      const userId = String(existing.auth_user_id)
+      const currentDisplayName = String(existing.display_name ?? '')
+      const nameChanged =
+        currentDisplayName.trim() !== '' &&
+        normalizeCompare(currentDisplayName) !== normalizeCompare(user.displayName)
+
+      const { error: authError } = await adminClient.auth.admin.updateUserById(
+        userId,
+        {
+          email: technicalEmail,
+          user_metadata: { display_name: user.displayName },
+        },
+      )
+
+      if (authError) {
+        throw new Error(authError.message)
       }
 
       const { error: updateError } = await adminClient
         .from('app_users')
-        .update({ is_active: false })
-        .eq('auth_user_id', String(row.auth_user_id))
+        .update({
+          code: user.code,
+          technical_email: technicalEmail,
+          display_name: user.displayName,
+          profile_id: profileId,
+          is_active: true,
+          origin,
+          requires_admin_password_definition: nameChanged
+            ? true
+            : Boolean(existing.requires_admin_password_definition ?? false),
+        })
+        .eq('auth_user_id', userId)
 
       if (updateError) {
         throw new Error(updateError.message)
       }
 
-      deactivated += 1
+      updated += 1
+      if (nameChanged) {
+        nameResets += 1
+      }
+      continue
     }
+
+    const { data, error: createError } = await adminClient.auth.admin.createUser(
+      {
+        email: technicalEmail,
+        password: placeholderPassword(),
+        email_confirm: true,
+        user_metadata: { display_name: user.displayName },
+      },
+    )
+
+    if (createError || !data.user) {
+      if (
+        createError?.message?.toLowerCase().includes('already been registered')
+      ) {
+        skipped += 1
+        continue
+      }
+      throw new Error(
+        createError?.message ??
+          `Falha ao criar usuário de ${profileSlug}.`,
+      )
+    }
+
+    const { error: updateError } = await adminClient
+      .from('app_users')
+      .update({
+        code: user.code,
+        technical_email: technicalEmail,
+        display_name: user.displayName,
+        profile_id: profileId,
+        is_active: true,
+        origin,
+        requires_admin_password_definition: true,
+      })
+      .eq('auth_user_id', data.user.id)
+
+    if (updateError) {
+      throw new Error(updateError.message)
+    }
+
+    created += 1
   }
+
+  let deactivated = 0
+  const { data: syncedUsers, error } = await adminClient
+    .from('app_users')
+    .select('auth_user_id, code')
+    .eq('profile_id', profileId)
+    .eq('origin', origin)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  for (const row of syncedUsers ?? []) {
+    const code = String(row.code ?? '').trim()
+    if (!code || activeCodeSet.has(code)) {
+      continue
+    }
+
+    const { error: updateError } = await adminClient
+      .from('app_users')
+      .update({ is_active: false })
+      .eq('auth_user_id', String(row.auth_user_id))
+
+    if (updateError) {
+      throw new Error(updateError.message)
+    }
+
+    deactivated += 1
+  }
+
+  return { created, updated, skipped, deactivated, nameResets }
+}
+
+async function syncSellers(payload: Record<string, unknown>) {
+  const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey)
+  const rawSellers = Array.isArray(payload.sellers) ? payload.sellers : []
+
+  const sellers = rawSellers
+    .filter(
+      (item): item is Record<string, unknown> =>
+        item !== null && typeof item === 'object',
+    )
+    .map((item) => ({
+      code: String(item.code ?? '').trim(),
+      displayName: String(item.displayName ?? '').trim(),
+      cpf: sanitizeDigits(String(item.cpf ?? '')),
+      supervisorCode: String(item.supervisorCode ?? '').trim(),
+      supervisorName: String(item.supervisorName ?? '').trim(),
+      coordinatorCode: String(item.coordinatorCode ?? '').trim(),
+      coordinatorName: String(item.coordinatorName ?? '').trim(),
+    }))
+    .filter((item) => item.code && item.displayName && item.cpf.length >= 3)
+
+  const rawSupervisors = Array.isArray(payload.supervisors)
+    ? payload.supervisors
+    : sellers.map((item) => ({
+        code: item.supervisorCode,
+        displayName: item.supervisorName,
+      }))
+
+  const rawCoordinators = Array.isArray(payload.coordinators)
+    ? payload.coordinators
+    : sellers.map((item) => ({
+        code: item.coordinatorCode,
+        displayName: item.coordinatorName,
+      }))
+
+  const supervisors = rawSupervisors
+    .filter(
+      (item): item is Record<string, unknown> =>
+        item !== null && typeof item === 'object',
+    )
+    .map((item) => ({
+      code: String(item.code ?? '').trim(),
+      displayName: String(item.displayName ?? '').trim(),
+    }))
+
+  const coordinators = rawCoordinators
+    .filter(
+      (item): item is Record<string, unknown> =>
+        item !== null && typeof item === 'object',
+    )
+    .map((item) => ({
+      code: String(item.code ?? '').trim(),
+      displayName: String(item.displayName ?? '').trim(),
+    }))
+
+  const sellerStats = await syncSellerUsers(adminClient, sellers)
+  const supervisorStats = await syncNamedRoleUsers({
+    adminClient,
+    rawUsers: supervisors,
+    profileSlug: 'supervisor',
+    origin: supervisorOrigin,
+  })
+  const coordinatorStats = await syncNamedRoleUsers({
+    adminClient,
+    rawUsers: coordinators,
+    profileSlug: 'coordenador',
+    origin: coordinatorOrigin,
+  })
 
   return {
     success: true,
     received: rawSellers.length,
     processed: sellers.length,
-    created,
-    updated,
-    skipped,
-    deactivated,
+    sellers: sellerStats,
+    supervisors: supervisorStats,
+    coordinators: coordinatorStats,
   }
 }
 

@@ -12,19 +12,60 @@ class TextSanitizer {
       value = repairedUtf8;
     }
 
-    return value
-        .replaceAll('Usu�rio', 'Usuário')
-        .replaceAll('usu�rio', 'usuário')
-        .replaceAll('M�dulo', 'Módulo')
-        .replaceAll('m�dulo', 'módulo')
-        .replaceAll('Libera��o', 'Liberação')
-        .replaceAll('libera��o', 'liberação')
-        .replaceAll('Exibi��o', 'Exibição')
-        .replaceAll('exibi��o', 'exibição')
-        .replaceAll('Configura��o', 'Configuração')
-        .replaceAll('configura��o', 'configuração')
-        .replaceAll('N�o', 'Não')
-        .replaceAll('n�o', 'não');
+    const replacements = <String, String>{
+      'Ã¡': 'á',
+      'Ã ': 'à',
+      'Ã¢': 'â',
+      'Ã£': 'ã',
+      'Ã¤': 'ä',
+      'Ã©': 'é',
+      'Ãª': 'ê',
+      'Ã­': 'í',
+      'Ã³': 'ó',
+      'Ã´': 'ô',
+      'Ãµ': 'õ',
+      'Ã¶': 'ö',
+      'Ãº': 'ú',
+      'Ã¼': 'ü',
+      'Ã§': 'ç',
+      'Ã\u0081': 'Á',
+      'Ã\u0080': 'À',
+      'Ã\u0082': 'Â',
+      'Ã\u0083': 'Ã',
+      'Ã\u0089': 'É',
+      'Ã\u008A': 'Ê',
+      'Ã\u008D': 'Í',
+      'Ã\u0093': 'Ó',
+      'Ã\u0094': 'Ô',
+      'Ã\u0095': 'Õ',
+      'Ã\u009A': 'Ú',
+      'Ã\u0087': 'Ç',
+      'â€¢': '•',
+      'â€“': '–',
+      'â€”': '—',
+      'â€˜': '\'',
+      'â€™': '\'',
+      'â€œ': '"',
+      'â€\u009d': '"',
+      'Usu�rio': 'Usuário',
+      'usu�rio': 'usuário',
+      'M�dulo': 'Módulo',
+      'm�dulo': 'módulo',
+      'Libera��o': 'Liberação',
+      'libera��o': 'liberação',
+      'Exibi��o': 'Exibição',
+      'exibi��o': 'exibição',
+      'Configura��o': 'Configuração',
+      'configura��o': 'configuração',
+      'N�o': 'Não',
+      'n�o': 'não',
+    };
+
+    for (final entry in replacements.entries) {
+      value = value.replaceAll(entry.key, entry.value);
+    }
+
+    return value;
   }
 
   static String? normalizeNullable(String? rawValue) {

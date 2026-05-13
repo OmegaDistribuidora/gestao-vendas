@@ -12,6 +12,8 @@ import 'admin_screen.dart';
 import 'panel_view_screen.dart';
 import 'reports_screen.dart';
 
+enum _HomePeriodPreset { today, currentMonth, currentYear, custom }
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -28,19 +30,75 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final AppRepository _repository = AppRepository.instance;
+
   bool _loading = true;
   String? _errorMessage;
   List<BiModule> _visibleModules = const <BiModule>[];
-  SellerHomeKpis _sellerKpis = SellerHomeKpis.empty();
+  SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
+  _HomePeriodPreset _selectedPeriod = _HomePeriodPreset.today;
+  DateTime? _customStartDate;
+  DateTime? _customEndDate;
 
   bool get _isAdmin => widget.currentUser.isAdmin;
-  bool get _isSeller =>
-      widget.currentUser.profileSlug == AppProfile.sellerSlug;
+  bool get _isSeller => widget.currentUser.profileSlug == AppProfile.sellerSlug;
+  bool get _isSupervisor =>
+      widget.currentUser.profileSlug == AppProfile.supervisorSlug;
+  bool get _isCoordinator =>
+      widget.currentUser.profileSlug == AppProfile.coordinatorSlug;
+  bool get _showsHomeKpis => !_isAdmin;
 
   @override
   void initState() {
     super.initState();
     _loadContent();
+  }
+
+  DateTime get _periodStart {
+    final now = DateTime.now();
+    switch (_selectedPeriod) {
+      case _HomePeriodPreset.today:
+        return DateTime(now.year, now.month, now.day);
+      case _HomePeriodPreset.currentMonth:
+        return DateTime(now.year, now.month, 1);
+      case _HomePeriodPreset.currentYear:
+        return DateTime(now.year, 1, 1);
+      case _HomePeriodPreset.custom:
+        final customStart = _customStartDate ?? now;
+        return DateTime(customStart.year, customStart.month, customStart.day);
+    }
+  }
+
+  DateTime get _periodEnd {
+    final now = DateTime.now();
+    switch (_selectedPeriod) {
+      case _HomePeriodPreset.today:
+      case _HomePeriodPreset.currentMonth:
+      case _HomePeriodPreset.currentYear:
+        return DateTime(now.year, now.month, now.day, 23, 59, 59);
+      case _HomePeriodPreset.custom:
+        final customEnd = _customEndDate ?? _customStartDate ?? now;
+        return DateTime(
+          customEnd.year,
+          customEnd.month,
+          customEnd.day,
+          23,
+          59,
+          59,
+        );
+    }
+  }
+
+  String get _periodDescription {
+    switch (_selectedPeriod) {
+      case _HomePeriodPreset.today:
+        return 'Hoje';
+      case _HomePeriodPreset.currentMonth:
+        return 'Mês atual';
+      case _HomePeriodPreset.currentYear:
+        return 'Ano atual';
+      case _HomePeriodPreset.custom:
+        return '${_formatDate(_periodStart)} até ${_formatDate(_periodEnd)}';
+    }
   }
 
   Future<void> _loadContent() async {
@@ -54,13 +112,15 @@ class _HomeScreenState extends State<HomeScreen> {
         _repository.getModulesForUser(widget.currentUser),
       ];
 
-      if (_isSeller) {
-        futures.add(_repository.getSellerHomeKpis(widget.currentUser.code));
+      if (_showsHomeKpis) {
+        futures.add(
+          _repository.getHomeKpis(start: _periodStart, end: _periodEnd),
+        );
       }
 
       final results = await Future.wait(futures);
       final modules = results[0] as List<BiModule>;
-      final sellerKpis = _isSeller && results.length > 1
+      final homeKpis = _showsHomeKpis && results.length > 1
           ? results[1] as SellerHomeKpis
           : SellerHomeKpis.empty();
 
@@ -70,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _visibleModules = modules;
-        _sellerKpis = sellerKpis;
+        _homeKpis = homeKpis;
         _loading = false;
       });
     } catch (error) {
@@ -83,6 +143,56 @@ class _HomeScreenState extends State<HomeScreen> {
         _errorMessage = 'Falha ao carregar os módulos.\n$error';
       });
     }
+  }
+
+  Future<void> _pickCustomDate({required bool isStart}) async {
+    final initialDate = isStart
+        ? (_customStartDate ?? DateTime.now())
+        : (_customEndDate ?? _customStartDate ?? DateTime.now());
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2026, 1, 1),
+      lastDate: DateTime.now(),
+    );
+
+    if (picked == null) {
+      return;
+    }
+
+    setState(() {
+      if (isStart) {
+        _customStartDate = picked;
+        if (_customEndDate != null && _customEndDate!.isBefore(picked)) {
+          _customEndDate = picked;
+        }
+      } else {
+        _customEndDate = picked;
+        if (_customStartDate != null && _customStartDate!.isAfter(picked)) {
+          _customStartDate = picked;
+        }
+      }
+    });
+
+    await _loadContent();
+  }
+
+  Future<void> _handlePeriodChanged(_HomePeriodPreset? preset) async {
+    if (preset == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedPeriod = preset;
+      if (preset == _HomePeriodPreset.custom) {
+        final today = DateTime.now();
+        _customStartDate ??= DateTime(today.year, today.month, today.day);
+        _customEndDate ??= _customStartDate;
+      }
+    });
+
+    await _loadContent();
   }
 
   Future<void> _openAdministration() async {
@@ -119,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    String url = module.panelUrl;
+    var url = module.panelUrl;
     String? filterDescription;
 
     if (!_isAdmin) {
@@ -127,6 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.currentUser.id,
         module.id,
       );
+
       if (access == null) {
         if (!mounted) {
           return;
@@ -358,7 +469,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(
                           _isAdmin
                               ? 'Acesse a área administrativa para gerenciar usuários, perfis, módulos e relatórios.'
-                              : 'Por favor selecione um módulo no menu à esquerda para acessar.',
+                              : 'Por favor, selecione um módulo no menu à esquerda para acessar.',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: const Color(0xFF5E6A7C)),
                         ),
@@ -379,13 +490,78 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          if (_isSeller) ...[
+          if (_showsHomeKpis) ...[
             const SizedBox(height: 20),
-            Text(
-              'Seu desempenho hoje',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isSeller || _isSupervisor || _isCoordinator
+                          ? 'Seu desempenho no período'
+                          : 'Indicadores do período',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _periodDescription,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF5E6A7C),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<_HomePeriodPreset>(
+                      initialValue: _selectedPeriod,
+                      decoration: const InputDecoration(
+                        labelText: 'Período',
+                        prefixIcon: Icon(Icons.date_range_outlined),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: _HomePeriodPreset.today,
+                          child: Text('Hoje'),
+                        ),
+                        DropdownMenuItem(
+                          value: _HomePeriodPreset.currentMonth,
+                          child: Text('Mês atual'),
+                        ),
+                        DropdownMenuItem(
+                          value: _HomePeriodPreset.currentYear,
+                          child: Text('Ano atual'),
+                        ),
+                        DropdownMenuItem(
+                          value: _HomePeriodPreset.custom,
+                          child: Text('Personalizado'),
+                        ),
+                      ],
+                      onChanged: _handlePeriodChanged,
+                    ),
+                    if (_selectedPeriod == _HomePeriodPreset.custom) ...[
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => _pickCustomDate(isStart: true),
+                            icon: const Icon(Icons.event_outlined),
+                            label: Text(_formatDate(_periodStart)),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => _pickCustomDate(isStart: false),
+                            icon: const Icon(Icons.event_busy_outlined),
+                            label: Text(_formatDate(_periodEnd)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -393,21 +569,21 @@ class _HomeScreenState extends State<HomeScreen> {
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
-                  _SellerKpiCard(
-                    title: 'Venda hoje',
-                    value: _formatCurrency(_sellerKpis.totalVenda),
+                  _HomeKpiCard(
+                    title: 'Venda',
+                    value: _formatCurrency(_homeKpis.totalVenda),
                   ),
-                  _SellerKpiCard(
-                    title: 'Volume hoje',
-                    value: _formatDecimal(_sellerKpis.totalVolume),
+                  _HomeKpiCard(
+                    title: 'Volume',
+                    value: _formatDecimal(_homeKpis.totalVolume),
                   ),
-                  _SellerKpiCard(
-                    title: 'Pedidos hoje',
-                    value: '${_sellerKpis.totalPedidos}',
+                  _HomeKpiCard(
+                    title: 'Pedidos',
+                    value: '${_homeKpis.totalPedidos}',
                   ),
-                  _SellerKpiCard(
-                    title: 'Positivação hoje',
-                    value: '${_sellerKpis.totalPositivacao}',
+                  _HomeKpiCard(
+                    title: 'Positivação',
+                    value: '${_homeKpis.totalPositivacao}',
                   ),
                 ],
               ),
@@ -454,6 +630,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _formatDecimal(double value) {
     return value.toStringAsFixed(1).replaceAll('.', ',');
+  }
+
+  String _formatDate(DateTime value) {
+    return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
   }
 }
 
@@ -523,11 +703,8 @@ class _ModuleCard extends StatelessWidget {
   }
 }
 
-class _SellerKpiCard extends StatelessWidget {
-  const _SellerKpiCard({
-    required this.title,
-    required this.value,
-  });
+class _HomeKpiCard extends StatelessWidget {
+  const _HomeKpiCard({required this.title, required this.value});
 
   final String title;
   final String value;
@@ -553,9 +730,9 @@ class _SellerKpiCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 value,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
               ),
             ],
           ),

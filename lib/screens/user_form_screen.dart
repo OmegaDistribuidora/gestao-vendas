@@ -24,9 +24,12 @@ class UserFormScreen extends StatefulWidget {
 class _UserFormScreenState extends State<UserFormScreen> {
   final AppRepository _repository = AppRepository.instance;
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
   late final TextEditingController _codeController;
   late final TextEditingController _displayNameController;
+  late final TextEditingController _loginAliasController;
   late final TextEditingController _passwordController;
+
   bool _hidePassword = true;
   bool _loading = true;
   bool _saving = false;
@@ -51,15 +54,30 @@ class _UserFormScreenState extends State<UserFormScreen> {
     return null;
   }
 
-  bool get _isSellerProfile =>
-      _selectedProfile?.slug == AppProfile.sellerSlug;
+  bool get _isSellerProfile => _selectedProfile?.slug == AppProfile.sellerSlug;
+  bool get _isSupervisorProfile =>
+      _selectedProfile?.slug == AppProfile.supervisorSlug;
+  bool get _isCoordinatorProfile =>
+      _selectedProfile?.slug == AppProfile.coordinatorSlug;
+  bool get _isAdminProfile => _selectedProfile?.slug == AppProfile.adminSlug;
+  bool get _isOracleManagedProfile =>
+      _isSellerProfile || _isSupervisorProfile || _isCoordinatorProfile;
+  bool get _isCodeBasedProfile => _isOracleManagedProfile;
+  bool get _requiresLoginAlias =>
+      _isAdminProfile || (!_isCodeBasedProfile && !_isSellerProfile);
+  bool get _showsLoginAliasField => !_isSellerProfile;
 
   @override
   void initState() {
     super.initState();
-    _codeController = TextEditingController(text: widget.existingUser?.code ?? '');
+    _codeController = TextEditingController(
+      text: widget.existingUser?.code ?? '',
+    );
     _displayNameController = TextEditingController(
       text: widget.existingUser?.displayName ?? '',
+    );
+    _loginAliasController = TextEditingController(
+      text: widget.existingUser?.loginAlias ?? '',
     );
     _passwordController = TextEditingController();
     _isActive = widget.existingUser?.isActive ?? true;
@@ -70,6 +88,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
   void dispose() {
     _codeController.dispose();
     _displayNameController.dispose();
+    _loginAliasController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -96,8 +115,12 @@ class _UserFormScreenState extends State<UserFormScreen> {
       setState(() {
         _profiles = profiles;
         _modules = modules;
-        _selectedProfileId = widget.existingUser?.profile?.id ??
+        _selectedProfileId =
+            widget.existingUser?.profile?.id ??
             (profiles.isEmpty ? null : profiles.first.id);
+        if (_isAdminProfile && _loginAliasController.text.trim().isEmpty) {
+          _loginAliasController.text = 'admin';
+        }
         _loading = false;
       });
     } on RepositoryException catch (error) {
@@ -114,9 +137,26 @@ class _UserFormScreenState extends State<UserFormScreen> {
       }
       setState(() {
         _loading = false;
-        _errorMessage = 'Nao foi possivel carregar os dados do usuario.\n$error';
+        _errorMessage =
+            'Não foi possível carregar os dados do usuário.\n$error';
       });
     }
+  }
+
+  String _buildProfileLoginHelpText() {
+    if (_isSellerProfile) {
+      return 'Vendedores entram exclusivamente com código e senha. A senha inicial é gerada a partir dos 3 primeiros dígitos do CPF e o cadastro é mantido pelo script automático do Oracle.';
+    }
+    if (_isSupervisorProfile) {
+      return 'Supervisores entram pelo primeiro nome, ignorando maiúsculas e minúsculas, com a senha definida pelo administrador. Se o nome mudar no Oracle, o login fica bloqueado até nova definição de senha.';
+    }
+    if (_isCoordinatorProfile) {
+      return 'Coordenadores entram pelo primeiro nome ou por um login alternativo. Se o nome mudar no Oracle, o login fica bloqueado até nova definição de senha.';
+    }
+    if (_isAdminProfile) {
+      return 'O administrador sempre entra com o login "admin". A senha inicial é Omega@123, mas pode ser alterada.';
+    }
+    return 'Usuários deste perfil entram com o login definido pelo administrador e a senha cadastrada no momento da criação.';
   }
 
   Future<void> _save() async {
@@ -129,9 +169,19 @@ class _UserFormScreenState extends State<UserFormScreen> {
       return;
     }
 
-    if (!_editing && _isSellerProfile) {
+    if (_isCodeBasedProfile && _codeController.text.trim().isEmpty) {
+      _showMessage('Informe o código para este perfil.');
+      return;
+    }
+
+    if (_requiresLoginAlias && _loginAliasController.text.trim().isEmpty) {
+      _showMessage('Informe o login para este perfil.');
+      return;
+    }
+
+    if (!_editing && _isOracleManagedProfile) {
       _showMessage(
-        'Usuários vendedores devem ser cadastrados pelo script automático do Oracle.',
+        'Usuários de vendedor, supervisor e coordenador devem ser cadastrados pelo script automático do Oracle.',
       );
       return;
     }
@@ -141,11 +191,16 @@ class _UserFormScreenState extends State<UserFormScreen> {
     });
 
     try {
+      final loginAlias = _isAdminProfile
+          ? 'admin'
+          : _loginAliasController.text.trim();
+
       if (_editing) {
         await _repository.updateUser(
           userId: widget.existingUser!.id,
           code: _codeController.text.trim(),
           displayName: _displayNameController.text.trim(),
+          loginAlias: loginAlias,
           profileId: _selectedProfileId!,
           isActive: _isActive,
           newPassword: _passwordController.text.trim(),
@@ -155,6 +210,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
           code: _codeController.text.trim(),
           password: _passwordController.text.trim(),
           displayName: _displayNameController.text.trim(),
+          loginAlias: loginAlias,
           profileId: _selectedProfileId!,
           isActive: _isActive,
         );
@@ -180,7 +236,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
     } on RepositoryException catch (error) {
       _showMessage(error.message);
     } catch (error) {
-      _showMessage('Nao foi possivel salvar o usuario.\n$error');
+      _showMessage('Não foi possível salvar o usuário.\n$error');
     } finally {
       if (mounted) {
         setState(() {
@@ -190,9 +246,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
     }
   }
 
-  Future<List<UserModuleAccessInput>?> _showInitialModulesDialog(
-    AppUser user,
-  ) {
+  Future<List<UserModuleAccessInput>?> _showInitialModulesDialog(AppUser user) {
     if (_modules.isEmpty) {
       return Future<List<UserModuleAccessInput>?>.value(
         const <UserModuleAccessInput>[],
@@ -202,10 +256,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
     return showDialog<List<UserModuleAccessInput>>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _InitialModuleAccessDialog(
-        user: user,
-        modules: _modules,
-      ),
+      builder: (_) => _InitialModuleAccessDialog(user: user, modules: _modules),
     );
   }
 
@@ -215,7 +266,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
       return;
     }
     if (user.id == widget.currentUser.id) {
-      _showMessage('Nao exclua o usuario logado.');
+      _showMessage('Não exclua o usuário logado.');
       return;
     }
 
@@ -232,7 +283,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
     } on RepositoryException catch (error) {
       _showMessage(error.message);
     } catch (error) {
-      _showMessage('Nao foi possivel excluir o usuario.\n$error');
+      _showMessage('Não foi possível excluir o usuário.\n$error');
     } finally {
       if (mounted) {
         setState(() {
@@ -243,14 +294,16 @@ class _UserFormScreenState extends State<UserFormScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_editing ? 'Editar usuario' : 'Novo usuario'),
+        title: Text(_editing ? 'Editar usuário' : 'Novo usuário'),
         actions: [
           if (_editing)
             IconButton(
@@ -265,189 +318,223 @@ class _UserFormScreenState extends State<UserFormScreen> {
                       ),
                     )
                   : const Icon(Icons.delete_outline),
-              tooltip: 'Excluir usuario',
+              tooltip: 'Excluir usuário',
             ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: primaryColor))
           : _errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_errorMessage!, textAlign: TextAlign.center),
-                  ),
-                )
-              : SafeArea(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 560),
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  TextFormField(
-                                    controller: _codeController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Codigo',
-                                      prefixIcon: Icon(Icons.pin_outlined),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null ||
-                                          value.trim().isEmpty) {
-                                        return 'Informe o codigo.';
-                                      }
-                                      return null;
-                                    },
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(_errorMessage!, textAlign: TextAlign.center),
+              ),
+            )
+          : SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (_isCodeBasedProfile) ...[
+                                TextFormField(
+                                  controller: _codeController,
+                                  readOnly: _editing && _isOracleManagedProfile,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Código',
+                                    prefixIcon: Icon(Icons.pin_outlined),
                                   ),
-                                  const SizedBox(height: 16),
-                                  TextFormField(
-                                    controller: _displayNameController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Nome de exibicao',
-                                      prefixIcon: Icon(Icons.badge_outlined),
-                                    ),
-                                    validator: (value) {
-                                      if (!_isSellerProfile &&
-                                          (value == null ||
-                                              value.trim().isEmpty)) {
-                                        return 'Informe o nome de exibicao para este perfil.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 16),
-                                  DropdownButtonFormField<String>(
-                                    initialValue: _selectedProfileId,
-                                    items: _profiles.map((profile) {
-                                      return DropdownMenuItem<String>(
-                                        value: profile.id,
-                                        child: Text(profile.name),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _selectedProfileId = value;
-                                      });
-                                    },
-                                    decoration: const InputDecoration(
-                                      labelText: 'Perfil',
-                                      prefixIcon: Icon(
-                                        Icons.account_tree_outlined,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  TextFormField(
-                                    controller: _passwordController,
-                                    obscureText: _hidePassword,
-                                    decoration: InputDecoration(
-                                      labelText: _editing
-                                          ? 'Nova senha (opcional)'
-                                          : 'Senha',
-                                      prefixIcon: const Icon(
-                                        Icons.lock_outline,
-                                      ),
-                                      suffixIcon: IconButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            _hidePassword = !_hidePassword;
-                                          });
-                                        },
-                                        icon: Icon(
-                                          _hidePassword
-                                              ? Icons.visibility_outlined
-                                              : Icons.visibility_off_outlined,
-                                        ),
-                                      ),
-                                    ),
-                                    validator: (value) {
-                                      if (!_editing &&
-                                          (value == null ||
-                                              value.trim().isEmpty)) {
-                                        return 'Informe a senha.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 12),
-                                  SwitchListTile(
-                                    value: _isActive,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _isActive = value;
-                                      });
-                                    },
-                                    contentPadding: EdgeInsets.zero,
-                                    activeThumbColor: primaryColor,
-                                    title: const Text('Usuario ativo'),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Card(
-                                    color: const Color(0xFFF7F8FC),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Text(
-                                        _isSellerProfile
-                                            ? 'Usuários do perfil vendedor entram com código e senha. O cadastro inicial e a senha padrão são definidos pelo script automático do Oracle.'
-                                            : 'Usuarios deste perfil entram com nome de exibicao e senha. O codigo continua sendo usado apenas como identificador interno e para o e-mail tecnico do Supabase.',
-                                      ),
-                                    ),
-                                  ),
-                                  if (!_editing) ...[
-                                    const SizedBox(height: 12),
-                                    Card(
-                                      color: const Color(0xFFF7F8FC),
-                                      child: const Padding(
-                                        padding: EdgeInsets.all(16),
-                                        child: Text(
-                                          'Depois de salvar, sera exibido um popup para liberar os modulos BI iniciais do usuario.',
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 20),
-                                  FilledButton(
-                                    onPressed: _saving ? null : _save,
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: primaryColor,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    child: _saving
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : const Text('Salvar'),
-                                  ),
-                                ],
+                                  validator: (value) {
+                                    if (_isCodeBasedProfile &&
+                                        (value == null ||
+                                            value.trim().isEmpty)) {
+                                      return 'Informe o código.';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 16),
+                              ],
+                              TextFormField(
+                                controller: _displayNameController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Nome de exibição',
+                                  prefixIcon: Icon(Icons.badge_outlined),
+                                ),
+                                validator: (value) {
+                                  if (!_isSellerProfile &&
+                                      (value == null || value.trim().isEmpty)) {
+                                    return 'Informe o nome de exibição para este perfil.';
+                                  }
+                                  return null;
+                                },
                               ),
-                            ),
+                              if (_showsLoginAliasField) ...[
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  controller: _loginAliasController,
+                                  readOnly: _isAdminProfile,
+                                  decoration: InputDecoration(
+                                    labelText: _isCoordinatorProfile
+                                        ? 'Login alternativo (opcional)'
+                                        : _requiresLoginAlias
+                                        ? 'Login'
+                                        : 'Login personalizado (opcional)',
+                                    prefixIcon: const Icon(
+                                      Icons.alternate_email_outlined,
+                                    ),
+                                    helperText: _isAdminProfile
+                                        ? 'O login do administrador é sempre "admin".'
+                                        : _isCoordinatorProfile
+                                        ? 'Se preenchido, terá prioridade sobre o primeiro nome.'
+                                        : _requiresLoginAlias
+                                        ? 'Este será o login usado por este usuário.'
+                                        : 'Se preenchido, terá prioridade sobre o nome.',
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                              DropdownButtonFormField<String>(
+                                initialValue: _selectedProfileId,
+                                items: _profiles.map((profile) {
+                                  return DropdownMenuItem<String>(
+                                    value: profile.id,
+                                    child: Text(profile.name),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedProfileId = value;
+                                    if (_isAdminProfile) {
+                                      _loginAliasController.text = 'admin';
+                                    }
+                                  });
+                                },
+                                decoration: const InputDecoration(
+                                  labelText: 'Perfil',
+                                  prefixIcon: Icon(Icons.account_tree_outlined),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: _hidePassword,
+                                decoration: InputDecoration(
+                                  labelText: _editing
+                                      ? 'Nova senha (opcional)'
+                                      : 'Senha',
+                                  prefixIcon: const Icon(Icons.lock_outline),
+                                  suffixIcon: IconButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _hidePassword = !_hidePassword;
+                                      });
+                                    },
+                                    icon: Icon(
+                                      _hidePassword
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                    ),
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (!_editing &&
+                                      (value == null || value.trim().isEmpty)) {
+                                    return 'Informe a senha.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              SwitchListTile(
+                                value: _isActive,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _isActive = value;
+                                  });
+                                },
+                                contentPadding: EdgeInsets.zero,
+                                activeThumbColor: primaryColor,
+                                title: const Text('Usuário ativo'),
+                              ),
+                              const SizedBox(height: 12),
+                              Card(
+                                color: const Color(0xFFF7F8FC),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Text(_buildProfileLoginHelpText()),
+                                ),
+                              ),
+                              if (_editing &&
+                                  widget
+                                          .existingUser
+                                          ?.requiresAdminPasswordDefinition ==
+                                      true) ...[
+                                const SizedBox(height: 12),
+                                Card(
+                                  color: const Color(0xFFFFF4E5),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text(
+                                      'Este usuário está bloqueado para login até que uma senha seja definida pelo administrador.',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (!_editing) ...[
+                                const SizedBox(height: 12),
+                                Card(
+                                  color: const Color(0xFFF7F8FC),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text(
+                                      'Depois de salvar, será exibido um pop-up para liberar os módulos BI iniciais do usuário.',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 20),
+                              FilledButton(
+                                onPressed: _saving ? null : _save,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: primaryColor,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: _saving
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text('Salvar'),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
+              ),
+            ),
     );
   }
 }
 
 class _InitialModuleAccessDialog extends StatefulWidget {
-  const _InitialModuleAccessDialog({
-    required this.user,
-    required this.modules,
-  });
+  const _InitialModuleAccessDialog({required this.user, required this.modules});
 
   final AppUser user;
   final List<BiModule> modules;
@@ -457,7 +544,8 @@ class _InitialModuleAccessDialog extends StatefulWidget {
       _InitialModuleAccessDialogState();
 }
 
-class _InitialModuleAccessDialogState extends State<_InitialModuleAccessDialog> {
+class _InitialModuleAccessDialogState
+    extends State<_InitialModuleAccessDialog> {
   late final List<_ModuleAccessDraft> _drafts;
   String? _errorMessage;
 
@@ -489,7 +577,7 @@ class _InitialModuleAccessDialogState extends State<_InitialModuleAccessDialog> 
           values.isEmpty) {
         setState(() {
           _errorMessage =
-              'Preencha pelo menos um valor para os modulos marcados com dados filtrados.';
+              'Preencha pelo menos um valor para os módulos marcados com dados filtrados.';
         });
         return;
       }
@@ -510,10 +598,10 @@ class _InitialModuleAccessDialogState extends State<_InitialModuleAccessDialog> 
   Widget build(BuildContext context) {
     final userLabel = widget.user.displayName?.trim().isNotEmpty == true
         ? widget.user.displayName!
-        : widget.user.code;
+        : widget.user.label;
 
     return AlertDialog(
-      title: const Text('Liberar modulos iniciais'),
+      title: const Text('Liberar módulos iniciais'),
       content: SizedBox(
         width: 720,
         child: Column(
@@ -521,23 +609,18 @@ class _InitialModuleAccessDialogState extends State<_InitialModuleAccessDialog> 
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Selecione os modulos BI que deseja liberar inicialmente para $userLabel.',
+              'Selecione os módulos BI que deseja liberar inicialmente para $userLabel.',
             ),
             const SizedBox(height: 16),
             SizedBox(
               height: 420,
               child: SingleChildScrollView(
-                child: Column(
-                  children: _drafts.map(_buildModuleCard).toList(),
-                ),
+                child: Column(children: _drafts.map(_buildModuleCard).toList()),
               ),
             ),
             if (_errorMessage != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red),
-              ),
+              Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
             ],
           ],
         ),
@@ -555,7 +638,7 @@ class _InitialModuleAccessDialogState extends State<_InitialModuleAccessDialog> 
             backgroundColor: primaryColor,
             foregroundColor: Colors.white,
           ),
-          child: const Text('Salvar liberacoes'),
+          child: const Text('Salvar liberações'),
         ),
       ],
     );
@@ -591,8 +674,8 @@ class _InitialModuleAccessDialogState extends State<_InitialModuleAccessDialog> 
                 ),
                 subtitle: Text(
                   draft.module.filters.isEmpty
-                      ? 'Sem campos filtraveis cadastrados.'
-                      : '${draft.module.filters.length} campo(s) filtravel(is) disponivel(is).',
+                      ? 'Sem campos filtráveis cadastrados.'
+                      : '${draft.module.filters.length} campo(s) filtrável(is) disponível(is).',
                 ),
               ),
               if (draft.enabled && draft.module.filters.isNotEmpty)
@@ -639,7 +722,7 @@ class _InitialModuleAccessDialogState extends State<_InitialModuleAccessDialog> 
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'Voce pode preencher apenas os filtros necessarios.',
+                    'Você pode preencher apenas os filtros necessários.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -654,10 +737,9 @@ class _InitialModuleAccessDialogState extends State<_InitialModuleAccessDialog> 
 
 class _ModuleAccessDraft {
   _ModuleAccessDraft(this.module)
-      : controllers = <String, TextEditingController>{
-          for (final filter in module.filters)
-            filter.id: TextEditingController(),
-        };
+    : controllers = <String, TextEditingController>{
+        for (final filter in module.filters) filter.id: TextEditingController(),
+      };
 
   final BiModule module;
   final Map<String, TextEditingController> controllers;

@@ -47,7 +47,8 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
   }
 
   bool get _sellerProfileSelected =>
-      _sellerProfile != null && _selectedProfileIds.contains(_sellerProfile!.id);
+      _sellerProfile != null &&
+      _selectedProfileIds.contains(_sellerProfile!.id);
 
   List<_FilterDraft> get _validFilterDrafts => _filters
       .where(
@@ -68,9 +69,7 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
     );
     _filters = widget.existingModule?.filters.isNotEmpty == true
         ? widget.existingModule!.filters
-              .map(
-                (filter) => _FilterDraft.fromFilter(filter),
-              )
+              .map((filter) => _FilterDraft.fromFilter(filter))
               .toList()
         : <_FilterDraft>[_FilterDraft()];
     _isActive = widget.existingModule?.isActive ?? true;
@@ -124,7 +123,8 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
       }
 
       String? selectedSellerDefaultDraftKey;
-      final sellerDefaultFilterId = widget.existingModule?.sellerDefaultFilterId;
+      final sellerDefaultFilterId =
+          widget.existingModule?.sellerDefaultFilterId;
       if (sellerDefaultFilterId != null) {
         for (final draft in _filters) {
           if (draft.id == sellerDefaultFilterId) {
@@ -160,7 +160,7 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
       }
       setState(() {
         _loading = false;
-        _errorMessage = 'Nao foi possivel carregar os dados do modulo.\n$error';
+        _errorMessage = 'Não foi possível carregar os dados do módulo.\n$error';
       });
     }
   }
@@ -240,7 +240,7 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
     } on RepositoryException catch (error) {
       _showMessage(error.message);
     } catch (error) {
-      _showMessage('Nao foi possivel salvar o modulo.\n$error');
+      _showMessage('Não foi possível salvar o módulo.\n$error');
     } finally {
       if (mounted) {
         setState(() {
@@ -250,7 +250,9 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
     }
   }
 
-  String? _resolveSavedSellerDefaultFilterId(List<BiModuleFilter> savedFilters) {
+  String? _resolveSavedSellerDefaultFilterId(
+    List<BiModuleFilter> savedFilters,
+  ) {
     if (!_sellerProfileSelected ||
         _selectedSellerDefaultDraftKey == null ||
         _selectedSellerDefaultDraftKey!.trim().isEmpty) {
@@ -287,7 +289,7 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
     } on RepositoryException catch (error) {
       _showMessage(error.message);
     } catch (error) {
-      _showMessage('Nao foi possivel excluir o modulo.\n$error');
+      _showMessage('Não foi possível excluir o módulo.\n$error');
     } finally {
       if (mounted) {
         setState(() {
@@ -358,14 +360,16 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_editing ? 'Editar modulo BI' : 'Novo modulo BI'),
+        title: Text(_editing ? 'Editar módulo BI' : 'Novo módulo BI'),
         actions: [
           if (_editing)
             IconButton(
@@ -380,297 +384,271 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
                       ),
                     )
                   : const Icon(Icons.delete_outline),
-              tooltip: 'Excluir modulo',
+              tooltip: 'Excluir módulo',
             ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: primaryColor))
           : _errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_errorMessage!, textAlign: TextAlign.center),
-                  ),
-                )
-              : SafeArea(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 900),
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(_errorMessage!, textAlign: TextAlign.center),
+              ),
+            )
+          : SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 900),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              TextFormField(
+                                controller: _nameController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Nome do módulo',
+                                  prefixIcon: Icon(Icons.badge_outlined),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Informe o nome do módulo.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: _urlController,
+                                minLines: 2,
+                                maxLines: 3,
+                                decoration: const InputDecoration(
+                                  labelText: 'Link base do painel Power BI',
+                                  prefixIcon: Icon(Icons.link_outlined),
+                                ),
+                                validator: (value) {
+                                  final trimmed = value?.trim() ?? '';
+                                  final uri = Uri.tryParse(trimmed);
+                                  if (trimmed.isEmpty) {
+                                    return 'Informe o link do painel.';
+                                  }
+                                  if (uri == null ||
+                                      !uri.hasScheme ||
+                                      !uri.hasAuthority) {
+                                    return 'Informe uma URL válida.';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 20),
+                              Row(
                                 children: [
-                                  TextFormField(
-                                    controller: _nameController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Nome do modulo',
-                                      prefixIcon: Icon(Icons.badge_outlined),
-                                    ),
-                                    validator: (value) {
-                                      if (value == null ||
-                                          value.trim().isEmpty) {
-                                        return 'Informe o nome do modulo.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 16),
-                                  TextFormField(
-                                    controller: _urlController,
-                                    minLines: 2,
-                                    maxLines: 3,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Link base do painel Power BI',
-                                      prefixIcon: Icon(Icons.link_outlined),
-                                    ),
-                                    validator: (value) {
-                                      final trimmed = value?.trim() ?? '';
-                                      final uri = Uri.tryParse(trimmed);
-                                      if (trimmed.isEmpty) {
-                                        return 'Informe o link do painel.';
-                                      }
-                                      if (uri == null ||
-                                          !uri.hasScheme ||
-                                          !uri.hasAuthority) {
-                                        return 'Informe uma URL valida.';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                  const SizedBox(height: 20),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          'Campos filtraveis',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                        ),
-                                      ),
-                                      TextButton.icon(
-                                        onPressed: _addFilter,
-                                        icon: const Icon(Icons.add),
-                                        label: const Text('Adicionar campo'),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ..._filters.asMap().entries.map((entry) {
-                                    final index = entry.key;
-                                    final filter = entry.value;
-                                    return Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
-                                      child: Card(
-                                        color: const Color(0xFFF7F8FC),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(16),
-                                          child: Column(
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      'Campo ${index + 1}',
-                                                      style: Theme.of(context)
-                                                          .textTheme
-                                                          .titleSmall
-                                                          ?.copyWith(
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                  IconButton(
-                                                    onPressed: _filters.length ==
-                                                            1
-                                                        ? null
-                                                        : () =>
-                                                            _removeFilter(index),
-                                                    icon: const Icon(
-                                                      Icons
-                                                          .remove_circle_outline,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 8),
-                                              TextFormField(
-                                                controller:
-                                                    filter.tableController,
-                                                onChanged: (_) {
-                                                  setState(() {});
-                                                },
-                                                decoration:
-                                                    const InputDecoration(
-                                                      labelText:
-                                                          'Tabela filtravel',
-                                                      prefixIcon: Icon(
-                                                        Icons
-                                                            .table_chart_outlined,
-                                                      ),
-                                                    ),
-                                              ),
-                                              const SizedBox(height: 12),
-                                              TextFormField(
-                                                controller:
-                                                    filter.columnController,
-                                                onChanged: (_) {
-                                                  setState(() {});
-                                                },
-                                                decoration:
-                                                    const InputDecoration(
-                                                      labelText:
-                                                          'Coluna filtravel',
-                                                      prefixIcon: Icon(
-                                                        Icons
-                                                            .view_column_outlined,
-                                                      ),
-                                                    ),
-                                              ),
-                                              const SizedBox(height: 12),
-                                              TextFormField(
-                                                controller:
-                                                    filter.labelController,
-                                                onChanged: (_) {
-                                                  setState(() {});
-                                                },
-                                                decoration:
-                                                    const InputDecoration(
-                                                      labelText:
-                                                          'Rotulo opcional',
-                                                      prefixIcon: Icon(
-                                                        Icons.label_outline,
-                                                      ),
-                                                    ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                  const SizedBox(height: 12),
-                                  SwitchListTile(
-                                    value: _isActive,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _isActive = value;
-                                      });
-                                    },
-                                    contentPadding: EdgeInsets.zero,
-                                    activeThumbColor: primaryColor,
-                                    title: const Text('Modulo ativo'),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Card(
-                                    color: const Color(0xFFF7F8FC),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Text(
-                                        'Exemplo de filtro gerado:\n?filter=dVendedor/codusur eq 1716 and dFilial/codfilial eq 3',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  Text(
-                                    'Usuarios com acesso a este modulo',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Selecione os perfis. Ao marcar um perfil, todos os usuarios dele ja ficam marcados e voce pode desmarcar excecoes.',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(
-                                          color: const Color(0xFF5E6A7C),
-                                        ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ..._profiles.map(_buildProfileCard),
-                                  if (_sellerProfileSelected) ...[
-                                    const SizedBox(height: 16),
-                                    DropdownButtonFormField<String>(
-                                      initialValue: _selectedSellerDefaultDraftKey,
-                                      items: _validFilterDrafts.map((draft) {
-                                        return DropdownMenuItem<String>(
-                                          value: draft.draftKey,
-                                          child: Text(draft.displayLabel),
-                                        );
-                                      }).toList(),
-                                      onChanged: _validFilterDrafts.isEmpty
-                                          ? null
-                                          : (value) {
-                                              setState(() {
-                                                _selectedSellerDefaultDraftKey =
-                                                    value;
-                                              });
-                                            },
-                                      decoration: const InputDecoration(
-                                        labelText:
-                                            'Campo padrao para filtrar todos os vendedores',
-                                        prefixIcon: Icon(
-                                          Icons.filter_alt_outlined,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Ao salvar, os vendedores deste modulo receberao esse campo preenchido automaticamente com o codigo deles, sem impedir ajustes individuais depois.',
+                                  Expanded(
+                                    child: Text(
+                                      'Campos filtráveis',
                                       style: Theme.of(context)
                                           .textTheme
-                                          .bodySmall
+                                          .titleMedium
                                           ?.copyWith(
-                                            color: const Color(0xFF5E6A7C),
+                                            fontWeight: FontWeight.w700,
                                           ),
                                     ),
-                                  ],
-                                  const SizedBox(height: 20),
-                                  FilledButton(
-                                    onPressed: _saving ? null : _save,
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: primaryColor,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    child: _saving
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
-                                            ),
-                                          )
-                                        : const Text('Salvar'),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: _addFilter,
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Adicionar campo'),
                                   ),
                                 ],
                               ),
-                            ),
+                              const SizedBox(height: 12),
+                              ..._filters.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final filter = entry.value;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: Card(
+                                    color: const Color(0xFFF7F8FC),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Column(
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  'Campo ${index + 1}',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                ),
+                                              ),
+                                              IconButton(
+                                                onPressed: _filters.length == 1
+                                                    ? null
+                                                    : () =>
+                                                          _removeFilter(index),
+                                                icon: const Icon(
+                                                  Icons.remove_circle_outline,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          TextFormField(
+                                            controller: filter.tableController,
+                                            onChanged: (_) {
+                                              setState(() {});
+                                            },
+                                            decoration: const InputDecoration(
+                                              labelText: 'Tabela filtrável',
+                                              prefixIcon: Icon(
+                                                Icons.table_chart_outlined,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          TextFormField(
+                                            controller: filter.columnController,
+                                            onChanged: (_) {
+                                              setState(() {});
+                                            },
+                                            decoration: const InputDecoration(
+                                              labelText: 'Coluna filtrável',
+                                              prefixIcon: Icon(
+                                                Icons.view_column_outlined,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          TextFormField(
+                                            controller: filter.labelController,
+                                            onChanged: (_) {
+                                              setState(() {});
+                                            },
+                                            decoration: const InputDecoration(
+                                              labelText: 'Rótulo opcional',
+                                              prefixIcon: Icon(
+                                                Icons.label_outline,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                              const SizedBox(height: 12),
+                              SwitchListTile(
+                                value: _isActive,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _isActive = value;
+                                  });
+                                },
+                                contentPadding: EdgeInsets.zero,
+                                activeThumbColor: primaryColor,
+                                title: const Text('Módulo ativo'),
+                              ),
+                              const SizedBox(height: 16),
+                              Card(
+                                color: const Color(0xFFF7F8FC),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Text(
+                                    'Exemplo de filtro gerado:\n?filter=dVendedor/codusur eq 1716 and dFilial/codfilial eq 3',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              Text(
+                                'Usuários com acesso a este módulo',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Selecione os perfis. Ao marcar um perfil, todos os usuários dele já ficam marcados e você pode desmarcar exceções.',
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(color: const Color(0xFF5E6A7C)),
+                              ),
+                              const SizedBox(height: 12),
+                              ..._profiles.map(_buildProfileCard),
+                              if (_sellerProfileSelected) ...[
+                                const SizedBox(height: 16),
+                                DropdownButtonFormField<String>(
+                                  initialValue: _selectedSellerDefaultDraftKey,
+                                  items: _validFilterDrafts.map((draft) {
+                                    return DropdownMenuItem<String>(
+                                      value: draft.draftKey,
+                                      child: Text(draft.displayLabel),
+                                    );
+                                  }).toList(),
+                                  onChanged: _validFilterDrafts.isEmpty
+                                      ? null
+                                      : (value) {
+                                          setState(() {
+                                            _selectedSellerDefaultDraftKey =
+                                                value;
+                                          });
+                                        },
+                                  decoration: const InputDecoration(
+                                    labelText:
+                                        'Campo padrão para filtrar todos os vendedores',
+                                    prefixIcon: Icon(Icons.filter_alt_outlined),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Ao salvar, os vendedores deste módulo receberão esse campo preenchido automaticamente com o código deles, sem impedir ajustes individuais depois.',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFF5E6A7C),
+                                      ),
+                                ),
+                              ],
+                              const SizedBox(height: 20),
+                              FilledButton(
+                                onPressed: _saving ? null : _save,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: primaryColor,
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: _saving
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Text('Salvar'),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
+              ),
+            ),
     );
   }
 
@@ -698,21 +676,19 @@ class _BiModuleFormScreenState extends State<BiModuleFormScreen> {
                 ),
                 subtitle: Text(
                   users.isEmpty
-                      ? 'Nenhum usuario neste perfil.'
-                      : '${users.length} usuario(s) neste perfil.',
+                      ? 'Nenhum usuário neste perfil.'
+                      : '${users.length} usuário(s) neste perfil.',
                 ),
               ),
               if (isSelected && users.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 ...users.map((user) {
-                  final label =
-                      user.displayName?.trim().isNotEmpty == true
-                          ? '${user.code} - ${user.displayName}'
-                          : user.code;
+                  final label = user.displayName?.trim().isNotEmpty == true
+                      ? user.label
+                      : user.code;
                   return CheckboxListTile(
                     value: _selectedUserIds.contains(user.id),
-                    onChanged: (value) =>
-                        _toggleUser(user.id, value ?? false),
+                    onChanged: (value) => _toggleUser(user.id, value ?? false),
                     controlAffinity: ListTileControlAffinity.leading,
                     activeColor: primaryColor,
                     contentPadding: const EdgeInsets.only(left: 12),
@@ -737,7 +713,8 @@ class _FilterDraft {
     String column = '',
     String label = '',
   }) : draftKey =
-           draftKey ?? 'draft_${DateTime.now().microsecondsSinceEpoch}_${_seed++}',
+           draftKey ??
+           'draft_${DateTime.now().microsecondsSinceEpoch}_${_seed++}',
        tableController = TextEditingController(text: table),
        columnController = TextEditingController(text: column),
        labelController = TextEditingController(text: label);

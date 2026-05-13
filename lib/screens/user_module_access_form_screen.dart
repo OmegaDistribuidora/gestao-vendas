@@ -64,16 +64,18 @@ class _UserModuleAccessFormScreenState
       }
 
       final selectedUserId =
-          widget.existingAccess?.userId ?? (users.isEmpty ? null : users.first.id);
-      final selectedModuleId = widget.existingAccess?.moduleId ??
+          widget.existingAccess?.userId ??
+          (users.isEmpty ? null : users.first.id);
+      final selectedModuleId =
+          widget.existingAccess?.moduleId ??
           (modules.isEmpty ? null : modules.first.id);
       final selectedModule = _findModuleById(modules, selectedModuleId);
 
       _syncFilterControllers(
         module: selectedModule,
         initialValues: {
-          for (final item in widget.existingAccess?.filterValues ??
-              const <dynamic>[])
+          for (final item
+              in widget.existingAccess?.filterValues ?? const <dynamic>[])
             item.moduleFilterId: item.filterValue,
         },
       );
@@ -103,8 +105,7 @@ class _UserModuleAccessFormScreenState
       }
       setState(() {
         _loading = false;
-        _errorMessage =
-            'Falha ao carregar os dados da liberacao.\n$error';
+        _errorMessage = 'Falha ao carregar os dados da liberação.\n$error';
       });
     }
   }
@@ -115,7 +116,7 @@ class _UserModuleAccessFormScreenState
     }
 
     if (_selectedUserId == null || _selectedModuleId == null) {
-      _showMessage('Selecione um usuario e um modulo.');
+      _showMessage('Selecione um usuário e um módulo.');
       return;
     }
 
@@ -125,9 +126,7 @@ class _UserModuleAccessFormScreenState
         selectedModule != null &&
         selectedModule.filters.isNotEmpty &&
         filterValues.isEmpty) {
-      _showMessage(
-        'Informe pelo menos um valor de filtro para este modulo.',
-      );
+      _showMessage('Informe pelo menos um valor de filtro para este módulo.');
       return;
     }
 
@@ -161,7 +160,7 @@ class _UserModuleAccessFormScreenState
     } on RepositoryException catch (error) {
       _showMessage(error.message);
     } catch (error) {
-      _showMessage('Nao foi possivel salvar a liberacao.\n$error');
+      _showMessage('Não foi possível salvar a liberação.\n$error');
     } finally {
       if (mounted) {
         setState(() {
@@ -190,7 +189,7 @@ class _UserModuleAccessFormScreenState
     } on RepositoryException catch (error) {
       _showMessage(error.message);
     } catch (error) {
-      _showMessage('Nao foi possivel excluir a liberacao.\n$error');
+      _showMessage('Não foi possível excluir a liberação.\n$error');
     } finally {
       if (mounted) {
         setState(() {
@@ -262,7 +261,9 @@ class _UserModuleAccessFormScreenState
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -270,7 +271,7 @@ class _UserModuleAccessFormScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _editing ? 'Editar liberacao' : 'Liberacao usuario x modulo',
+          _editing ? 'Editar liberação' : 'Liberação usuário x módulo',
         ),
         actions: [
           if (_editing)
@@ -286,7 +287,7 @@ class _UserModuleAccessFormScreenState
                       ),
                     )
                   : const Icon(Icons.delete_outline),
-              tooltip: 'Excluir liberacao',
+              tooltip: 'Excluir liberação',
             ),
         ],
       ),
@@ -321,8 +322,8 @@ class _UserModuleAccessFormScreenState
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   _users.isEmpty
-                      ? 'Cadastre pelo menos um usuario nao administrador antes de criar liberacoes.'
-                      : 'Cadastre pelo menos um modulo BI antes de criar liberacoes.',
+                      ? 'Cadastre pelo menos um usuário não administrador antes de criar liberações.'
+                      : 'Cadastre pelo menos um módulo BI antes de criar liberações.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -351,8 +352,9 @@ class _UserModuleAccessFormScreenState
                       DropdownButtonFormField<String>(
                         initialValue: _selectedUserId,
                         items: _users.map((user) {
-                          final label = user.displayName?.trim().isNotEmpty == true
-                              ? '${user.code} - ${user.displayName}'
+                          final label =
+                              user.displayName?.trim().isNotEmpty == true
+                              ? user.label
                               : user.code;
                           return DropdownMenuItem<String>(
                             value: user.id,
@@ -365,7 +367,7 @@ class _UserModuleAccessFormScreenState
                           });
                         },
                         decoration: const InputDecoration(
-                          labelText: 'Usuario',
+                          labelText: 'Usuário',
                           prefixIcon: Icon(Icons.person_outline),
                         ),
                       ),
@@ -380,7 +382,7 @@ class _UserModuleAccessFormScreenState
                         }).toList(),
                         onChanged: _handleModuleChanged,
                         decoration: const InputDecoration(
-                          labelText: 'Modulo BI',
+                          labelText: 'Módulo BI',
                           prefixIcon: Icon(Icons.bar_chart_outlined),
                         ),
                       ),
@@ -393,19 +395,19 @@ class _UserModuleAccessFormScreenState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Configuracao do modulo',
+                                'Configuração do módulo',
                                 style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                               const SizedBox(height: 12),
-                              Text('Modulo: ${selectedModule?.name ?? '-'}'),
+                              Text('Módulo: ${selectedModule?.name ?? '-'}'),
                               const SizedBox(height: 8),
                               Text(
                                 selectedModule == null
-                                    ? 'Nenhum modulo selecionado.'
+                                    ? 'Nenhum módulo selecionado.'
                                     : selectedModule.filters.isEmpty
-                                        ? 'Este modulo nao possui campos filtraveis cadastrados.'
-                                        : 'Campos filtraveis: ${selectedModule.filters.map((item) => item.displayLabel).join(' | ')}',
+                                    ? 'Este módulo não possui campos filtráveis cadastrados.'
+                                    : 'Campos filtráveis: ${selectedModule.filters.map((item) => item.displayLabel).join(' | ')}',
                               ),
                             ],
                           ),
@@ -414,7 +416,8 @@ class _UserModuleAccessFormScreenState
                       const SizedBox(height: 16),
                       SwitchListTile(
                         value: _hasFilteredData,
-                        onChanged: selectedModule == null ||
+                        onChanged:
+                            selectedModule == null ||
                                 selectedModule.filters.isEmpty
                             ? null
                             : (value) {
@@ -433,7 +436,7 @@ class _UserModuleAccessFormScreenState
                         ...selectedModule.filters.map(_buildFilterField),
                         const SizedBox(height: 8),
                         Text(
-                          'Preencha apenas os filtros necessarios para este usuario.',
+                          'Preencha apenas os filtros necessários para este usuário.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],

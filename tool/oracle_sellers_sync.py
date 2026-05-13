@@ -144,7 +144,32 @@ def authenticate_supabase() -> tuple[str, str]:
     return supabase_url, response.json()["access_token"]
 
 
+def _build_supervisors(rows: Iterable[SellerRow]) -> list[dict[str, str]]:
+    supervisors: dict[str, dict[str, str]] = {}
+    for row in rows:
+        if not row.supervisor_code or not row.supervisor_name:
+            continue
+        supervisors[row.supervisor_code] = {
+            "code": row.supervisor_code,
+            "displayName": row.supervisor_name,
+        }
+    return list(supervisors.values())
+
+
+def _build_coordinators(rows: Iterable[SellerRow]) -> list[dict[str, str]]:
+    coordinators: dict[str, dict[str, str]] = {}
+    for row in rows:
+        if not row.coordinator_code or not row.coordinator_name:
+            continue
+        coordinators[row.coordinator_code] = {
+            "code": row.coordinator_code,
+            "displayName": row.coordinator_name,
+        }
+    return list(coordinators.values())
+
+
 def sync_sellers(rows: Iterable[SellerRow]) -> dict[str, object]:
+    rows = list(rows)
     sellers = [
         {
             "code": row.seller_code,
@@ -158,6 +183,8 @@ def sync_sellers(rows: Iterable[SellerRow]) -> dict[str, object]:
         for row in rows
         if row.seller_code and row.seller_name and len(row.cpf) >= 3
     ]
+    supervisors = _build_supervisors(rows)
+    coordinators = _build_coordinators(rows)
 
     supabase_url, access_token = authenticate_supabase()
     publishable_key = _require_env("SUPABASE_PUBLISHABLE_KEY")
@@ -171,8 +198,9 @@ def sync_sellers(rows: Iterable[SellerRow]) -> dict[str, object]:
         },
         json={
             "action": "sync_sellers",
-            "deactivateMissing": True,
             "sellers": sellers,
+            "supervisors": supervisors,
+            "coordinators": coordinators,
         },
         timeout=240,
     )

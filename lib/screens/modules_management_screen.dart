@@ -110,60 +110,60 @@ class _ModulesManagementScreenState extends State<ModulesManagementScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: primaryColor))
           : _errorMessage != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(_errorMessage!, textAlign: TextAlign.center),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: 'Buscar módulo',
-                    prefixIcon: Icon(Icons.search),
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(_errorMessage!, textAlign: TextAlign.center),
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      _search = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 20),
-                if (visibleModules.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('Nenhum módulo encontrado.'),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Buscar módulo',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _search = value;
+                        });
+                      },
                     ),
-                  )
-                else
-                  ...visibleModules.map(
-                    (module) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Card(
-                        child: ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Color(0xFFE7EBFF),
-                            foregroundColor: primaryColor,
-                            child: Icon(Icons.bar_chart_outlined),
+                    const SizedBox(height: 20),
+                    if (visibleModules.isEmpty)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text('Nenhum módulo encontrado.'),
+                        ),
+                      )
+                    else
+                      ...visibleModules.map(
+                        (module) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Card(
+                            child: ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Color(0xFFE7EBFF),
+                                foregroundColor: primaryColor,
+                                child: Icon(Icons.bar_chart_outlined),
+                              ),
+                              title: Text(
+                                module.name,
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              subtitle: Text(
+                                'Filtros: ${module.filters.isEmpty ? 'Nenhum' : module.filters.map((item) => item.displayLabel).join(' | ')}\nStatus: ${module.isActive ? 'Ativo' : 'Inativo'}',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => _openForm(module),
+                            ),
                           ),
-                          title: Text(
-                            module.name,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Text(
-                            'Filtros: ${module.filters.isEmpty ? 'Nenhum' : module.filters.map((item) => item.displayLabel).join(' | ')}\nStatus: ${module.isActive ? 'Ativo' : 'Inativo'}',
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _openForm(module),
                         ),
                       ),
-                    ),
-                  ),
-              ],
-            ),
+                  ],
+                ),
     );
   }
 }

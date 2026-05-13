@@ -138,62 +138,62 @@ class _AccessManagementScreenState extends State<AccessManagementScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: primaryColor))
           : _errorMessage != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(_errorMessage!, textAlign: TextAlign.center),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: 'Buscar liberação',
-                    prefixIcon: Icon(Icons.search),
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(_errorMessage!, textAlign: TextAlign.center),
                   ),
-                  onChanged: (value) {
-                    setState(() {
-                      _search = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 20),
-                if (visibleAccesses.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('Nenhuma liberação encontrada.'),
-                    ),
-                  )
-                else
-                  ...visibleAccesses.map((access) {
-                    final user = _findUser(access.userId);
-                    final module = _findModule(access.moduleId);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Card(
-                        child: ListTile(
-                          leading: const CircleAvatar(
-                            backgroundColor: Color(0xFFE7EBFF),
-                            foregroundColor: primaryColor,
-                            child: Icon(Icons.link_outlined),
-                          ),
-                          title: Text(
-                            '${user?.code ?? 'Usuário'} -> ${module?.name ?? 'Módulo'}',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: Text(
-                            _buildAccessSummary(module, access),
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _openForm(access),
-                        ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Buscar liberação',
+                        prefixIcon: Icon(Icons.search),
                       ),
-                    );
-                  }),
-              ],
-            ),
+                      onChanged: (value) {
+                        setState(() {
+                          _search = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    if (visibleAccesses.isEmpty)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text('Nenhuma liberação encontrada.'),
+                        ),
+                      )
+                    else
+                      ...visibleAccesses.map((access) {
+                        final user = _findUser(access.userId);
+                        final module = _findModule(access.moduleId);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Card(
+                            child: ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Color(0xFFE7EBFF),
+                                foregroundColor: primaryColor,
+                                child: Icon(Icons.link_outlined),
+                              ),
+                              title: Text(
+                                '${user?.code ?? 'Usuário'} • ${module?.name ?? 'Módulo'}',
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              subtitle: Text(
+                                _buildAccessSummary(module, access),
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => _openForm(access),
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
     );
   }
 

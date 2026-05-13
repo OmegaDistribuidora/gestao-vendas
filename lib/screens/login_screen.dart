@@ -4,11 +4,7 @@ import '../core/app_theme.dart';
 import 'app_bootstrap.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({
-    super.key,
-    required this.onLogin,
-    this.initialIdentifier,
-  });
+  const LoginScreen({super.key, required this.onLogin, this.initialIdentifier});
 
   final Future<void> Function({
     required String login,
@@ -25,21 +21,22 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _loginController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
   bool _hidePassword = true;
   bool _rememberLogin = true;
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loginController.text = widget.initialIdentifier ?? '';
+  }
 
   @override
   void dispose() {
     _loginController.dispose();
     _passwordController.dispose();
     super.dispose();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loginController.text = widget.initialIdentifier ?? '';
   }
 
   Future<void> _submit() async {
@@ -83,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Gest\u00E3o de Vendas')),
+      appBar: AppBar(title: const Text('Gestão de Vendas')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -104,7 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Vendedores entram com código e senha. Os demais perfis entram com nome de exibição e senha.',
+                        'Vendedores entram com código. Supervisores entram com o primeiro nome. Coordenadores entram com o primeiro nome ou login alternativo. O admin entra com "admin". Usuários manuais entram com o login cadastrado.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: const Color(0xFF5E6A7C),
@@ -115,7 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         controller: _loginController,
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
-                          labelText: 'Código ou nome de exibição',
+                          labelText: 'Código, login, nome ou alias',
                           prefixIcon: Icon(Icons.person_outline),
                         ),
                       ),

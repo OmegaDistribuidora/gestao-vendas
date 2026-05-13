@@ -22,10 +22,10 @@ class SellerHomeKpis {
 
   factory SellerHomeKpis.fromJson(Map<String, dynamic> json) {
     return SellerHomeKpis(
-      totalVenda: (json['venda_hoje'] as num?)?.toDouble() ?? 0,
-      totalVolume: (json['volume_hoje'] as num?)?.toDouble() ?? 0,
-      totalPedidos: (json['pedidos_hoje'] as num?)?.toInt() ?? 0,
-      totalPositivacao: (json['positivacao_hoje'] as num?)?.toInt() ?? 0,
+      totalVenda: (json['total_venda'] as num?)?.toDouble() ?? 0,
+      totalVolume: (json['total_volume'] as num?)?.toDouble() ?? 0,
+      totalPedidos: (json['total_pedidos'] as num?)?.toInt() ?? 0,
+      totalPositivacao: (json['total_positivacao'] as num?)?.toInt() ?? 0,
     );
   }
 }

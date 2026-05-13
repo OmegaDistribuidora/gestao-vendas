@@ -64,10 +64,8 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
   Future<void> _openForm([AppUser? user]) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
-        builder: (_) => UserFormScreen(
-          existingUser: user,
-          currentUser: widget.currentUser,
-        ),
+        builder: (_) =>
+            UserFormScreen(existingUser: user, currentUser: widget.currentUser),
       ),
     );
 
@@ -84,6 +82,7 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
         return true;
       }
       return user.code.toLowerCase().contains(search) ||
+          (user.loginAlias ?? '').toLowerCase().contains(search) ||
           (user.displayName ?? '').toLowerCase().contains(search) ||
           user.profileName.toLowerCase().contains(search);
     }).toList();
@@ -154,11 +153,14 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
                             ),
                           ),
                           title: Text(
-                            '${user.code}${user.displayName?.trim().isNotEmpty == true ? ' • ${user.displayName}' : ''}',
+                            user.label,
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           subtitle: Text(
-                            'Perfil: ${user.profileName}\nStatus: ${user.isActive ? 'Ativo' : 'Inativo'}',
+                            'Perfil: ${user.profileName}\n'
+                            'Status: ${user.isActive ? 'Ativo' : 'Inativo'}'
+                            '${user.loginAlias?.trim().isNotEmpty == true ? '\nLogin: ${user.loginAlias}' : ''}'
+                            '${user.requiresAdminPasswordDefinition ? '\nSenha pendente de definição pelo admin' : ''}',
                           ),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () => _openForm(user),

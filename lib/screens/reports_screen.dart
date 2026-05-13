@@ -61,7 +61,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
       setState(() {
         _loading = false;
-        _errorMessage = 'Nao foi possivel carregar os relatórios.\n$error';
+        _errorMessage = 'Não foi possível carregar os relatórios.\n$error';
       });
     }
   }
@@ -101,7 +101,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
       setState(() {
         _loading = false;
-        _errorMessage = 'Nao foi possivel carregar os relatórios.\n$error';
+        _errorMessage = 'Não foi possível carregar os relatórios.\n$error';
       });
     }
   }

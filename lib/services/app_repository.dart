@@ -23,6 +23,8 @@ class AppRepository {
   final RememberedLoginStore _rememberedLoginStore;
 
   static const String technicalDomain = 'app.omegadistribuidora.com.br';
+  static const String _moduleFiltersSelect =
+      'filters:app_module_filters!app_module_filters_module_id_fkey(*)';
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
@@ -61,7 +63,12 @@ class AppRepository {
       return null;
     }
 
-    return _loadCurrentUser(enforceActive: true);
+    try {
+      return await _loadCurrentUser(enforceActive: true);
+    } on RepositoryException {
+      await _supabase.auth.signOut();
+      return null;
+    }
   }
 
   Future<AppUser> authenticate({
@@ -69,7 +76,14 @@ class AppRepository {
     required String password,
   }) async {
     final identifier = login.trim();
-    final technicalEmail = await _resolveTechnicalEmail(identifier);
+    final loginContext = await _resolveLoginContext(identifier);
+    final technicalEmail = loginContext?.technicalEmail;
+
+    if (loginContext?.requiresAdminPasswordDefinition == true) {
+      throw const RepositoryException(
+        'Sua senha ainda precisa ser definida pelo administrador. Entre em contato com a equipe comercial.',
+      );
+    }
 
     if (technicalEmail == null || technicalEmail.isEmpty) {
       throw const RepositoryException('Identificador ou senha inválidos.');
@@ -120,6 +134,10 @@ class AppRepository {
     await _supabase.auth.updateUser(
       UserAttributes(password: newPassword.trim()),
     );
+    await _supabase
+        .from('app_users')
+        .update(<String, dynamic>{'requires_admin_password_definition': false})
+        .eq('auth_user_id', authUser.id);
 
     return _loadCurrentUser(enforceActive: true);
   }
@@ -192,20 +210,21 @@ class AppRepository {
     required String code,
     required String password,
     required String displayName,
+    String? loginAlias,
     required String profileId,
     required bool isActive,
-    List<UserModuleAccessInput> initialAccesses = const <UserModuleAccessInput>[],
+    List<UserModuleAccessInput> initialAccesses =
+        const <UserModuleAccessInput>[],
   }) async {
-    final result = await _invokeAdminUsersFunction(
-      <String, dynamic>{
-        'action': 'create',
-        'code': code.trim(),
-        'password': password.trim(),
-        'displayName': displayName.trim(),
-        'profileId': profileId,
-        'isActive': isActive,
-      },
-    );
+    final result = await _invokeAdminUsersFunction(<String, dynamic>{
+      'action': 'create',
+      'code': code.trim(),
+      'password': password.trim(),
+      'displayName': displayName.trim(),
+      'loginAlias': loginAlias?.trim(),
+      'profileId': profileId,
+      'isActive': isActive,
+    });
 
     final userData = result['user'];
     if (userData is! Map) {
@@ -231,23 +250,23 @@ class AppRepository {
     required String userId,
     required String code,
     required String displayName,
+    String? loginAlias,
     required String profileId,
     required bool isActive,
     String? newPassword,
   }) async {
-    final result = await _invokeAdminUsersFunction(
-      <String, dynamic>{
-        'action': 'update',
-        'userId': userId,
-        'code': code.trim(),
-        'displayName': displayName.trim(),
-        'profileId': profileId,
-        'isActive': isActive,
-        'newPassword': newPassword?.trim().isEmpty ?? true
-            ? null
-            : newPassword?.trim(),
-      },
-    );
+    final result = await _invokeAdminUsersFunction(<String, dynamic>{
+      'action': 'update',
+      'userId': userId,
+      'code': code.trim(),
+      'displayName': displayName.trim(),
+      'loginAlias': loginAlias?.trim(),
+      'profileId': profileId,
+      'isActive': isActive,
+      'newPassword': newPassword?.trim().isEmpty ?? true
+          ? null
+          : newPassword?.trim(),
+    });
 
     final userData = result['user'];
     if (userData is! Map) {
@@ -261,15 +280,16 @@ class AppRepository {
   }
 
   Future<void> deleteUser(String userId) async {
-    await _invokeAdminUsersFunction(
-      <String, dynamic>{'action': 'delete', 'userId': userId},
-    );
+    await _invokeAdminUsersFunction(<String, dynamic>{
+      'action': 'delete',
+      'userId': userId,
+    });
   }
 
   Future<List<BiModule>> getBiModules({bool onlyActive = false}) async {
-    var query = _supabase.from('app_modules').select(
-      '*, filters:app_module_filters(*)',
-    );
+    var query = _supabase
+        .from('app_modules')
+        .select('*, $_moduleFiltersSelect');
     if (onlyActive) {
       query = query.eq('is_active', true);
     }
@@ -347,7 +367,7 @@ class AppRepository {
   Future<BiModule> getBiModuleById(String moduleId) async {
     final row = await _supabase
         .from('app_modules')
-        .select('*, filters:app_module_filters(*)')
+        .select('*, $_moduleFiltersSelect')
         .eq('id', moduleId)
         .single();
 
@@ -652,7 +672,7 @@ class AppRepository {
 
     final data = await _supabase
         .from('app_modules')
-        .select('*, filters:app_module_filters(*)')
+        .select('*, $_moduleFiltersSelect')
         .inFilter('id', moduleIds)
         .eq('is_active', true)
         .order('name');
@@ -742,10 +762,16 @@ class AppRepository {
     return UsageReport.fromJson(_stringKeyedMap(response));
   }
 
-  Future<SellerHomeKpis> getSellerHomeKpis(String userCode) async {
+  Future<SellerHomeKpis> getHomeKpis({
+    required DateTime start,
+    required DateTime end,
+  }) async {
     final response = await _supabase.rpc(
-      'get_seller_home_kpis',
-      params: <String, dynamic>{'target_user_code': userCode.trim()},
+      'get_home_kpis',
+      params: <String, dynamic>{
+        'window_start': start.toUtc().toIso8601String(),
+        'window_end': end.toUtc().toIso8601String(),
+      },
     );
 
     if (response is! Map) {
@@ -788,6 +814,13 @@ class AppRepository {
       );
     }
 
+    if (enforceActive && user.requiresAdminPasswordDefinition) {
+      await _supabase.auth.signOut();
+      throw const RepositoryException(
+        'Sua senha ainda precisa ser definida pelo administrador. Entre em contato com a equipe comercial.',
+      );
+    }
+
     return user;
   }
 
@@ -799,21 +832,30 @@ class AppRepository {
     });
   }
 
-  Future<String?> _resolveTechnicalEmail(String identifier) async {
+  Future<_ResolvedLoginContext?> _resolveLoginContext(String identifier) async {
     try {
       final response = await _supabase.rpc(
-        'resolve_auth_email',
+        'resolve_login_context',
         params: <String, dynamic>{'login_identifier': identifier},
       );
 
-      if (response is String && response.trim().isNotEmpty) {
-        return response.trim();
+      if (response is Map) {
+        final mapped = _stringKeyedMap(response);
+        final technicalEmail = '${mapped['technical_email'] ?? ''}'.trim();
+        if (technicalEmail.isEmpty) {
+          return null;
+        }
+        return _ResolvedLoginContext(
+          technicalEmail: technicalEmail,
+          requiresAdminPasswordDefinition:
+              mapped['requires_admin_password_definition'] as bool? ?? false,
+        );
       }
       return null;
     } on PostgrestException catch (error) {
       if (error.message.toLowerCase().contains('duplicado')) {
         throw const RepositoryException(
-          'O nome de exibição informado está duplicado. Ajuste esse usuário na administração.',
+          'O identificador informado está duplicado. Ajuste esse usuário na administração.',
         );
       }
       throw RepositoryException(error.message);
@@ -859,8 +901,7 @@ class AppRepository {
           ),
         )
         .where(
-          (item) =>
-              item.filterTable.isNotEmpty && item.filterColumn.isNotEmpty,
+          (item) => item.filterTable.isNotEmpty && item.filterColumn.isNotEmpty,
         )
         .toList();
 
@@ -932,9 +973,7 @@ class AppRepository {
         .eq('access_id', accessId);
 
     final payload = filterValues.entries
-        .map(
-          (entry) => MapEntry(entry.key, entry.value.trim()),
-        )
+        .map((entry) => MapEntry(entry.key, entry.value.trim()))
         .where((entry) => entry.value.isNotEmpty)
         .map(
           (entry) => <String, dynamic>{
@@ -1005,4 +1044,14 @@ class RepositoryException implements Exception {
   const RepositoryException(this.message);
 
   final String message;
+}
+
+class _ResolvedLoginContext {
+  const _ResolvedLoginContext({
+    required this.technicalEmail,
+    required this.requiresAdminPasswordDefinition,
+  });
+
+  final String technicalEmail;
+  final bool requiresAdminPasswordDefinition;
 }
