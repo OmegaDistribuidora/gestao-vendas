@@ -13,8 +13,8 @@ import requests
 
 
 INITIAL_SYNC_START_DATE = date(2026, 1, 1)
-OPEN_DAY_OVERLAP_DAYS = 0
-CLOSED_DAY_OVERLAP_DAYS = 1
+DEFAULT_OPEN_DAY_OVERLAP_DAYS = 0
+DEFAULT_CLOSED_DAY_OVERLAP_DAYS = 7
 BATCH_SIZE = 1000
 
 ORACLE_QUERY = """
@@ -87,6 +87,27 @@ def _require_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"Environment variable {name} is required.")
     return value
+
+
+def _get_overlap_days(*, is_open_day: bool) -> int:
+    env_name = (
+        "OPEN_DAY_OVERLAP_DAYS"
+        if is_open_day
+        else "CLOSED_DAY_OVERLAP_DAYS"
+    )
+    default_value = (
+        DEFAULT_OPEN_DAY_OVERLAP_DAYS
+        if is_open_day
+        else DEFAULT_CLOSED_DAY_OVERLAP_DAYS
+    )
+    raw_value = os.getenv(env_name, "").strip()
+    if not raw_value:
+        return default_value
+
+    try:
+        return max(0, int(raw_value))
+    except ValueError:
+        return default_value
 
 
 def _to_float(value: Decimal | float | int | None) -> float:
@@ -171,9 +192,7 @@ def get_sync_start_date() -> date:
 
     last_date = date.fromisoformat(last_date_raw)
     today = date.today()
-    overlap_days = (
-        OPEN_DAY_OVERLAP_DAYS if last_date >= today else CLOSED_DAY_OVERLAP_DAYS
-    )
+    overlap_days = _get_overlap_days(is_open_day=last_date >= today)
     sync_start_date = last_date - timedelta(days=overlap_days)
     if sync_start_date < INITIAL_SYNC_START_DATE:
         sync_start_date = INITIAL_SYNC_START_DATE

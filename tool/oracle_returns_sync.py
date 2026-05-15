@@ -9,11 +9,10 @@ import oracledb
 import requests
 
 from oracle_financial_sync_common import (
-    CLOSED_DAY_OVERLAP_DAYS,
     INITIAL_SYNC_START_DATE,
-    OPEN_DAY_OVERLAP_DAYS,
     authenticate_supabase,
     fetch_oracle_rows,
+    get_overlap_days,
     get_sync_start_date,
     init_oracle_client_if_available,
     purge_supabase_window,
@@ -299,9 +298,7 @@ def get_return_detail_sync_start_date() -> date:
 
     last_date = date.fromisoformat(last_date_raw)
     today = date.today()
-    overlap_days = (
-        OPEN_DAY_OVERLAP_DAYS if last_date >= today else CLOSED_DAY_OVERLAP_DAYS
-    )
+    overlap_days = get_overlap_days(is_open_day=last_date >= today)
     sync_start_date = last_date - timedelta(days=overlap_days)
     if sync_start_date < INITIAL_SYNC_START_DATE:
         sync_start_date = INITIAL_SYNC_START_DATE

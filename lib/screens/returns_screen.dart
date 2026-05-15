@@ -23,6 +23,7 @@ class ReturnsScreen extends StatefulWidget {
 
 class _ReturnsScreenState extends State<ReturnsScreen> {
   final AppRepository _repository = AppRepository.instance;
+  final TextEditingController _searchController = TextEditingController();
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'pt_BR',
     symbol: 'R\$',
@@ -37,11 +38,18 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   _ReturnPeriodPreset _selectedPeriod = _ReturnPeriodPreset.today;
   DateTime? _customStartDate;
   DateTime? _customEndDate;
+  String _searchTerm = '';
 
   @override
   void initState() {
     super.initState();
     _loadAnalysis();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   DateTime get _periodStart {
@@ -113,6 +121,19 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
       case _ReturnPeriodPreset.custom:
         return '${_dateFormat.format(_periodStart)} até ${_dateFormat.format(_periodEnd)}';
     }
+  }
+
+  List<ReturnOrderSummary> get _filteredOrders {
+    final term = _searchTerm.trim().toLowerCase();
+    if (term.isEmpty) {
+      return _analysis.orders;
+    }
+
+    return _analysis.orders.where((order) {
+      return order.numped.toLowerCase().contains(term) ||
+          order.codcli.toLowerCase().contains(term) ||
+          order.clientName.toLowerCase().contains(term);
+    }).toList();
   }
 
   Future<void> _loadAnalysis() async {
@@ -197,9 +218,8 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
 
   String _formatCurrency(double value) => _currencyFormat.format(value);
 
-  String _formatNumber(double value) => _decimalFormat.format(
-    double.parse(value.toStringAsFixed(1)),
-  );
+  String _formatNumber(double value) =>
+      _decimalFormat.format(double.parse(value.toStringAsFixed(1)));
 
   Future<void> _showOrderDetails(ReturnOrderSummary order) async {
     if (order.returnDate == null) {
@@ -226,14 +246,23 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Pedido ${order.numped}',
+                      '${order.codcli} • ${order.clientName}',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${order.codcli} • ${order.clientName}',
+                      'Pedido ${order.numped}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF5E6A7C),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      order.sellerName.trim().isNotEmpty
+                          ? 'Vendedor: ${order.codusur} • ${order.sellerName}'
+                          : 'Vendedor: ${order.codusur}',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: const Color(0xFF5E6A7C),
                       ),
@@ -275,7 +304,8 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                     ),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         '${item.codprod} • ${item.productName}',
@@ -365,7 +395,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Acompanhe os pedidos devolvidos, clientes, motivos e itens do período selecionado.',
+                              'Acompanhe os pedidos devolvidos, clientes, vendedores, motivos e itens do período selecionado.',
                               style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(color: const Color(0xFF5E6A7C)),
                             ),
@@ -411,18 +441,39 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                 runSpacing: 12,
                                 children: [
                                   OutlinedButton.icon(
-                                    onPressed: () => _pickCustomDate(isStart: true),
+                                    onPressed: () =>
+                                        _pickCustomDate(isStart: true),
                                     icon: const Icon(Icons.event_outlined),
-                                    label: Text(_dateFormat.format(_periodStart)),
+                                    label: Text(
+                                      _dateFormat.format(_periodStart),
+                                    ),
                                   ),
                                   OutlinedButton.icon(
-                                    onPressed: () => _pickCustomDate(isStart: false),
-                                    icon: const Icon(Icons.event_busy_outlined),
+                                    onPressed: () =>
+                                        _pickCustomDate(isStart: false),
+                                    icon: const Icon(
+                                      Icons.event_busy_outlined,
+                                    ),
                                     label: Text(_dateFormat.format(_periodEnd)),
                                   ),
                                 ],
                               ),
                             ],
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _searchController,
+                              textInputAction: TextInputAction.search,
+                              decoration: const InputDecoration(
+                                labelText: 'Buscar devolução',
+                                hintText: 'Pedido, código ou nome do cliente',
+                                prefixIcon: Icon(Icons.search),
+                              ),
+                              onChanged: (value) {
+                                setState(() {
+                                  _searchTerm = value;
+                                });
+                              },
+                            ),
                           ],
                         ),
                       ),
@@ -455,7 +506,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                               runSpacing: 10,
                               children: [
                                 _SummaryMetricCard(
-                                  title: 'Financeiro Devolvido',
+                                  title: 'Financeiro devolvido',
                                   value: _formatCurrency(
                                     _analysis.totalReturnAmount,
                                   ),
@@ -465,11 +516,11 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                   value: '${_analysis.totalClients}',
                                 ),
                                 _SummaryMetricCard(
-                                  title: 'Volume Devolvido',
+                                  title: 'Volume devolvido',
                                   value: _formatNumber(_analysis.totalVolume),
                                 ),
                                 _SummaryMetricCard(
-                                  title: 'Pedidos Devolvidos',
+                                  title: 'Pedidos devolvidos',
                                   value: '${_analysis.totalOrders}',
                                 ),
                               ],
@@ -479,17 +530,17 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    if (_analysis.orders.isEmpty)
+                    if (_filteredOrders.isEmpty)
                       const Card(
                         child: Padding(
                           padding: EdgeInsets.all(24),
                           child: Text(
-                            'Nenhuma devolução encontrada no período selecionado.',
+                            'Nenhuma devolução encontrada para o filtro informado.',
                           ),
                         ),
                       )
                     else
-                      ..._analysis.orders.map(
+                      ..._filteredOrders.map(
                         (order) => Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Card(
@@ -511,7 +562,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                 ),
                               ),
                               title: Text(
-                                'Pedido ${order.numped}',
+                                '${order.codcli} • ${order.clientName}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -521,7 +572,15 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('${order.codcli} • ${order.clientName}'),
+                                    Text('Pedido ${order.numped}'),
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        order.sellerName.trim().isNotEmpty
+                                            ? 'Vendedor: ${order.codusur} • ${order.sellerName}'
+                                            : 'Vendedor: ${order.codusur}',
+                                      ),
+                                    ),
                                     if (order.returnReason.isNotEmpty)
                                       Padding(
                                         padding: const EdgeInsets.only(top: 4),

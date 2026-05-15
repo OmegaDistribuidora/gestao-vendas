@@ -63,6 +63,8 @@ class ReturnOrderSummary {
     required this.numped,
     required this.codcli,
     required this.clientName,
+    required this.codusur,
+    required this.sellerName,
     required this.returnReason,
     required this.totalValue,
     required this.totalVolume,
@@ -74,6 +76,8 @@ class ReturnOrderSummary {
   final String numped;
   final String codcli;
   final String clientName;
+  final String codusur;
+  final String sellerName;
   final String returnReason;
   final double totalValue;
   final double totalVolume;
@@ -86,6 +90,8 @@ class ReturnOrderSummary {
       numped: '${json['numped'] ?? ''}'.trim(),
       codcli: '${json['codcli'] ?? ''}'.trim(),
       clientName: TextSanitizer.normalize(json['client_name'] as String? ?? ''),
+      codusur: '${json['codusur'] ?? ''}'.trim(),
+      sellerName: TextSanitizer.normalize(json['seller_name'] as String? ?? ''),
       returnReason: TextSanitizer.normalize(
         json['return_reason'] as String? ?? '',
       ),
