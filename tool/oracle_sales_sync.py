@@ -233,6 +233,31 @@ def fetch_oracle_rows(sync_start_date: date) -> list[SalesRow]:
         connection.close()
 
 
+def purge_supabase_window(sync_start_date: date) -> int:
+    supabase_url, access_token = authenticate_supabase()
+    publishable_key = _require_env("SUPABASE_PUBLISHABLE_KEY")
+
+    response = requests.delete(
+        f"{supabase_url}/rest/v1/app_sales_daily_snapshots",
+        headers={
+            "apikey": publishable_key,
+            "Authorization": f"Bearer {access_token}",
+            "Prefer": "return=representation",
+        },
+        params={
+            "sales_date": f"gte.{sync_start_date.isoformat()}",
+        },
+        timeout=300,
+    )
+    if not response.ok:
+        raise RuntimeError(
+            f"Supabase purge failed: {response.status_code} {response.text}"
+        )
+
+    deleted_rows = response.json() if response.text.strip() else []
+    return len(deleted_rows) if isinstance(deleted_rows, list) else 0
+
+
 def upsert_supabase_rows(rows: Iterable[SalesRow]) -> int:
     deduped_rows: dict[tuple[str, str, str, str, str], SalesRow] = {}
     for row in rows:
@@ -291,6 +316,7 @@ def upsert_supabase_rows(rows: Iterable[SalesRow]) -> int:
 def main() -> None:
     sync_start_date = get_sync_start_date()
     rows = fetch_oracle_rows(sync_start_date)
+    purged_count = purge_supabase_window(sync_start_date)
     upserted_count = upsert_supabase_rows(rows)
     total_venda = sum(row.venda for row in rows)
     total_volume = sum(row.volume for row in rows)
@@ -299,6 +325,7 @@ def main() -> None:
             {
                 "sync_start_date": sync_start_date.isoformat(),
                 "rows": len(rows),
+                "purged": purged_count,
                 "upserted": upserted_count,
                 "total_venda": round(total_venda, 2),
                 "total_volume": round(total_volume, 2),

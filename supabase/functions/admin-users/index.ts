@@ -28,6 +28,17 @@ function technicalEmailFromCode(code: string) {
   return `${code.trim().toLowerCase()}@${technicalDomain}`
 }
 
+function technicalEmailFromProfileCode(profileSlug: string, code: string) {
+  const normalizedCode = code.trim().toLowerCase()
+  if (profileSlug === 'supervisor') {
+    return `supervisor.${normalizedCode}@${technicalDomain}`
+  }
+  if (profileSlug === 'coordenador') {
+    return `coordenador.${normalizedCode}@${technicalDomain}`
+  }
+  return technicalEmailFromCode(code)
+}
+
 function technicalEmailFromLogin(login: string) {
   return `${login.trim().toLowerCase()}@${technicalDomain}`
 }
@@ -41,7 +52,8 @@ function sellerInitialPassword(cpf: string) {
   if (digits.length < 3) {
     throw new Error('CPF inválido para geração da senha inicial do vendedor.')
   }
-  return digits.slice(0, 3)
+  const seed = digits.slice(0, 3)
+  return `${seed}${seed}`
 }
 
 function placeholderPassword() {
@@ -273,7 +285,7 @@ async function createUser(payload: Record<string, unknown>) {
   }
 
   const technicalEmail = isCodeBasedProfileSlug(profileSlug)
-    ? technicalEmailFromCode(code)
+    ? technicalEmailFromProfileCode(profileSlug, code)
     : technicalEmailFromLogin(effectiveLoginAlias)
 
   const { data, error } = await adminClient.auth.admin.createUser({
@@ -303,6 +315,7 @@ async function createUser(payload: Record<string, unknown>) {
       is_active: isActive,
       origin: 'manual',
       requires_admin_password_definition: false,
+      credentials_updated_at: new Date().toISOString(),
     })
     .eq('auth_user_id', data.user.id)
     .select()
@@ -353,7 +366,7 @@ async function updateUser(payload: Record<string, unknown>) {
   }
 
   const technicalEmail = isCodeBasedProfileSlug(profileSlug)
-    ? technicalEmailFromCode(code)
+    ? technicalEmailFromProfileCode(profileSlug, code)
     : technicalEmailFromLogin(effectiveLoginAlias)
   const updateAuthPayload: Record<string, unknown> = {
     email: technicalEmail,
@@ -389,6 +402,7 @@ async function updateUser(payload: Record<string, unknown>) {
 
   if (newPassword) {
     updatePayload.requires_admin_password_definition = false
+    updatePayload.credentials_updated_at = new Date().toISOString()
   }
 
   const { data: updatedUser, error: updateError } = await adminClient
@@ -436,6 +450,7 @@ async function syncSellerUsers(
       .select(
         'auth_user_id, code, display_name, profile_id, origin, requires_admin_password_definition',
       )
+      .eq('profile_id', sellerProfileId)
       .in('code', codes)
 
     if (error) {
@@ -453,7 +468,7 @@ async function syncSellerUsers(
   let nameResets = 0
 
   for (const seller of sellers) {
-    const technicalEmail = technicalEmailFromCode(seller.code)
+    const technicalEmail = technicalEmailFromProfileCode('vendedor', seller.code)
     const existing = existingUsersByCode.get(seller.code)
 
     if (existing) {
@@ -496,6 +511,9 @@ async function syncSellerUsers(
           coordinator_name: seller.coordinatorName || null,
           origin: sellerOrigin,
           requires_admin_password_definition: false,
+          credentials_updated_at: nameChanged
+            ? new Date().toISOString()
+            : undefined,
         })
         .eq('auth_user_id', userId)
 
@@ -545,6 +563,7 @@ async function syncSellerUsers(
         coordinator_name: seller.coordinatorName || null,
         origin: sellerOrigin,
         requires_admin_password_definition: false,
+        credentials_updated_at: new Date().toISOString(),
       })
       .eq('auth_user_id', data.user.id)
 
@@ -621,6 +640,7 @@ async function syncNamedRoleUsers({
       .select(
         'auth_user_id, code, display_name, requires_admin_password_definition',
       )
+      .eq('profile_id', profileId)
       .in('code', codes)
 
     if (error) {
@@ -638,7 +658,7 @@ async function syncNamedRoleUsers({
   let skipped = 0
 
   for (const user of users) {
-    const technicalEmail = technicalEmailFromCode(user.code)
+    const technicalEmail = technicalEmailFromProfileCode(profileSlug, user.code)
     const existing = existingUsersByCode.get(user.code)
 
     if (existing) {
@@ -672,6 +692,9 @@ async function syncNamedRoleUsers({
           requires_admin_password_definition: nameChanged
             ? true
             : Boolean(existing.requires_admin_password_definition ?? false),
+          credentials_updated_at: nameChanged
+            ? new Date().toISOString()
+            : undefined,
         })
         .eq('auth_user_id', userId)
 
@@ -718,6 +741,7 @@ async function syncNamedRoleUsers({
         is_active: true,
         origin,
         requires_admin_password_definition: true,
+        credentials_updated_at: new Date().toISOString(),
       })
       .eq('auth_user_id', data.user.id)
 

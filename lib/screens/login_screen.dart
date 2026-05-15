@@ -94,25 +94,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Login',
+                        'Bem-vindo à Gestão de Vendas!',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineSmall
                             ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Vendedores entram com código. Supervisores entram com o primeiro nome. Coordenadores entram com o primeiro nome ou login alternativo. O admin entra com "admin". Usuários manuais entram com o login cadastrado.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: const Color(0xFF5E6A7C),
-                        ),
                       ),
                       const SizedBox(height: 24),
                       TextField(
                         controller: _loginController,
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
-                          labelText: 'Código, login, nome ou alias',
+                          labelText: 'Código ou login',
                           prefixIcon: Icon(Icons.person_outline),
                         ),
                       ),

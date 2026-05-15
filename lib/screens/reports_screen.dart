@@ -113,6 +113,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       initialDate: initialDate,
       firstDate: DateTime(2024),
       lastDate: DateTime.now().add(const Duration(days: 365)),
+      locale: const Locale('pt', 'BR'),
     );
 
     if (picked == null) {
@@ -145,6 +146,28 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _loadReport();
   }
 
+  String _formatDate(DateTime value) {
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    return '$day/$month/${value.year}';
+  }
+
+  String _buildTooltipText(
+    List<UsageBucket> items, {
+    String empty = 'Sem dados.',
+  }) {
+    if (items.isEmpty) {
+      return empty;
+    }
+
+    return items
+        .map(
+          (item) =>
+              '${item.label}: ${item.value.toStringAsFixed(item.value.truncateToDouble() == item.value ? 0 : 1)}',
+        )
+        .join('\n');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -162,169 +185,188 @@ class _ReportsScreenState extends State<ReportsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: primaryColor))
           : _errorMessage != null
-              ? Center(
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(_errorMessage!, textAlign: TextAlign.center),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(_errorMessage!, textAlign: TextAlign.center),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                OutlinedButton.icon(
-                                  onPressed: () => _pickDate(isStart: true),
-                                  icon: const Icon(Icons.date_range_outlined),
-                                  label: Text(_formatDate(_startDate)),
-                                ),
-                                OutlinedButton.icon(
-                                  onPressed: () => _pickDate(isStart: false),
-                                  icon: const Icon(Icons.event_outlined),
-                                  label: Text(_formatDate(_endDate)),
-                                ),
-                                ActionChip(
-                                  label: const Text('7 dias'),
-                                  onPressed: () => _applyQuickRange(7),
-                                ),
-                                ActionChip(
-                                  label: const Text('30 dias'),
-                                  onPressed: () => _applyQuickRange(30),
-                                ),
-                              ],
+                            OutlinedButton.icon(
+                              onPressed: () => _pickDate(isStart: true),
+                              icon: const Icon(Icons.date_range_outlined),
+                              label: Text(_formatDate(_startDate)),
                             ),
-                            const SizedBox(height: 16),
-                            DropdownButtonFormField<String?>(
-                              initialValue: _selectedUserId,
-                              items: <DropdownMenuItem<String?>>[
-                                const DropdownMenuItem<String?>(
-                                  value: null,
-                                  child: Text('Todos os usuários'),
-                                ),
-                                ..._users.map((user) {
-                                  final label =
-                                      user.displayName?.trim().isNotEmpty == true
-                                          ? '${user.displayName} (${user.code})'
-                                          : user.code;
-                                  return DropdownMenuItem<String?>(
-                                    value: user.id,
-                                    child: Text(label),
-                                  );
-                                }),
-                              ],
-                              onChanged: (value) async {
-                                setState(() {
-                                  _selectedUserId = value;
-                                });
-                                await _loadReport();
-                              },
-                              decoration: const InputDecoration(
-                                labelText: 'Filtrar por usuário',
-                                prefixIcon: Icon(Icons.person_search_outlined),
-                              ),
+                            OutlinedButton.icon(
+                              onPressed: () => _pickDate(isStart: false),
+                              icon: const Icon(Icons.event_outlined),
+                              label: Text(_formatDate(_endDate)),
+                            ),
+                            ActionChip(
+                              label: const Text('7 dias'),
+                              onPressed: () => _applyQuickRange(7),
+                            ),
+                            ActionChip(
+                              label: const Text('30 dias'),
+                              onPressed: () => _applyQuickRange(30),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      children: [
-                        _MetricCard(
-                          title: 'Usuários ativos',
-                          value: '${_report.activeUsers}',
-                        ),
-                        _MetricCard(
-                          title: 'Logins no sistema',
-                          value: '${_report.totalLogins}',
-                        ),
-                        _MetricCard(
-                          title: 'Aberturas de módulos',
-                          value: '${_report.totalModuleOpens}',
-                        ),
-                        _MetricCard(
-                          title: 'Tempo total',
-                          value: '${_report.totalMinutes.toStringAsFixed(1)} min',
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String?>(
+                          initialValue: _selectedUserId,
+                          items: <DropdownMenuItem<String?>>[
+                            const DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text('Todos os usuários'),
+                            ),
+                            ..._users.map((user) {
+                              final label =
+                                  user.displayName?.trim().isNotEmpty == true
+                                  ? '${user.displayName} (${user.code})'
+                                  : user.code;
+                              return DropdownMenuItem<String?>(
+                                value: user.id,
+                                child: Text(label),
+                              );
+                            }),
+                          ],
+                          onChanged: (value) async {
+                            setState(() {
+                              _selectedUserId = value;
+                            });
+                            await _loadReport();
+                          },
+                          decoration: const InputDecoration(
+                            labelText: 'Filtrar por usuário',
+                            prefixIcon: Icon(Icons.person_search_outlined),
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    _ReportSection(
-                      title: 'Logins por usuário',
-                      items: _report.loginsByUser,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: [
+                    _MetricCard(
+                      title: 'Usuários ativos',
+                      value: '${_report.activeUsers}',
+                      description:
+                          'Usuários ativos que fizeram login e/ou abriram pelo menos um painel no período.',
+                      tooltipMessage: _buildTooltipText(
+                        _report.activeUsersDetails,
+                        empty: 'Nenhum usuário ativo no período.',
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    _ReportSection(
-                      title: 'Módulos mais abertos',
-                      items: _report.modulesByOpenCount,
-                    ),
-                    const SizedBox(height: 16),
-                    _ReportSection(
-                      title: 'Tempo por módulo',
-                      items: _report.minutesByModule,
-                      suffix: ' min',
-                    ),
-                    const SizedBox(height: 16),
-                    _ReportSection(
-                      title: 'Logins por hora',
-                      items: _report.loginsByHour,
-                    ),
-                    const SizedBox(height: 16),
-                    _ReportSection(
-                      title: 'Logins por dia da semana',
-                      items: _report.loginsByWeekday,
-                    ),
-                    const SizedBox(height: 16),
-                    _ReportSection(
-                      title: 'Logins por perfil',
-                      items: _report.loginsByProfile,
+                    _MetricCard(
+                      title: 'Logins no sistema',
+                      value: '${_report.totalLogins}',
+                      description:
+                          'Quantidade total de logins realizados no período.',
+                      tooltipMessage: _buildTooltipText(
+                        _report.loginsByUser,
+                        empty: 'Nenhum login no período.',
+                      ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 20),
+                _FlatReportSection(
+                  title: 'Logins por perfil',
+                  items: _report.loginsByProfile,
+                ),
+                const SizedBox(height: 16),
+                _GroupedReportSection(
+                  title: 'Logins por usuário',
+                  groups: _report.loginsByUserByProfile,
+                ),
+                const SizedBox(height: 16),
+                _GroupedReportSection(
+                  title: 'Módulos mais abertos',
+                  groups: _report.modulesByOpenCountByProfile,
+                ),
+                const SizedBox(height: 16),
+                _FlatReportSection(
+                  title: 'Tempo por módulo',
+                  items: _report.minutesByModule,
+                  suffix: ' min',
+                ),
+                const SizedBox(height: 16),
+                _GroupedReportSection(
+                  title: 'Logins por hora',
+                  groups: _report.loginsByHourByProfile,
+                ),
+                const SizedBox(height: 16),
+                _GroupedReportSection(
+                  title: 'Logins por dia da semana',
+                  groups: _report.loginsByWeekdayByProfile,
+                ),
+              ],
+            ),
     );
-  }
-
-  String _formatDate(DateTime value) {
-    return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
   }
 }
 
 class _MetricCard extends StatelessWidget {
-  const _MetricCard({required this.title, required this.value});
+  const _MetricCard({
+    required this.title,
+    required this.value,
+    required this.description,
+    required this.tooltipMessage,
+  });
 
   final String title;
   final String value;
+  final String description;
+  final String tooltipMessage;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+    return Tooltip(
+      triggerMode: TooltipTriggerMode.tap,
+      showDuration: const Duration(seconds: 5),
+      message: tooltipMessage,
+      child: SizedBox(
+        width: 260,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: 8),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  description,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF5E6A7C),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -332,8 +374,8 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
-class _ReportSection extends StatelessWidget {
-  const _ReportSection({
+class _FlatReportSection extends StatelessWidget {
+  const _FlatReportSection({
     required this.title,
     required this.items,
     this.suffix = '',
@@ -353,9 +395,9 @@ class _ReportSection extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             if (items.isEmpty)
@@ -370,6 +412,73 @@ class _ReportSection extends StatelessWidget {
                       Text(
                         '${item.value.toStringAsFixed(item.value.truncateToDouble() == item.value ? 0 : 1)}$suffix',
                       ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupedReportSection extends StatelessWidget {
+  const _GroupedReportSection({required this.title, required this.groups});
+
+  final String title;
+  final List<UsageGroup> groups;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            if (groups.isEmpty)
+              const Text('Sem dados no período.')
+            else
+              ...groups.map(
+                (group) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        group.label,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 10),
+                      if (group.items.isEmpty)
+                        const Text('Sem dados neste perfil.')
+                      else
+                        ...group.items.map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                Expanded(child: Text(item.label)),
+                                Text(
+                                  item.value.toStringAsFixed(
+                                    item.value.truncateToDouble() == item.value
+                                        ? 0
+                                        : 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),

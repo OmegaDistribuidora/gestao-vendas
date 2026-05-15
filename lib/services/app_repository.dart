@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/supabase_config.dart';
@@ -5,8 +7,11 @@ import '../models/app_profile.dart';
 import '../models/app_user.dart';
 import '../models/bi_module.dart';
 import '../models/bi_module_filter_input.dart';
+import '../models/kpi_metric_source.dart';
 import '../models/remembered_login.dart';
+import '../models/return_analysis.dart';
 import '../models/seller_home_kpis.dart';
+import '../models/supplier_analysis.dart';
 import '../models/usage_report.dart';
 import '../models/user_module_access.dart';
 import '../models/user_module_access_input.dart';
@@ -86,7 +91,7 @@ class AppRepository {
     }
 
     if (technicalEmail == null || technicalEmail.isEmpty) {
-      throw const RepositoryException('Identificador ou senha inválidos.');
+      throw const RepositoryException('Identificador ou senha inv?lidos.');
     }
 
     try {
@@ -95,7 +100,22 @@ class AppRepository {
         password: password,
       );
     } on AuthException {
-      throw const RepositoryException('Identificador ou senha inválidos.');
+      final sellerFallbackPassword = _buildSellerFallbackPassword(
+        identifier,
+        password,
+      );
+      if (sellerFallbackPassword == null) {
+        throw const RepositoryException('Identificador ou senha inv?lidos.');
+      }
+
+      try {
+        await _supabase.auth.signInWithPassword(
+          email: technicalEmail,
+          password: sellerFallbackPassword,
+        );
+      } on AuthException {
+        throw const RepositoryException('Identificador ou senha inv?lidos.');
+      }
     }
 
     try {
@@ -122,13 +142,31 @@ class AppRepository {
       throw const RepositoryException('Nenhuma sessão ativa encontrada.');
     }
 
+    final currentUser = await _loadCurrentUser(enforceActive: true);
+
     try {
       await _supabase.auth.signInWithPassword(
         email: email,
         password: currentPassword,
       );
     } on AuthException {
-      throw const RepositoryException('A senha atual está incorreta.');
+      final sellerFallbackPassword =
+          currentUser.profileSlug == AppProfile.sellerSlug
+          ? _buildSellerFallbackPassword(currentUser.code, currentPassword)
+          : null;
+
+      if (sellerFallbackPassword == null) {
+        throw const RepositoryException('A senha atual está incorreta.');
+      }
+
+      try {
+        await _supabase.auth.signInWithPassword(
+          email: email,
+          password: sellerFallbackPassword,
+        );
+      } on AuthException {
+        throw const RepositoryException('A senha atual está incorreta.');
+      }
     }
 
     await _supabase.auth.updateUser(
@@ -136,8 +174,17 @@ class AppRepository {
     );
     await _supabase
         .from('app_users')
-        .update(<String, dynamic>{'requires_admin_password_definition': false})
+        .update(<String, dynamic>{
+          'requires_admin_password_definition': false,
+          'credentials_updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
         .eq('auth_user_id', authUser.id);
+
+    await _supabase.auth.signOut();
+    await _supabase.auth.signInWithPassword(
+      email: email,
+      password: newPassword.trim(),
+    );
 
     return _loadCurrentUser(enforceActive: true);
   }
@@ -765,12 +812,14 @@ class AppRepository {
   Future<SellerHomeKpis> getHomeKpis({
     required DateTime start,
     required DateTime end,
+    required KpiMetricSource metricSource,
   }) async {
     final response = await _supabase.rpc(
       'get_home_kpis',
       params: <String, dynamic>{
         'window_start': start.toUtc().toIso8601String(),
         'window_end': end.toUtc().toIso8601String(),
+        'metric_source': metricSource.value,
       },
     );
 
@@ -781,9 +830,90 @@ class AppRepository {
     return SellerHomeKpis.fromJson(_stringKeyedMap(response));
   }
 
+  Future<SupplierAnalysis> getSupplierAnalysis({
+    required DateTime start,
+    required DateTime end,
+    required KpiMetricSource metricSource,
+  }) async {
+    final response = await _supabase.rpc(
+      'get_supplier_analysis',
+      params: <String, dynamic>{
+        'window_start': start.toUtc().toIso8601String(),
+        'window_end': end.toUtc().toIso8601String(),
+        'metric_source': metricSource.value,
+      },
+    );
+
+    if (response is! Map) {
+      return SupplierAnalysis.empty();
+    }
+
+    return SupplierAnalysis.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<ReturnAnalysis> getReturnAnalysis({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final response = await _supabase.rpc(
+      'get_return_analysis',
+      params: <String, dynamic>{
+        'window_start': start.toUtc().toIso8601String(),
+        'window_end': end.toUtc().toIso8601String(),
+      },
+    );
+
+    if (response is! Map) {
+      return ReturnAnalysis.empty();
+    }
+
+    return ReturnAnalysis.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<List<ReturnOrderDetail>> getReturnOrderDetails({
+    required DateTime returnDate,
+    required String orderNumber,
+  }) async {
+    final response = await _supabase.rpc(
+      'get_return_order_details',
+      params: <String, dynamic>{
+        'target_return_date': returnDate.toIso8601String().split('T').first,
+        'target_order_number': orderNumber,
+      },
+    );
+
+    if (response is! Map) {
+      return const <ReturnOrderDetail>[];
+    }
+
+    final items = response['items'];
+    if (items is! List) {
+      return const <ReturnOrderDetail>[];
+    }
+
+    return items
+        .whereType<Map>()
+        .map(
+          (row) => ReturnOrderDetail.fromJson(
+            row.map((key, value) => MapEntry('$key', value)),
+          ),
+        )
+        .toList();
+  }
+
   String buildTechnicalEmail(String code) {
     final normalizedCode = code.trim().toLowerCase();
     return '$normalizedCode@$technicalDomain';
+  }
+
+  String? _buildSellerFallbackPassword(String identifier, String password) {
+    final trimmedIdentifier = identifier.trim();
+    final trimmedPassword = password.trim();
+    final isNumericCode = RegExp(r'^\d+$').hasMatch(trimmedIdentifier);
+    if (!isNumericCode || trimmedPassword.length != 3) {
+      return null;
+    }
+    return '$trimmedPassword$trimmedPassword';
   }
 
   Future<AppUser> _loadCurrentUser({required bool enforceActive}) async {
@@ -801,6 +931,25 @@ class AppRepository {
     if (row == null) {
       throw const RepositoryException(
         'O usuário autenticado ainda não possui perfil no app.',
+      );
+    }
+
+    final credentialsUpdatedAt = _parseDateTimeValue(
+      row['credentials_updated_at'],
+    );
+    final sessionIssuedAt = _currentSessionIssuedAt();
+    final sessionInvalidated =
+        enforceActive &&
+        credentialsUpdatedAt != null &&
+        sessionIssuedAt != null &&
+        credentialsUpdatedAt
+            .toUtc()
+            .isAfter(sessionIssuedAt.toUtc().add(const Duration(seconds: 1)));
+
+    if (sessionInvalidated) {
+      await _supabase.auth.signOut();
+      throw const RepositoryException(
+        'Sua sessão foi invalidada. Faça login novamente.',
       );
     }
 
@@ -1037,6 +1186,44 @@ class AppRepository {
 
   Map<String, dynamic> _stringKeyedMap(Map<dynamic, dynamic> source) {
     return source.map((key, value) => MapEntry('$key', value));
+  }
+
+  DateTime? _parseDateTimeValue(Object? value) {
+    if (value is String && value.isNotEmpty) {
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
+
+  DateTime? _currentSessionIssuedAt() {
+    final accessToken = _supabase.auth.currentSession?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      return null;
+    }
+
+    final parts = accessToken.split('.');
+    if (parts.length < 2) {
+      return null;
+    }
+
+    try {
+      final normalizedPayload = base64Url.normalize(parts[1]);
+      final payloadJson = utf8.decode(base64Url.decode(normalizedPayload));
+      final payload = jsonDecode(payloadJson);
+      if (payload is Map<String, dynamic>) {
+        final issuedAtSeconds = payload['iat'];
+        if (issuedAtSeconds is num) {
+          return DateTime.fromMillisecondsSinceEpoch(
+            issuedAtSeconds.toInt() * 1000,
+            isUtc: true,
+          );
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
   }
 }
 

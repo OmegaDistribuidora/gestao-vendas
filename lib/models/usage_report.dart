@@ -4,44 +4,44 @@ class UsageReport {
   const UsageReport({
     required this.activeUsers,
     required this.totalLogins,
-    required this.totalModuleOpens,
-    required this.totalMinutes,
+    required this.activeUsersDetails,
     required this.loginsByUser,
-    required this.modulesByOpenCount,
-    required this.minutesByModule,
-    required this.loginsByHour,
-    required this.loginsByWeekday,
     required this.loginsByProfile,
+    required this.loginsByUserByProfile,
+    required this.modulesByOpenCountByProfile,
+    required this.minutesByModule,
+    required this.loginsByHourByProfile,
+    required this.loginsByWeekdayByProfile,
   });
 
   final int activeUsers;
   final int totalLogins;
-  final int totalModuleOpens;
-  final double totalMinutes;
+  final List<UsageBucket> activeUsersDetails;
   final List<UsageBucket> loginsByUser;
-  final List<UsageBucket> modulesByOpenCount;
-  final List<UsageBucket> minutesByModule;
-  final List<UsageBucket> loginsByHour;
-  final List<UsageBucket> loginsByWeekday;
   final List<UsageBucket> loginsByProfile;
+  final List<UsageGroup> loginsByUserByProfile;
+  final List<UsageGroup> modulesByOpenCountByProfile;
+  final List<UsageBucket> minutesByModule;
+  final List<UsageGroup> loginsByHourByProfile;
+  final List<UsageGroup> loginsByWeekdayByProfile;
 
   factory UsageReport.empty() {
     return const UsageReport(
       activeUsers: 0,
       totalLogins: 0,
-      totalModuleOpens: 0,
-      totalMinutes: 0,
+      activeUsersDetails: <UsageBucket>[],
       loginsByUser: <UsageBucket>[],
-      modulesByOpenCount: <UsageBucket>[],
-      minutesByModule: <UsageBucket>[],
-      loginsByHour: <UsageBucket>[],
-      loginsByWeekday: <UsageBucket>[],
       loginsByProfile: <UsageBucket>[],
+      loginsByUserByProfile: <UsageGroup>[],
+      modulesByOpenCountByProfile: <UsageGroup>[],
+      minutesByModule: <UsageBucket>[],
+      loginsByHourByProfile: <UsageGroup>[],
+      loginsByWeekdayByProfile: <UsageGroup>[],
     );
   }
 
   factory UsageReport.fromJson(Map<String, dynamic> json) {
-    List<UsageBucket> parseList(Object? value) {
+    List<UsageBucket> parseBuckets(Object? value) {
       if (value is! List) {
         return const <UsageBucket>[];
       }
@@ -50,9 +50,22 @@ class UsageReport {
           .whereType<Map>()
           .map(
             (item) => UsageBucket.fromJson(
-              item.map(
-                (key, value) => MapEntry('$key', value),
-              ),
+              item.map((key, value) => MapEntry('$key', value)),
+            ),
+          )
+          .toList();
+    }
+
+    List<UsageGroup> parseGroups(Object? value) {
+      if (value is! List) {
+        return const <UsageGroup>[];
+      }
+
+      return value
+          .whereType<Map>()
+          .map(
+            (item) => UsageGroup.fromJson(
+              item.map((key, value) => MapEntry('$key', value)),
             ),
           )
           .toList();
@@ -61,14 +74,42 @@ class UsageReport {
     return UsageReport(
       activeUsers: (json['active_users'] as num?)?.toInt() ?? 0,
       totalLogins: (json['total_logins'] as num?)?.toInt() ?? 0,
-      totalModuleOpens: (json['total_module_opens'] as num?)?.toInt() ?? 0,
-      totalMinutes: (json['total_minutes'] as num?)?.toDouble() ?? 0,
-      loginsByUser: parseList(json['logins_by_user']),
-      modulesByOpenCount: parseList(json['modules_by_open_count']),
-      minutesByModule: parseList(json['minutes_by_module']),
-      loginsByHour: parseList(json['logins_by_hour']),
-      loginsByWeekday: parseList(json['logins_by_weekday']),
-      loginsByProfile: parseList(json['logins_by_profile']),
+      activeUsersDetails: parseBuckets(json['active_users_details']),
+      loginsByUser: parseBuckets(json['logins_by_user']),
+      loginsByProfile: parseBuckets(json['logins_by_profile']),
+      loginsByUserByProfile: parseGroups(json['logins_by_user_by_profile']),
+      modulesByOpenCountByProfile: parseGroups(
+        json['modules_by_open_count_by_profile'],
+      ),
+      minutesByModule: parseBuckets(json['minutes_by_module']),
+      loginsByHourByProfile: parseGroups(json['logins_by_hour_by_profile']),
+      loginsByWeekdayByProfile: parseGroups(
+        json['logins_by_weekday_by_profile'],
+      ),
+    );
+  }
+}
+
+class UsageGroup {
+  const UsageGroup({required this.label, required this.items});
+
+  final String label;
+  final List<UsageBucket> items;
+
+  factory UsageGroup.fromJson(Map<String, dynamic> json) {
+    final itemsJson = json['items'];
+    return UsageGroup(
+      label: TextSanitizer.normalize(json['label'] as String? ?? ''),
+      items: itemsJson is List
+          ? itemsJson
+                .whereType<Map>()
+                .map(
+                  (item) => UsageBucket.fromJson(
+                    item.map((key, value) => MapEntry('$key', value)),
+                  ),
+                )
+                .toList()
+          : const <UsageBucket>[],
     );
   }
 }

@@ -1,18 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
 import '../models/bi_module.dart';
+import '../models/kpi_metric_source.dart';
 import '../models/seller_home_kpis.dart';
 import '../models/user_module_access.dart';
 import '../services/app_repository.dart';
 import '../utils/power_bi_url_builder.dart';
 import 'admin_screen.dart';
+import 'change_password_screen.dart';
 import 'panel_view_screen.dart';
 import 'reports_screen.dart';
+import 'returns_screen.dart';
+import 'supplier_analysis_screen.dart';
 
-enum _HomePeriodPreset { today, currentMonth, currentYear, custom }
+enum _HomePeriodPreset {
+  today,
+  yesterday,
+  currentMonth,
+  previousMonth,
+  currentYear,
+  custom,
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -30,12 +42,20 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final AppRepository _repository = AppRepository.instance;
+  final NumberFormat _currencyFormat = NumberFormat.currency(
+    locale: 'pt_BR',
+    symbol: 'R\$',
+  );
+  final NumberFormat _decimalFormat = NumberFormat.decimalPattern('pt_BR');
+  final DateFormat _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
+  final DateFormat _dateTimeFormat = DateFormat("dd/MM/yyyy 'às' HH:mm", 'pt_BR');
 
   bool _loading = true;
   String? _errorMessage;
   List<BiModule> _visibleModules = const <BiModule>[];
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
   _HomePeriodPreset _selectedPeriod = _HomePeriodPreset.today;
+  KpiMetricSource _selectedMetricSource = KpiMetricSource.venda;
   DateTime? _customStartDate;
   DateTime? _customEndDate;
 
@@ -46,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _isCoordinator =>
       widget.currentUser.profileSlug == AppProfile.coordinatorSlug;
   bool get _showsHomeKpis => !_isAdmin;
+  bool get _isNamedKpiProfile => _isSeller || _isSupervisor || _isCoordinator;
 
   @override
   void initState() {
@@ -58,8 +79,13 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (_selectedPeriod) {
       case _HomePeriodPreset.today:
         return DateTime(now.year, now.month, now.day);
+      case _HomePeriodPreset.yesterday:
+        final yesterday = now.subtract(const Duration(days: 1));
+        return DateTime(yesterday.year, yesterday.month, yesterday.day);
       case _HomePeriodPreset.currentMonth:
         return DateTime(now.year, now.month, 1);
+      case _HomePeriodPreset.previousMonth:
+        return DateTime(now.year, now.month - 1, 1);
       case _HomePeriodPreset.currentYear:
         return DateTime(now.year, 1, 1);
       case _HomePeriodPreset.custom:
@@ -72,7 +98,21 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     switch (_selectedPeriod) {
       case _HomePeriodPreset.today:
+        return DateTime(now.year, now.month, now.day, 23, 59, 59);
+      case _HomePeriodPreset.yesterday:
+        final yesterday = now.subtract(const Duration(days: 1));
+        return DateTime(
+          yesterday.year,
+          yesterday.month,
+          yesterday.day,
+          23,
+          59,
+          59,
+        );
       case _HomePeriodPreset.currentMonth:
+        return DateTime(now.year, now.month, now.day, 23, 59, 59);
+      case _HomePeriodPreset.previousMonth:
+        return DateTime(now.year, now.month, 0, 23, 59, 59);
       case _HomePeriodPreset.currentYear:
         return DateTime(now.year, now.month, now.day, 23, 59, 59);
       case _HomePeriodPreset.custom:
@@ -92,12 +132,16 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (_selectedPeriod) {
       case _HomePeriodPreset.today:
         return 'Hoje';
+      case _HomePeriodPreset.yesterday:
+        return 'Ontem';
       case _HomePeriodPreset.currentMonth:
         return 'Mês atual';
+      case _HomePeriodPreset.previousMonth:
+        return 'Mês anterior';
       case _HomePeriodPreset.currentYear:
         return 'Ano atual';
       case _HomePeriodPreset.custom:
-        return '${_formatDate(_periodStart)} até ${_formatDate(_periodEnd)}';
+        return '${_dateFormat.format(_periodStart)} até ${_dateFormat.format(_periodEnd)}';
     }
   }
 
@@ -108,29 +152,22 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final futures = <Future<dynamic>>[
+      final results = await Future.wait<dynamic>([
         _repository.getModulesForUser(widget.currentUser),
-      ];
-
-      if (_showsHomeKpis) {
-        futures.add(
-          _repository.getHomeKpis(start: _periodStart, end: _periodEnd),
-        );
-      }
-
-      final results = await Future.wait(futures);
-      final modules = results[0] as List<BiModule>;
-      final homeKpis = _showsHomeKpis && results.length > 1
-          ? results[1] as SellerHomeKpis
-          : SellerHomeKpis.empty();
+        _repository.getHomeKpis(
+          start: _periodStart,
+          end: _periodEnd,
+          metricSource: _selectedMetricSource,
+        ),
+      ]);
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _visibleModules = modules;
-        _homeKpis = homeKpis;
+        _visibleModules = results[0] as List<BiModule>;
+        _homeKpis = results[1] as SellerHomeKpis;
         _loading = false;
       });
     } catch (error) {
@@ -155,6 +192,7 @@ class _HomeScreenState extends State<HomeScreen> {
       initialDate: initialDate,
       firstDate: DateTime(2026, 1, 1),
       lastDate: DateTime.now(),
+      locale: const Locale('pt', 'BR'),
     );
 
     if (picked == null) {
@@ -195,6 +233,18 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadContent();
   }
 
+  Future<void> _handleMetricSourceChanged(KpiMetricSource? source) async {
+    if (source == null || source == _selectedMetricSource) {
+      return;
+    }
+
+    setState(() {
+      _selectedMetricSource = source;
+    });
+
+    await _loadContent();
+  }
+
   Future<void> _openAdministration() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -211,6 +261,54 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     await _openAdministration();
+  }
+
+  Future<void> _openReportsFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReportsScreen(currentUser: widget.currentUser),
+      ),
+    );
+  }
+
+  Future<void> _openSupplierAnalysisFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const SupplierAnalysisScreen()),
+    );
+  }
+
+  Future<void> _openReturnsFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const ReturnsScreen()),
+    );
+  }
+
+  Future<void> _openChangePasswordFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChangePasswordScreen(currentUser: widget.currentUser),
+      ),
+    );
   }
 
   Future<void> _openModule(BiModule module) async {
@@ -237,46 +335,24 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.currentUser.id,
         module.id,
       );
-
-      if (access == null) {
-        if (!mounted) {
-          return;
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Você não possui filtro configurado para este módulo.',
-            ),
-          ),
-        );
-        return;
-      }
-
-      final filledFilterValues = access.filterValues
+      final filterValues = access?.filterValues ?? const [];
+      final activeDescriptions = filterValues
           .where((item) => item.filterValue.trim().isNotEmpty)
+          .map(
+            (item) =>
+                '${item.moduleFilter?.displayLabel ?? 'Filtro'}: ${item.filterValue}',
+          )
           .toList();
 
-      if (access.hasFilteredData && filledFilterValues.isNotEmpty) {
-        url = PowerBiUrlBuilder.build(module, filledFilterValues);
-        filterDescription = filledFilterValues
-            .map(
-              (item) =>
-                  '${item.moduleFilter?.filterTable ?? '-'}'
-                  '/${item.moduleFilter?.filterColumn ?? '-'}'
-                  ' = ${item.filterValue}',
-            )
-            .join(' | ');
-      } else {
-        filterDescription = 'Sem filtro configurado.';
+      if (filterValues.isNotEmpty) {
+        url = PowerBiUrlBuilder.build(module, filterValues);
       }
+      filterDescription = activeDescriptions.isEmpty
+          ? 'Sem filtros específicos.'
+          : activeDescriptions.join(' | ');
     }
 
-    if (!mounted) {
-      return;
-    }
-
-    final openedAt = DateTime.now();
+    final startedAt = DateTime.now();
     final usageEventId = await _repository.startModuleUsage(
       userId: widget.currentUser.id,
       moduleId: module.id,
@@ -300,198 +376,162 @@ class _HomeScreenState extends State<HomeScreen> {
     if (usageEventId != null) {
       await _repository.finishModuleUsage(
         usageEventId: usageEventId,
-        duration: DateTime.now().difference(openedAt),
+        duration: DateTime.now().difference(startedAt),
       );
     }
   }
 
-  Future<void> _openReports() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ReportsScreen(currentUser: widget.currentUser),
-      ),
-    );
-  }
+  String _formatCurrency(double value) => _currencyFormat.format(value);
 
-  @override
-  Widget build(BuildContext context) {
-    final displayName =
-        widget.currentUser.displayName?.trim().isNotEmpty == true
-        ? widget.currentUser.displayName!
-        : widget.currentUser.login;
+  String _formatDecimal(double value) => _decimalFormat.format(
+    double.parse(value.toStringAsFixed(1)),
+  );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isAdmin ? 'Bem-vindo, $displayName' : 'Gestão de Vendas'),
-        actions: [
-          IconButton(
-            onPressed: _loadContent,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Atualizar',
-          ),
-          IconButton(
-            onPressed: widget.onLogout,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sair',
-          ),
-        ],
-      ),
-      drawer: Drawer(
-        child: SafeArea(
-          child: Column(
-            children: [
-              Container(
-                width: double.infinity,
-                color: primaryColor,
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Gestão de Vendas',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 20,
+  String _formatDateTime(DateTime value) => _dateTimeFormat.format(value);
+
+  Widget _buildLastUpdatesCard() {
+    final lines = <String>[
+      _homeKpis.lastSalesUpdatedAt != null
+          ? 'Última atualização das vendas: ${_formatDateTime(_homeKpis.lastSalesUpdatedAt!)}'
+          : 'Última atualização das vendas: ainda não disponível',
+    ];
+
+    if (_homeKpis.lastFinancialUpdatedAt != null) {
+      lines.add(
+        'Última atualização de faturamento/devolução: ${_formatDateTime(_homeKpis.lastFinancialUpdatedAt!)}',
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.schedule_outlined, color: primaryColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: lines
+                    .map(
+                      (line) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(line),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _isAdmin
-                          ? 'Administrador'
-                          : '${widget.currentUser.login} • ${widget.currentUser.profileName}',
-                      style: const TextStyle(color: Color(0xFFD9E0FF)),
-                    ),
-                  ],
-                ),
+                    )
+                    .toList(),
               ),
-              ListTile(
-                leading: const Icon(Icons.home_outlined),
-                title: const Text('Home'),
-                onTap: () => Navigator.of(context).pop(),
-              ),
-              if (_isAdmin)
-                ListTile(
-                  leading: const Icon(Icons.admin_panel_settings_outlined),
-                  title: const Text('Administração'),
-                  onTap: _openAdministrationFromDrawer,
-                ),
-              if (_isAdmin)
-                ListTile(
-                  leading: const Icon(Icons.insights_outlined),
-                  title: const Text('Relatórios'),
-                  onTap: () async {
-                    Navigator.of(context).pop();
-                    await _openReports();
-                  },
-                ),
-              const Divider(height: 1),
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  children: _visibleModules.map((module) {
-                    return ListTile(
-                      leading: const Icon(Icons.bar_chart_outlined),
-                      title: Text(module.name),
-                      subtitle: const Text('Acompanhamento BI'),
-                      onTap: () async {
-                        Navigator.of(context).pop();
-                        await _openModule(module);
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-      body: _buildBody(displayName),
     );
   }
 
-  Widget _buildBody(String displayName) {
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: primaryColor),
-      );
-    }
-
-    if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_errorMessage!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: _loadContent,
-                style: FilledButton.styleFrom(
-                  backgroundColor: primaryColor,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Tentar novamente'),
+  Widget _buildKpiCarousel({
+    required String title,
+    required String subtitle,
+    required List<_HomeKpiCardData> cards,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 138,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: cards
+                    .map(
+                      (card) => _HomeKpiCard(
+                        title: card.title,
+                        value: card.value,
+                        color: card.color,
+                      ),
+                    )
+                    .toList(),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    final displayName = widget.currentUser.displayName?.trim();
 
     return RefreshIndicator(
+      color: primaryColor,
       onRefresh: _loadContent,
       child: ListView(
-        padding: const EdgeInsets.all(24),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
         children: [
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Wrap(
-                runSpacing: 16,
-                spacing: 16,
-                alignment: WrapAlignment.spaceBetween,
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _isAdmin
-                              ? 'Painel administrativo'
-                              : 'Bem-vindo, $displayName',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _isAdmin
-                              ? 'Acesse a área administrativa para gerenciar usuários, perfis, módulos e relatórios.'
-                              : 'Por favor, selecione um módulo no menu à esquerda para acessar.',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: const Color(0xFF5E6A7C)),
-                        ),
-                      ],
+                  Text(
+                    _isAdmin
+                        ? 'Bem-vindo, Administração'
+                        : 'Bem-vindo, ${displayName?.isNotEmpty == true ? displayName : widget.currentUser.label}',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _isAdmin
+                        ? 'Acesse a área administrativa para gerenciar usuários, perfis, módulos e relatórios.'
+                        : 'Por favor, selecione um módulo no menu à esquerda para acessar.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF5E6A7C),
                     ),
                   ),
                   if (_isAdmin)
-                    FilledButton.icon(
-                      onPressed: _openAdministration,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
+                    Padding(
+                      padding: const EdgeInsets.only(top: 18),
+                      child: FilledButton.icon(
+                        onPressed: _openAdministration,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.settings_outlined),
+                        label: const Text('Abrir administração'),
                       ),
-                      icon: const Icon(Icons.settings_outlined),
-                      label: const Text('Abrir administração'),
                     ),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          _buildLastUpdatesCard(),
           if (_showsHomeKpis) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(20),
@@ -499,7 +539,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _isSeller || _isSupervisor || _isCoordinator
+                      _isNamedKpiProfile
                           ? 'Seu desempenho no período'
                           : 'Indicadores do período',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -514,7 +554,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    DropdownButtonFormField<KpiMetricSource>(
+                      initialValue: _selectedMetricSource,
+                      decoration: const InputDecoration(
+                        labelText: 'Fonte dos indicadores',
+                        prefixIcon: Icon(Icons.tune_outlined),
+                      ),
+                      items: KpiMetricSource.values
+                          .map(
+                            (source) => DropdownMenuItem(
+                              value: source,
+                              child: Text(source.label),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _handleMetricSourceChanged,
+                    ),
+                    const SizedBox(height: 14),
                     DropdownButtonFormField<_HomePeriodPreset>(
+                      key: ValueKey<_HomePeriodPreset>(_selectedPeriod),
                       initialValue: _selectedPeriod,
                       decoration: const InputDecoration(
                         labelText: 'Período',
@@ -526,8 +584,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Text('Hoje'),
                         ),
                         DropdownMenuItem(
+                          value: _HomePeriodPreset.yesterday,
+                          child: Text('Ontem'),
+                        ),
+                        DropdownMenuItem(
                           value: _HomePeriodPreset.currentMonth,
                           child: Text('Mês atual'),
+                        ),
+                        DropdownMenuItem(
+                          value: _HomePeriodPreset.previousMonth,
+                          child: Text('Mês anterior'),
                         ),
                         DropdownMenuItem(
                           value: _HomePeriodPreset.currentYear,
@@ -541,7 +607,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: _handlePeriodChanged,
                     ),
                     if (_selectedPeriod == _HomePeriodPreset.custom) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       Wrap(
                         spacing: 12,
                         runSpacing: 12,
@@ -549,12 +615,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           OutlinedButton.icon(
                             onPressed: () => _pickCustomDate(isStart: true),
                             icon: const Icon(Icons.event_outlined),
-                            label: Text(_formatDate(_periodStart)),
+                            label: Text(_dateFormat.format(_periodStart)),
                           ),
                           OutlinedButton.icon(
                             onPressed: () => _pickCustomDate(isStart: false),
                             icon: const Icon(Icons.event_busy_outlined),
-                            label: Text(_formatDate(_periodEnd)),
+                            label: Text(_dateFormat.format(_periodEnd)),
                           ),
                         ],
                       ),
@@ -564,29 +630,56 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              height: 138,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _HomeKpiCard(
-                    title: 'Venda',
-                    value: _formatCurrency(_homeKpis.totalVenda),
-                  ),
-                  _HomeKpiCard(
-                    title: 'Volume',
-                    value: _formatDecimal(_homeKpis.totalVolume),
-                  ),
-                  _HomeKpiCard(
-                    title: 'Pedidos',
-                    value: '${_homeKpis.totalPedidos}',
-                  ),
-                  _HomeKpiCard(
-                    title: 'Positivação',
-                    value: '${_homeKpis.totalPositivacao}',
-                  ),
-                ],
-              ),
+            _buildKpiCarousel(
+              title: _selectedMetricSource == KpiMetricSource.venda
+                  ? 'Indicadores brutos de venda'
+                  : 'Indicadores brutos de faturamento',
+              subtitle: _periodDescription,
+              cards: [
+                _HomeKpiCardData(
+                  title: 'Financeiro Bruto',
+                  value: _formatCurrency(_homeKpis.grossAmount),
+                ),
+                _HomeKpiCardData(
+                  title: 'Volume Bruto',
+                  value: _formatDecimal(_homeKpis.grossVolume),
+                ),
+                _HomeKpiCardData(
+                  title: 'Pedidos Brutos',
+                  value: '${_homeKpis.grossOrders}',
+                ),
+                _HomeKpiCardData(
+                  title: 'Positivação Bruta',
+                  value: '${_homeKpis.grossPositivation}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildKpiCarousel(
+              title: 'Devoluções no período',
+              subtitle: 'Dados de devolução para o mesmo intervalo selecionado.',
+              cards: [
+                _HomeKpiCardData(
+                  title: 'Financeiro Devolvido',
+                  value: _formatCurrency(_homeKpis.returnAmount),
+                  color: const Color(0xFFFDECEC),
+                ),
+                _HomeKpiCardData(
+                  title: 'Volume Devolvido',
+                  value: _formatDecimal(_homeKpis.returnVolume),
+                  color: const Color(0xFFFDECEC),
+                ),
+                _HomeKpiCardData(
+                  title: 'Pedidos Devolvidos',
+                  value: '${_homeKpis.returnOrders}',
+                  color: const Color(0xFFFDECEC),
+                ),
+                _HomeKpiCardData(
+                  title: 'Positivação Devolvida',
+                  value: '${_homeKpis.returnPositivation}',
+                  color: const Color(0xFFFDECEC),
+                ),
+              ],
             ),
           ],
           if (_isAdmin) ...[
@@ -623,17 +716,214 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  String _formatCurrency(double value) {
-    final fixed = value.toStringAsFixed(2).replaceAll('.', ',');
-    return 'R\$ $fixed';
-  }
-
-  String _formatDecimal(double value) {
-    return value.toStringAsFixed(1).replaceAll('.', ',');
-  }
-
-  String _formatDate(DateTime value) {
-    return '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      drawer: Drawer(
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Gestão de Vendas',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.currentUser.label,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF5E6A7C),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.home_outlined),
+                      title: const Text('Home'),
+                      selected: true,
+                      selectedTileColor: const Color(0xFFE7EBFF),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.storefront_outlined),
+                      title: const Text('Análise por Fornecedor'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      onTap: _openSupplierAnalysisFromDrawer,
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.assignment_return_outlined),
+                      title: const Text('Devoluções'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      onTap: _openReturnsFromDrawer,
+                    ),
+                    if (_isAdmin) ...[
+                      const SizedBox(height: 8),
+                      ListTile(
+                        leading: const Icon(Icons.settings_outlined),
+                        title: const Text('Administração'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        onTap: _openAdministrationFromDrawer,
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.analytics_outlined),
+                        title: const Text('Relatórios'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        onTap: _openReportsFromDrawer,
+                      ),
+                    ],
+                    if (_visibleModules.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(12, 18, 12, 8),
+                        child: Text(
+                          'Painéis BI',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF5E6A7C),
+                          ),
+                        ),
+                      ),
+                      ..._visibleModules.map(
+                        (module) => ListTile(
+                          leading: const Icon(Icons.bar_chart_outlined),
+                          title: Text(module.name),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          onTap: () async {
+                            Navigator.of(context).pop();
+                            await Future<void>.delayed(
+                              const Duration(milliseconds: 120),
+                            );
+                            if (!mounted) {
+                              return;
+                            }
+                            await _openModule(module);
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.lock_outline),
+                      title: const Text('Trocar Senha'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      onTap: _openChangePasswordFromDrawer,
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.logout),
+                      title: const Text('Sair'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      onTap: () async {
+                        Navigator.of(context).pop();
+                        await widget.onLogout();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      appBar: AppBar(
+        title: Text(
+          _isAdmin ? 'Bem-vindo, Administração' : 'Bem-vindo',
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          IconButton(
+            onPressed: _loadContent,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Atualizar',
+          ),
+          IconButton(
+            onPressed: widget.onLogout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Sair',
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: _loading
+            ? const Center(
+                child: CircularProgressIndicator(color: primaryColor),
+              )
+            : _errorMessage != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: primaryColor,
+                              size: 48,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 20),
+                            FilledButton(
+                              onPressed: _loadContent,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: primaryColor,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: const Text('Tentar novamente'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            : _buildBody(),
+      ),
+    );
   }
 }
 
@@ -654,10 +944,7 @@ class _ModuleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 10,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         leading: CircleAvatar(
           backgroundColor: const Color(0xFFE7EBFF),
           foregroundColor: primaryColor,
@@ -703,20 +990,41 @@ class _ModuleCard extends StatelessWidget {
   }
 }
 
-class _HomeKpiCard extends StatelessWidget {
-  const _HomeKpiCard({required this.title, required this.value});
+class _HomeKpiCardData {
+  const _HomeKpiCardData({
+    required this.title,
+    required this.value,
+    this.color = const Color(0xFFF7F9FF),
+  });
 
   final String title;
   final String value;
+  final Color color;
+}
+
+class _HomeKpiCard extends StatelessWidget {
+  const _HomeKpiCard({
+    required this.title,
+    required this.value,
+    required this.color,
+  });
+
+  final String title;
+  final String value;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 178,
+      width: 154,
       margin: const EdgeInsets.only(right: 12),
       child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
+        child: Container(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -725,14 +1033,23 @@ class _HomeKpiCard extends StatelessWidget {
                 title,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: const Color(0xFF5E6A7C),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 10),
-              Text(
-                value,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              SizedBox(
+                height: 34,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

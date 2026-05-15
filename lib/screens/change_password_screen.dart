@@ -82,7 +82,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const BackButton(),
-        title: const Text('Alterar minha senha'),
+        title: const Text('Trocar senha'),
       ),
       body: SafeArea(
         child: Center(

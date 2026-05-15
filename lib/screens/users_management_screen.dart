@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
+import '../models/app_profile.dart';
 import '../models/app_user.dart';
 import '../services/app_repository.dart';
 import 'user_form_screen.dart';
+
+enum _UserStatusFilter { all, active, inactive }
 
 class UsersManagementScreen extends StatefulWidget {
   const UsersManagementScreen({super.key, required this.currentUser});
@@ -19,6 +22,9 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
   bool _loading = true;
   String? _errorMessage;
   String _search = '';
+  String? _selectedProfileId;
+  _UserStatusFilter _selectedStatusFilter = _UserStatusFilter.all;
+  List<AppProfile> _profiles = const <AppProfile>[];
   List<AppUser> _users = const <AppUser>[];
 
   @override
@@ -34,11 +40,17 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
     });
 
     try {
-      final users = await _repository.getUsers();
+      final results = await Future.wait<dynamic>([
+        _repository.getProfiles(),
+        _repository.getUsers(),
+      ]);
+      final profiles = results[0] as List<AppProfile>;
+      final users = results[1] as List<AppUser>;
       if (!mounted) {
         return;
       }
       setState(() {
+        _profiles = profiles;
         _users = users;
         _loading = false;
       });
@@ -78,9 +90,22 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
   Widget build(BuildContext context) {
     final visibleUsers = _users.where((user) {
       final search = _search.trim().toLowerCase();
+      final matchesProfile =
+          _selectedProfileId == null || user.profile?.id == _selectedProfileId;
+      final matchesStatus = switch (_selectedStatusFilter) {
+        _UserStatusFilter.all => true,
+        _UserStatusFilter.active => user.isActive,
+        _UserStatusFilter.inactive => !user.isActive,
+      };
+
+      if (!matchesProfile || !matchesStatus) {
+        return false;
+      }
+
       if (search.isEmpty) {
         return true;
       }
+
       return user.code.toLowerCase().contains(search) ||
           (user.loginAlias ?? '').toLowerCase().contains(search) ||
           (user.displayName ?? '').toLowerCase().contains(search) ||
@@ -129,7 +154,71 @@ class _UsersManagementScreenState extends State<UsersManagementScreen> {
                     });
                   },
                 ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String?>(
+                  key: ValueKey<String?>(_selectedProfileId),
+                  initialValue: _selectedProfileId,
+                  decoration: const InputDecoration(
+                    labelText: 'Filtrar por perfil',
+                    prefixIcon: Icon(Icons.filter_list_outlined),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Todos os perfis'),
+                    ),
+                    ..._profiles.map(
+                      (profile) => DropdownMenuItem<String?>(
+                        value: profile.id,
+                        child: Text(profile.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedProfileId = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<_UserStatusFilter>(
+                  key: ValueKey<_UserStatusFilter>(_selectedStatusFilter),
+                  initialValue: _selectedStatusFilter,
+                  decoration: const InputDecoration(
+                    labelText: 'Filtrar por status',
+                    prefixIcon: Icon(Icons.toggle_on_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: _UserStatusFilter.all,
+                      child: Text('Todos'),
+                    ),
+                    DropdownMenuItem(
+                      value: _UserStatusFilter.active,
+                      child: Text('Ativos'),
+                    ),
+                    DropdownMenuItem(
+                      value: _UserStatusFilter.inactive,
+                      child: Text('Inativos'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _selectedStatusFilter = value;
+                    });
+                  },
+                ),
                 const SizedBox(height: 20),
+                Text(
+                  '${visibleUsers.length} usuário(s) encontrado(s)',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF5E6A7C),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 if (visibleUsers.isEmpty)
                   const Card(
                     child: Padding(
