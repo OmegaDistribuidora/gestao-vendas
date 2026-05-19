@@ -31,7 +31,10 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
   );
   final NumberFormat _decimalFormat = NumberFormat.decimalPattern('pt_BR');
   final DateFormat _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
-  final DateFormat _dateTimeFormat = DateFormat("dd/MM/yyyy 'às' HH:mm", 'pt_BR');
+  final DateFormat _dateTimeFormat = DateFormat(
+    "dd/MM/yyyy 'às' HH:mm",
+    'pt_BR',
+  );
 
   bool _loading = true;
   String? _errorMessage;
@@ -212,12 +215,32 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
 
   String _formatCurrency(double value) => _currencyFormat.format(value);
 
-  String _formatVolume(double value) => _decimalFormat.format(
-    double.parse(value.toStringAsFixed(1)),
-  );
+  String _formatVolume(double value) =>
+      _decimalFormat.format(double.parse(value.toStringAsFixed(1)));
 
   String _supplierLogoUrl(String supplierCode) {
     return '${SupabaseConfig.url}/storage/v1/object/public/fornecedores-logos/$supplierCode.png';
+  }
+
+  Widget _buildLastUpdateCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: [
+            const Icon(Icons.schedule_outlined, color: primaryColor),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _analysis.lastUpdatedAt != null
+                    ? 'Última atualização: ${_dateTimeFormat.format(_analysis.lastUpdatedAt!)}'
+                    : 'Última atualização: ainda não disponível',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -237,10 +260,7 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(24),
                   children: [
-                    _ErrorCard(
-                      message: _errorMessage!,
-                      onRetry: _loadAnalysis,
-                    ),
+                    _ErrorCard(message: _errorMessage!, onRetry: _loadAnalysis),
                   ],
                 )
               : ListView(
@@ -316,19 +336,24 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                               ],
                               onChanged: _handlePeriodChanged,
                             ),
-                            if (_selectedPeriod == _SupplierPeriodPreset.custom) ...[
+                            if (_selectedPeriod ==
+                                _SupplierPeriodPreset.custom) ...[
                               const SizedBox(height: 14),
                               Wrap(
                                 spacing: 12,
                                 runSpacing: 12,
                                 children: [
                                   OutlinedButton.icon(
-                                    onPressed: () => _pickCustomDate(isStart: true),
+                                    onPressed: () =>
+                                        _pickCustomDate(isStart: true),
                                     icon: const Icon(Icons.event_outlined),
-                                    label: Text(_dateFormat.format(_periodStart)),
+                                    label: Text(
+                                      _dateFormat.format(_periodStart),
+                                    ),
                                   ),
                                   OutlinedButton.icon(
-                                    onPressed: () => _pickCustomDate(isStart: false),
+                                    onPressed: () =>
+                                        _pickCustomDate(isStart: false),
                                     icon: const Icon(Icons.event_busy_outlined),
                                     label: Text(_dateFormat.format(_periodEnd)),
                                   ),
@@ -359,18 +384,13 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                                 Expanded(
                                   child: Text(
                                     '${_selectedMetricSource.label} • $_periodDescription',
-                                    style: Theme.of(context).textTheme.titleMedium
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
                                         ?.copyWith(fontWeight: FontWeight.w700),
                                   ),
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _analysis.lastUpdatedAt != null
-                                  ? 'Última atualização: ${_dateTimeFormat.format(_analysis.lastUpdatedAt!)}'
-                                  : 'Última atualização: ainda não disponível',
-                              style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           ],
                         ),
@@ -398,6 +418,8 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                           ),
                         ),
                       ),
+                    const SizedBox(height: 8),
+                    _buildLastUpdateCard(),
                   ],
                 ),
         ),
@@ -526,9 +548,9 @@ class _MiniMetricTile extends StatelessWidget {
               child: Text(
                 value,
                 maxLines: 1,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
           ),
@@ -552,16 +574,9 @@ class _ErrorCard extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 48,
-              color: primaryColor,
-            ),
+            const Icon(Icons.error_outline, size: 48, color: primaryColor),
             const SizedBox(height: 14),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-            ),
+            Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 18),
             FilledButton(
               onPressed: onRetry,

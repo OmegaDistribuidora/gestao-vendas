@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/app_theme.dart';
 import '../models/app_profile.dart';
@@ -13,6 +14,7 @@ import '../utils/power_bi_url_builder.dart';
 import 'admin_screen.dart';
 import 'change_password_screen.dart';
 import 'panel_view_screen.dart';
+import 'performance_screen.dart';
 import 'reports_screen.dart';
 import 'returns_screen.dart';
 import 'supplier_analysis_screen.dart';
@@ -48,10 +50,14 @@ class _HomeScreenState extends State<HomeScreen> {
   );
   final NumberFormat _decimalFormat = NumberFormat.decimalPattern('pt_BR');
   final DateFormat _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
-  final DateFormat _dateTimeFormat = DateFormat("dd/MM/yyyy 'às' HH:mm", 'pt_BR');
+  final DateFormat _dateTimeFormat = DateFormat(
+    "dd/MM/yyyy 'às' HH:mm",
+    'pt_BR',
+  );
 
   bool _loading = true;
   String? _errorMessage;
+  String _appVersionLabel = 'Versao 0.4.1+5';
   List<BiModule> _visibleModules = const <BiModule>[];
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
   _HomePeriodPreset _selectedPeriod = _HomePeriodPreset.today;
@@ -67,11 +73,37 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.currentUser.profileSlug == AppProfile.coordinatorSlug;
   bool get _showsHomeKpis => !_isAdmin;
   bool get _isNamedKpiProfile => _isSeller || _isSupervisor || _isCoordinator;
+  bool get _showsPerformanceModule => true;
 
   @override
   void initState() {
     super.initState();
+    _loadAppVersion();
     _loadContent();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final version = packageInfo.version.trim();
+      final buildNumber = packageInfo.buildNumber.trim();
+      final versionLabel = buildNumber.isEmpty
+          ? 'Versao $version'
+          : 'Versao $version+$buildNumber';
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _appVersionLabel = versionLabel;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _appVersionLabel = 'Versao 0.4.1+5';
+      });
+    }
   }
 
   DateTime get _periodStart {
@@ -287,15 +319,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openPerformanceFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const PerformanceScreen()));
+  }
+
   Future<void> _openReturnsFromDrawer() async {
     Navigator.of(context).pop();
     await Future<void>.delayed(const Duration(milliseconds: 120));
     if (!mounted) {
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const ReturnsScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ReturnsScreen()));
   }
 
   Future<void> _openChangePasswordFromDrawer() async {
@@ -383,9 +426,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _formatCurrency(double value) => _currencyFormat.format(value);
 
-  String _formatDecimal(double value) => _decimalFormat.format(
-    double.parse(value.toStringAsFixed(1)),
-  );
+  String _formatDecimal(double value) =>
+      _decimalFormat.format(double.parse(value.toStringAsFixed(1)));
 
   String _formatDateTime(DateTime value) => _dateTimeFormat.format(value);
 
@@ -528,8 +570,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          _buildLastUpdatesCard(),
           if (_showsHomeKpis) ...[
             const SizedBox(height: 18),
             Card(
@@ -657,7 +697,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 12),
             _buildKpiCarousel(
               title: 'Devoluções no período',
-              subtitle: 'Dados de devolução para o mesmo intervalo selecionado.',
+              subtitle:
+                  'Dados de devolução para o mesmo intervalo selecionado.',
               cards: [
                 _HomeKpiCardData(
                   title: 'Financeiro Devolvido',
@@ -711,6 +752,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
           ],
+          const SizedBox(height: 12),
+          _buildLastUpdatesCard(),
         ],
       ),
     );
@@ -733,6 +776,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       'Gestão de Vendas',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _appVersionLabel,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF7A8597),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -760,6 +812,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       onTap: () => Navigator.of(context).pop(),
                     ),
+                    if (_showsPerformanceModule)
+                      ListTile(
+                        leading: const Icon(Icons.auto_graph_outlined),
+                        title: const Text('Performance'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        onTap: _openPerformanceFromDrawer,
+                      ),
                     ListTile(
                       leading: const Icon(Icons.storefront_outlined),
                       title: const Text('Análise por Fornecedor'),
@@ -901,10 +962,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               size: 48,
                             ),
                             const SizedBox(height: 16),
-                            Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                            ),
+                            Text(_errorMessage!, textAlign: TextAlign.center),
                             const SizedBox(height: 20),
                             FilledButton(
                               onPressed: _loadContent,
@@ -944,7 +1002,10 @@ class _ModuleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 10,
+        ),
         leading: CircleAvatar(
           backgroundColor: const Color(0xFFE7EBFF),
           foregroundColor: primaryColor,

@@ -8,6 +8,7 @@ import '../models/app_user.dart';
 import '../models/bi_module.dart';
 import '../models/bi_module_filter_input.dart';
 import '../models/kpi_metric_source.dart';
+import '../models/performance_overview.dart';
 import '../models/remembered_login.dart';
 import '../models/return_analysis.dart';
 import '../models/seller_home_kpis.dart';
@@ -851,6 +852,25 @@ class AppRepository {
     return SupplierAnalysis.fromJson(_stringKeyedMap(response));
   }
 
+  Future<PerformanceOverview> getPerformanceOverview({
+    DateTime? monthStart,
+    KpiMetricSource metricSource = KpiMetricSource.venda,
+  }) async {
+    final response = await _supabase.rpc(
+      'get_performance_overview',
+      params: <String, dynamic>{
+        'target_month_start': monthStart?.toIso8601String().split('T').first,
+        'metric_source': metricSource.value,
+      },
+    );
+
+    if (response is! Map) {
+      return PerformanceOverview.empty();
+    }
+
+    return PerformanceOverview.fromJson(_stringKeyedMap(response));
+  }
+
   Future<ReturnAnalysis> getReturnAnalysis({
     required DateTime start,
     required DateTime end,
@@ -942,9 +962,9 @@ class AppRepository {
         enforceActive &&
         credentialsUpdatedAt != null &&
         sessionIssuedAt != null &&
-        credentialsUpdatedAt
-            .toUtc()
-            .isAfter(sessionIssuedAt.toUtc().add(const Duration(seconds: 1)));
+        credentialsUpdatedAt.toUtc().isAfter(
+          sessionIssuedAt.toUtc().add(const Duration(seconds: 1)),
+        );
 
     if (sessionInvalidated) {
       await _supabase.auth.signOut();

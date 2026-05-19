@@ -30,7 +30,10 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   );
   final NumberFormat _decimalFormat = NumberFormat.decimalPattern('pt_BR');
   final DateFormat _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
-  final DateFormat _dateTimeFormat = DateFormat("dd/MM/yyyy 'às' HH:mm", 'pt_BR');
+  final DateFormat _dateTimeFormat = DateFormat(
+    "dd/MM/yyyy 'às' HH:mm",
+    'pt_BR',
+  );
 
   bool _loading = true;
   String? _errorMessage;
@@ -221,6 +224,27 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   String _formatNumber(double value) =>
       _decimalFormat.format(double.parse(value.toStringAsFixed(1)));
 
+  Widget _buildLastUpdateCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: [
+            const Icon(Icons.schedule_outlined, color: primaryColor),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _analysis.lastUpdatedAt != null
+                    ? 'Última atualização: ${_dateTimeFormat.format(_analysis.lastUpdatedAt!)}'
+                    : 'Última atualização: ainda não disponível',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showOrderDetails(ReturnOrderSummary order) async {
     if (order.returnDate == null) {
       return;
@@ -329,9 +353,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                           ),
                                           _DetailChip(
                                             label: 'Quantidade',
-                                            value: _formatNumber(
-                                              item.quantity,
-                                            ),
+                                            value: _formatNumber(item.quantity),
                                           ),
                                           _DetailChip(
                                             label: 'Volume',
@@ -434,7 +456,8 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                               ],
                               onChanged: _handlePeriodChanged,
                             ),
-                            if (_selectedPeriod == _ReturnPeriodPreset.custom) ...[
+                            if (_selectedPeriod ==
+                                _ReturnPeriodPreset.custom) ...[
                               const SizedBox(height: 14),
                               Wrap(
                                 spacing: 12,
@@ -451,9 +474,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                   OutlinedButton.icon(
                                     onPressed: () =>
                                         _pickCustomDate(isStart: false),
-                                    icon: const Icon(
-                                      Icons.event_busy_outlined,
-                                    ),
+                                    icon: const Icon(Icons.event_busy_outlined),
                                     label: Text(_dateFormat.format(_periodEnd)),
                                   ),
                                 ],
@@ -492,13 +513,6 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                               'Resumo • $_periodDescription',
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _analysis.lastUpdatedAt != null
-                                  ? 'Última atualização: ${_dateTimeFormat.format(_analysis.lastUpdatedAt!)}'
-                                  : 'Última atualização: ainda não disponível',
-                              style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             const SizedBox(height: 16),
                             Wrap(
@@ -603,6 +617,8 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                           ),
                         ),
                       ),
+                    const SizedBox(height: 8),
+                    _buildLastUpdateCard(),
                   ],
                 ),
         ),
@@ -612,10 +628,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
 }
 
 class _SummaryMetricCard extends StatelessWidget {
-  const _SummaryMetricCard({
-    required this.title,
-    required this.value,
-  });
+  const _SummaryMetricCard({required this.title, required this.value});
 
   final String title;
   final String value;
@@ -649,9 +662,9 @@ class _SummaryMetricCard extends StatelessWidget {
               child: Text(
                 value,
                 maxLines: 1,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
             ),
           ),
