@@ -268,7 +268,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       title: 'Usuários ativos',
                       value: '${_report.activeUsers}',
                       description:
-                          'Usuários ativos que fizeram login e/ou abriram pelo menos um painel no período.',
+                          'Usuários ativos que fizeram login no período selecionado.',
                       tooltipMessage: _buildTooltipText(
                         _report.activeUsersDetails,
                         empty: 'Nenhum usuário ativo no período.',
@@ -295,17 +295,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 _GroupedReportSection(
                   title: 'Logins por usuário',
                   groups: _report.loginsByUserByProfile,
-                ),
-                const SizedBox(height: 16),
-                _GroupedReportSection(
-                  title: 'Módulos mais abertos',
-                  groups: _report.modulesByOpenCountByProfile,
-                ),
-                const SizedBox(height: 16),
-                _FlatReportSection(
-                  title: 'Tempo por módulo',
-                  items: _report.minutesByModule,
-                  suffix: ' min',
                 ),
                 const SizedBox(height: 16),
                 _GroupedReportSection(
@@ -375,15 +364,10 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _FlatReportSection extends StatelessWidget {
-  const _FlatReportSection({
-    required this.title,
-    required this.items,
-    this.suffix = '',
-  });
+  const _FlatReportSection({required this.title, required this.items});
 
   final String title;
   final List<UsageBucket> items;
-  final String suffix;
 
   @override
   Widget build(BuildContext context) {
@@ -410,7 +394,9 @@ class _FlatReportSection extends StatelessWidget {
                     children: [
                       Expanded(child: Text(item.label)),
                       Text(
-                        '${item.value.toStringAsFixed(item.value.truncateToDouble() == item.value ? 0 : 1)}$suffix',
+                        item.value.toStringAsFixed(
+                          item.value.truncateToDouble() == item.value ? 0 : 1,
+                        ),
                       ),
                     ],
                   ),

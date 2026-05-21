@@ -8,8 +8,6 @@ class UsageReport {
     required this.loginsByUser,
     required this.loginsByProfile,
     required this.loginsByUserByProfile,
-    required this.modulesByOpenCountByProfile,
-    required this.minutesByModule,
     required this.loginsByHourByProfile,
     required this.loginsByWeekdayByProfile,
   });
@@ -20,8 +18,6 @@ class UsageReport {
   final List<UsageBucket> loginsByUser;
   final List<UsageBucket> loginsByProfile;
   final List<UsageGroup> loginsByUserByProfile;
-  final List<UsageGroup> modulesByOpenCountByProfile;
-  final List<UsageBucket> minutesByModule;
   final List<UsageGroup> loginsByHourByProfile;
   final List<UsageGroup> loginsByWeekdayByProfile;
 
@@ -33,8 +29,6 @@ class UsageReport {
       loginsByUser: <UsageBucket>[],
       loginsByProfile: <UsageBucket>[],
       loginsByUserByProfile: <UsageGroup>[],
-      modulesByOpenCountByProfile: <UsageGroup>[],
-      minutesByModule: <UsageBucket>[],
       loginsByHourByProfile: <UsageGroup>[],
       loginsByWeekdayByProfile: <UsageGroup>[],
     );
@@ -78,10 +72,6 @@ class UsageReport {
       loginsByUser: parseBuckets(json['logins_by_user']),
       loginsByProfile: parseBuckets(json['logins_by_profile']),
       loginsByUserByProfile: parseGroups(json['logins_by_user_by_profile']),
-      modulesByOpenCountByProfile: parseGroups(
-        json['modules_by_open_count_by_profile'],
-      ),
-      minutesByModule: parseBuckets(json['minutes_by_module']),
       loginsByHourByProfile: parseGroups(json['logins_by_hour_by_profile']),
       loginsByWeekdayByProfile: parseGroups(
         json['logins_by_weekday_by_profile'],

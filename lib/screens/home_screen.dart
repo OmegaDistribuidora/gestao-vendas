@@ -5,15 +5,12 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
-import '../models/bi_module.dart';
 import '../models/kpi_metric_source.dart';
 import '../models/seller_home_kpis.dart';
-import '../models/user_module_access.dart';
 import '../services/app_repository.dart';
-import '../utils/power_bi_url_builder.dart';
 import 'admin_screen.dart';
 import 'change_password_screen.dart';
-import 'panel_view_screen.dart';
+import 'delinquency_screen.dart';
 import 'performance_screen.dart';
 import 'reports_screen.dart';
 import 'returns_screen.dart';
@@ -57,8 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Versao 0.4.1+5';
-  List<BiModule> _visibleModules = const <BiModule>[];
+  String _appVersionLabel = 'Versao 0.4.2+6';
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
   _HomePeriodPreset _selectedPeriod = _HomePeriodPreset.today;
   KpiMetricSource _selectedMetricSource = KpiMetricSource.venda;
@@ -101,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Versao 0.4.1+5';
+        _appVersionLabel = 'Versao 0.4.2+6';
       });
     }
   }
@@ -184,22 +180,18 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final results = await Future.wait<dynamic>([
-        _repository.getModulesForUser(widget.currentUser),
-        _repository.getHomeKpis(
-          start: _periodStart,
-          end: _periodEnd,
-          metricSource: _selectedMetricSource,
-        ),
-      ]);
+      final homeKpis = await _repository.getHomeKpis(
+        start: _periodStart,
+        end: _periodEnd,
+        metricSource: _selectedMetricSource,
+      );
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _visibleModules = results[0] as List<BiModule>;
-        _homeKpis = results[1] as SellerHomeKpis;
+        _homeKpis = homeKpis;
         _loading = false;
       });
     } catch (error) {
@@ -341,6 +333,17 @@ class _HomeScreenState extends State<HomeScreen> {
     ).push(MaterialPageRoute<void>(builder: (_) => const ReturnsScreen()));
   }
 
+  Future<void> _openDelinquencyFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const DelinquencyScreen()));
+  }
+
   Future<void> _openChangePasswordFromDrawer() async {
     Navigator.of(context).pop();
     await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -352,76 +355,6 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => ChangePasswordScreen(currentUser: widget.currentUser),
       ),
     );
-  }
-
-  Future<void> _openModule(BiModule module) async {
-    if (module.panelUrl.trim().isEmpty) {
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Este módulo ainda não possui link de painel configurado.',
-          ),
-        ),
-      );
-      return;
-    }
-
-    var url = module.panelUrl;
-    String? filterDescription;
-
-    if (!_isAdmin) {
-      final access = await _repository.getAccessForUserModule(
-        widget.currentUser.id,
-        module.id,
-      );
-      final filterValues = access?.filterValues ?? const [];
-      final activeDescriptions = filterValues
-          .where((item) => item.filterValue.trim().isNotEmpty)
-          .map(
-            (item) =>
-                '${item.moduleFilter?.displayLabel ?? 'Filtro'}: ${item.filterValue}',
-          )
-          .toList();
-
-      if (filterValues.isNotEmpty) {
-        url = PowerBiUrlBuilder.build(module, filterValues);
-      }
-      filterDescription = activeDescriptions.isEmpty
-          ? 'Sem filtros específicos.'
-          : activeDescriptions.join(' | ');
-    }
-
-    final startedAt = DateTime.now();
-    final usageEventId = await _repository.startModuleUsage(
-      userId: widget.currentUser.id,
-      moduleId: module.id,
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PanelViewScreen(
-          title: module.name,
-          initialUrl: url,
-          filterDescription: filterDescription,
-          isAdminView: _isAdmin,
-        ),
-      ),
-    );
-
-    if (usageEventId != null) {
-      await _repository.finishModuleUsage(
-        usageEventId: usageEventId,
-        duration: DateTime.now().difference(startedAt),
-      );
-    }
   }
 
   String _formatCurrency(double value) => _currencyFormat.format(value);
@@ -547,8 +480,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 8),
                   Text(
                     _isAdmin
-                        ? 'Acesse a área administrativa para gerenciar usuários, perfis, módulos e relatórios.'
-                        : 'Por favor, selecione um módulo no menu à esquerda para acessar.',
+                        ? 'Acesse a área administrativa para gerenciar usuários, perfis e relatórios.'
+                        : 'Use o menu à esquerda para acessar os módulos permanentes do aplicativo.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF5E6A7C),
                     ),
@@ -723,35 +656,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ],
-          if (_isAdmin) ...[
-            const SizedBox(height: 20),
-            Text(
-              'Módulos cadastrados',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            if (_visibleModules.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text('Nenhum módulo disponível no momento.'),
-                ),
-              )
-            else
-              ..._visibleModules.map(
-                (module) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _ModuleCard(
-                    module: module,
-                    onOpen: () => _openModule(module),
-                    currentUser: widget.currentUser,
-                    repository: _repository,
-                  ),
-                ),
-              ),
-          ],
           const SizedBox(height: 12),
           _buildLastUpdatesCard(),
         ],
@@ -837,6 +741,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       onTap: _openReturnsFromDrawer,
                     ),
+                    ListTile(
+                      leading: const Icon(Icons.warning_amber_rounded),
+                      title: const Text('Inadimplencia'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      onTap: _openDelinquencyFromDrawer,
+                    ),
                     if (_isAdmin) ...[
                       const SizedBox(height: 8),
                       ListTile(
@@ -854,37 +766,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         onTap: _openReportsFromDrawer,
-                      ),
-                    ],
-                    if (_visibleModules.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(12, 18, 12, 8),
-                        child: Text(
-                          'Painéis BI',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF5E6A7C),
-                          ),
-                        ),
-                      ),
-                      ..._visibleModules.map(
-                        (module) => ListTile(
-                          leading: const Icon(Icons.bar_chart_outlined),
-                          title: Text(module.name),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          onTap: () async {
-                            Navigator.of(context).pop();
-                            await Future<void>.delayed(
-                              const Duration(milliseconds: 120),
-                            );
-                            if (!mounted) {
-                              return;
-                            }
-                            await _openModule(module);
-                          },
-                        ),
                       ),
                     ],
                   ],
@@ -980,72 +861,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
             : _buildBody(),
-      ),
-    );
-  }
-}
-
-class _ModuleCard extends StatelessWidget {
-  const _ModuleCard({
-    required this.module,
-    required this.onOpen,
-    required this.currentUser,
-    required this.repository,
-  });
-
-  final BiModule module;
-  final Future<void> Function() onOpen;
-  final AppUser currentUser;
-  final AppRepository repository;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 10,
-        ),
-        leading: CircleAvatar(
-          backgroundColor: const Color(0xFFE7EBFF),
-          foregroundColor: primaryColor,
-          child: const Icon(Icons.bar_chart_outlined),
-        ),
-        title: Text(
-          module.name,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        subtitle: FutureBuilder<UserModuleAccess?>(
-          future: currentUser.isAdmin
-              ? Future<UserModuleAccess?>.value(null)
-              : repository.getAccessForUserModule(currentUser.id, module.id),
-          builder: (context, snapshot) {
-            final lines = <String>[
-              'Tipo: Acompanhamento BI',
-              'Campos filtráveis: ${module.filters.isEmpty ? 'Nenhum' : module.filters.map((item) => item.displayLabel).join(' | ')}',
-              'Status: ${module.isActive ? 'Ativo' : 'Inativo'}',
-            ];
-
-            if (currentUser.isAdmin) {
-              lines.add('Visão administrativa sem filtro automático.');
-            } else if (snapshot.data != null) {
-              final values = snapshot.data!.filterValues
-                  .where((item) => item.filterValue.trim().isNotEmpty)
-                  .map(
-                    (item) =>
-                        '${item.moduleFilter?.displayLabel ?? 'Filtro'}: ${item.filterValue}',
-                  )
-                  .join(' | ');
-              if (values.isNotEmpty) {
-                lines.add('Filtros: $values');
-              }
-            }
-
-            return Text(lines.join('\n'));
-          },
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onOpen,
       ),
     );
   }

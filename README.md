@@ -1,6 +1,6 @@
 # Gestão de Vendas
 
-Aplicativo Android em Flutter para autenticação de usuários, navegação em módulos de BI e gestão administrativa integrada ao Supabase.
+Aplicativo Android em Flutter para autenticação de usuários, acompanhamento operacional e gestão administrativa integrada ao Supabase.
 
 ## Visão Geral
 
@@ -8,10 +8,10 @@ O app foi desenhado para operação remota, com Supabase como backend principal 
 
 - autenticação de usuários
 - perfis e permissões
-- cadastro de módulos BI
-- liberações de acesso por usuário
+- gestão administrativa
 - relatórios de uso
 - snapshots de dados operacionais consumidos na home
+- módulos permanentes como performance, devoluções e análise por fornecedor
 
 O armazenamento local é usado apenas para itens de sessão e conveniência do usuário, como a preferência de lembrar login.
 
@@ -22,7 +22,7 @@ Estrutura principal:
 - `lib/main.dart`: inicialização do Flutter e do Supabase
 - `lib/app.dart`: configuração do app e tema global
 - `lib/services/app_repository.dart`: camada central de acesso a dados e regras de integração
-- `lib/screens/`: telas do fluxo de login, home, administração, relatórios e BI
+- `lib/screens/`: telas do fluxo de login, home, administração, relatórios e módulos operacionais
 - `lib/models/`: modelos de domínio usados pelo app
 - `supabase/migrations/`: histórico de schema e funções SQL
 - `supabase/functions/admin-users/`: Edge Function para operações administrativas sensíveis
@@ -40,14 +40,13 @@ Autenticação:
 Autorização:
 
 - administradores têm acesso à área administrativa e aos relatórios
-- usuários comuns veem apenas os módulos liberados para eles
-- módulos BI podem ter múltiplos campos filtráveis por usuário
+- usuários comuns acessam os módulos permanentes do aplicativo pelo menu lateral
 
 Home:
 
 - admin vê acesso direto à administração
-- vendedor vê KPIs do dia em carrossel horizontal
-- demais usuários recebem uma mensagem de boas-vindas e acessam módulos pelo menu lateral
+- vendedor vê KPIs do período em carrossel horizontal
+- demais usuários recebem uma mensagem de boas-vindas e acessam os módulos pelo menu lateral
 
 ## Integrações Externas
 

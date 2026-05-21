@@ -1,10 +1,3 @@
-alter table public.app_users
-  add column if not exists login_alias text;
-
-create unique index if not exists app_users_login_alias_unique_idx
-  on public.app_users (lower(login_alias))
-  where login_alias is not null and btrim(login_alias) <> '';
-
 create or replace function public.resolve_login_context(login_identifier text)
 returns jsonb
 language plpgsql
@@ -34,7 +27,7 @@ begin
   from public.app_users u
   left join public.app_profiles p
     on p.id = u.profile_id
-  where lower(u.code) = normalized_input
+  where lower(coalesce(u.code, '')) = normalized_input
     and coalesce(p.slug, '') in ('vendedor', 'admin')
   limit 1;
 

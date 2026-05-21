@@ -40,6 +40,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   String? _errorMessage;
   PerformanceOverview _overview = PerformanceOverview.empty();
   String? _selectedMonthValue;
+  String? _selectedScopeValue;
   KpiMetricSource _selectedMetricSource = KpiMetricSource.venda;
 
   bool get _isSeller => _overview.profileSlug == AppProfile.sellerSlug;
@@ -48,6 +49,11 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       _overview.profileSlug == AppProfile.coordinatorSlug;
   bool get _isNamedProfile => _isSeller || _isSupervisor || _isCoordinator;
   bool get _showsMetricSourceSelector => !_isNamedProfile;
+  bool get _showsScopeSelector => _overview.availableScopes.isNotEmpty;
+  bool get _viewerIsSupervisor =>
+      _overview.viewerProfileSlug == AppProfile.supervisorSlug;
+  bool get _viewerIsCoordinator =>
+      _overview.viewerProfileSlug == AppProfile.coordinatorSlug;
 
   DateTime get _projectionMonthStart {
     final selectedMonthStart = _overview.selectedMonthStart;
@@ -67,6 +73,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   Future<void> _loadOverview({
     DateTime? monthStart,
     KpiMetricSource? metricSource,
+    String? targetScopeProfileSlug,
+    String? targetScopeOwnerCode,
   }) async {
     setState(() {
       _loading = true;
@@ -77,6 +85,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       final overview = await _repository.getPerformanceOverview(
         monthStart: monthStart,
         metricSource: metricSource ?? _selectedMetricSource,
+        targetScopeProfileSlug: targetScopeProfileSlug,
+        targetScopeOwnerCode: targetScopeOwnerCode,
       );
       if (!mounted) {
         return;
@@ -89,6 +99,10 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
             ?.toIso8601String()
             .split('T')
             .first;
+        _selectedScopeValue = _scopeValue(
+          profileSlug: overview.selectedScopeProfileSlug,
+          ownerCode: overview.selectedScopeOwnerCode,
+        );
         _loading = false;
       });
     } catch (error) {
@@ -113,7 +127,12 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       return;
     }
 
-    await _loadOverview(monthStart: parsed);
+    await _loadOverview(
+      monthStart: parsed,
+      metricSource: _selectedMetricSource,
+      targetScopeProfileSlug: _selectedScope?.profileSlug,
+      targetScopeOwnerCode: _selectedScope?.ownerCode,
+    );
   }
 
   Future<void> _handleMetricSourceChanged(KpiMetricSource? source) async {
@@ -124,6 +143,55 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     await _loadOverview(
       monthStart: _overview.selectedMonthStart,
       metricSource: source,
+      targetScopeProfileSlug: _selectedScope?.profileSlug,
+      targetScopeOwnerCode: _selectedScope?.ownerCode,
+    );
+  }
+
+  String? _scopeValue({String? profileSlug, String? ownerCode}) {
+    if (profileSlug == null || ownerCode == null) {
+      return null;
+    }
+    return '$profileSlug|$ownerCode';
+  }
+
+  PerformanceScopeOption? _scopeFromValue(String? value) {
+    if (value == null) {
+      return null;
+    }
+
+    for (final scope in _overview.availableScopes) {
+      if (scope.value == value) {
+        return scope;
+      }
+    }
+
+    return null;
+  }
+
+  PerformanceScopeOption? get _selectedScope =>
+      _scopeFromValue(_selectedScopeValue);
+
+  Future<void> _handleScopeChanged(String? value) async {
+    if (value == _selectedScopeValue) {
+      return;
+    }
+
+    final selectedScope = _scopeFromValue(value);
+    await _loadOverview(
+      monthStart: null,
+      metricSource: _selectedMetricSource,
+      targetScopeProfileSlug: selectedScope?.profileSlug,
+      targetScopeOwnerCode: selectedScope?.ownerCode,
+    );
+  }
+
+  Future<void> _reloadCurrentOverview() {
+    return _loadOverview(
+      monthStart: _overview.selectedMonthStart,
+      metricSource: _selectedMetricSource,
+      targetScopeProfileSlug: _selectedScope?.profileSlug,
+      targetScopeOwnerCode: _selectedScope?.ownerCode,
     );
   }
 
@@ -170,6 +238,26 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       return 'Financeiro em faturamento liquido. Positivacao e SKU em faturamento bruto.';
     }
     return 'Meta consolidada pela soma dos coordenadores. Positivacao sempre como metrica secundaria.';
+  }
+
+  String _scopeSelectorLabel() {
+    if (_viewerIsSupervisor) {
+      return 'Filtrar vendedor';
+    }
+    if (_viewerIsCoordinator) {
+      return 'Filtrar supervisor';
+    }
+    return 'Visualizar como';
+  }
+
+  String _allScopesLabel() {
+    if (_viewerIsSupervisor) {
+      return 'Todos os vendedores';
+    }
+    if (_viewerIsCoordinator) {
+      return 'Todos os supervisores';
+    }
+    return 'Todos';
   }
 
   String _supplierLogoUrl(String supplierCode) {
@@ -279,6 +367,32 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
               ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
             ),
             const SizedBox(height: 16),
+            if (_showsScopeSelector) ...[
+              DropdownButtonFormField<String?>(
+                key: ValueKey<String?>(_selectedScopeValue),
+                initialValue: _selectedScopeValue,
+                decoration: InputDecoration(
+                  labelText: _scopeSelectorLabel(),
+                  prefixIcon: const Icon(Icons.account_tree_outlined),
+                ),
+                items: <DropdownMenuItem<String?>>[
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(_allScopesLabel()),
+                  ),
+                  ..._overview.availableScopes.map(
+                    (scope) => DropdownMenuItem<String?>(
+                      value: scope.value,
+                      child: Text(
+                        '${_profileLabel(scope.profileSlug)} • ${scope.label}',
+                      ),
+                    ),
+                  ),
+                ],
+                onChanged: _handleScopeChanged,
+              ),
+              const SizedBox(height: 14),
+            ],
             if (_showsMetricSourceSelector) ...[
               DropdownButtonFormField<KpiMetricSource>(
                 initialValue: _selectedMetricSource,
@@ -393,6 +507,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       icon: Icons.paid_outlined,
       accentColor: const Color(0xFF0F766E),
       showProjection: true,
+      showPaceStatus: true,
       actualLabel: _formatCurrency(item.actualFin),
       targetLabel: _formatCurrency(item.targetFin),
       projectedLabel: _formatCurrency(summary.projectedValue),
@@ -427,6 +542,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
           ? const Color(0xFF7C3AED)
           : const Color(0xFF1D4ED8),
       showProjection: false,
+      showPaceStatus: false,
       actualLabel: _formatInteger(item.secondaryActual),
       targetLabel: item.secondaryTarget == null
           ? 'Sem meta'
@@ -608,7 +724,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
             ),
             const SizedBox(height: 18),
             FilledButton(
-              onPressed: _loadOverview,
+              onPressed: _reloadCurrentOverview,
               style: FilledButton.styleFrom(
                 backgroundColor: primaryColor,
                 foregroundColor: Colors.white,
@@ -639,7 +755,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
 
     return RefreshIndicator(
       color: primaryColor,
-      onRefresh: _loadOverview,
+      onRefresh: _reloadCurrentOverview,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
@@ -692,7 +808,10 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(24),
                 children: [
-                  _ErrorCard(message: _errorMessage!, onRetry: _loadOverview),
+                  _ErrorCard(
+                    message: _errorMessage!,
+                    onRetry: _reloadCurrentOverview,
+                  ),
                 ],
               )
             : _buildBody(),
@@ -707,6 +826,7 @@ class _MetricPanelData {
     required this.icon,
     required this.accentColor,
     required this.showProjection,
+    required this.showPaceStatus,
     required this.actualLabel,
     required this.targetLabel,
     required this.projectedLabel,
@@ -723,6 +843,7 @@ class _MetricPanelData {
   final IconData icon;
   final Color accentColor;
   final bool showProjection;
+  final bool showPaceStatus;
   final String actualLabel;
   final String targetLabel;
   final String projectedLabel;
@@ -753,7 +874,7 @@ class _MetricProjectionPanel extends StatelessWidget {
     final projectedPercentLabel = data.projectedProgressPct == null
         ? 'Tend. --'
         : 'Tend. ${formatPercent(data.projectedProgressPct)}';
-    final statusData = _buildStatusData(data);
+    final statusData = data.showPaceStatus ? _buildStatusData(data) : null;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -835,6 +956,7 @@ class _MetricProjectionPanel extends StatelessWidget {
           const Divider(height: 1, color: Color(0xFFE3E8F5)),
           const SizedBox(height: 14),
           Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _MetricInfoTile(title: 'Meta', value: data.targetLabel),
               const SizedBox(height: 8),
@@ -870,13 +992,14 @@ class _MetricProjectionPanel extends StatelessWidget {
                     label: 'Media/dia util: ${data.averageLabel}',
                     maxWidth: constraints.maxWidth,
                   ),
-                  _InfoPill(
-                    icon: statusData.icon,
-                    label: statusData.label,
-                    foregroundColor: statusData.foregroundColor,
-                    backgroundColor: statusData.backgroundColor,
-                    maxWidth: constraints.maxWidth,
-                  ),
+                  if (statusData != null)
+                    _InfoPill(
+                      icon: statusData.icon,
+                      label: statusData.label,
+                      foregroundColor: statusData.foregroundColor,
+                      backgroundColor: statusData.backgroundColor,
+                      maxWidth: constraints.maxWidth,
+                    ),
                 ],
               );
             },

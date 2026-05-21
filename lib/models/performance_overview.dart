@@ -3,9 +3,13 @@ import 'kpi_metric_source.dart';
 class PerformanceOverview {
   const PerformanceOverview({
     required this.supported,
+    required this.viewerProfileSlug,
     required this.profileSlug,
+    required this.selectedScopeProfileSlug,
+    required this.selectedScopeOwnerCode,
     required this.metricSource,
     required this.selectedMonthStart,
+    required this.availableScopes,
     required this.availableMonths,
     required this.items,
     this.lastTargetsUpdatedAt,
@@ -15,9 +19,13 @@ class PerformanceOverview {
   });
 
   final bool supported;
+  final String viewerProfileSlug;
   final String profileSlug;
+  final String? selectedScopeProfileSlug;
+  final String? selectedScopeOwnerCode;
   final KpiMetricSource metricSource;
   final DateTime? selectedMonthStart;
+  final List<PerformanceScopeOption> availableScopes;
   final List<PerformanceMonthOption> availableMonths;
   final List<PerformanceOverviewItem> items;
   final DateTime? lastTargetsUpdatedAt;
@@ -40,23 +48,43 @@ class PerformanceOverview {
   factory PerformanceOverview.empty() {
     return const PerformanceOverview(
       supported: true,
+      viewerProfileSlug: '',
       profileSlug: '',
+      selectedScopeProfileSlug: null,
+      selectedScopeOwnerCode: null,
       metricSource: KpiMetricSource.venda,
       selectedMonthStart: null,
+      availableScopes: <PerformanceScopeOption>[],
       availableMonths: <PerformanceMonthOption>[],
       items: <PerformanceOverviewItem>[],
     );
   }
 
   factory PerformanceOverview.fromJson(Map<String, dynamic> json) {
+    final rawScopes = json['available_scopes'];
     final rawMonths = json['available_months'];
     final rawItems = json['items'];
 
     return PerformanceOverview(
       supported: json['supported'] as bool? ?? true,
+      viewerProfileSlug: '${json['viewer_profile_slug'] ?? ''}',
       profileSlug: '${json['profile_slug'] ?? ''}',
+      selectedScopeProfileSlug: _toNullableString(
+        json['selected_scope_profile_slug'],
+      ),
+      selectedScopeOwnerCode: _toNullableString(json['selected_scope_owner_code']),
       metricSource: parseKpiMetricSource(json['metric_source'] as String?),
       selectedMonthStart: _parseDateTime(json['selected_month_start']),
+      availableScopes: rawScopes is List
+          ? rawScopes
+                .whereType<Map>()
+                .map(
+                  (row) => PerformanceScopeOption.fromJson(
+                    row.map((key, value) => MapEntry('$key', value)),
+                  ),
+                )
+                .toList()
+          : const <PerformanceScopeOption>[],
       availableMonths: rawMonths is List
           ? rawMonths
                 .whereType<Map>()
@@ -89,6 +117,39 @@ class PerformanceOverview {
       return DateTime.tryParse(value);
     }
     return null;
+  }
+
+  static String? _toNullableString(Object? value) {
+    final text = '$value'.trim();
+    if (value == null || text.isEmpty || text == 'null') {
+      return null;
+    }
+    return text;
+  }
+}
+
+class PerformanceScopeOption {
+  const PerformanceScopeOption({
+    required this.profileSlug,
+    required this.ownerCode,
+    required this.displayName,
+    required this.label,
+  });
+
+  final String profileSlug;
+  final String ownerCode;
+  final String displayName;
+  final String label;
+
+  String get value => '$profileSlug|$ownerCode';
+
+  factory PerformanceScopeOption.fromJson(Map<String, dynamic> json) {
+    return PerformanceScopeOption(
+      profileSlug: '${json['profile_slug'] ?? ''}',
+      ownerCode: '${json['owner_code'] ?? ''}',
+      displayName: '${json['display_name'] ?? ''}',
+      label: '${json['label'] ?? ''}',
+    );
   }
 }
 

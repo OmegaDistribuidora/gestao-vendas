@@ -13,6 +13,7 @@ from oracle_financial_sync_common import (
     authenticate_supabase,
     fetch_oracle_rows,
     get_overlap_days,
+    get_min_retroactive_days,
     get_sync_start_date,
     init_oracle_client_if_available,
     purge_supabase_window,
@@ -299,7 +300,10 @@ def get_return_detail_sync_start_date() -> date:
     last_date = date.fromisoformat(last_date_raw)
     today = date.today()
     overlap_days = get_overlap_days(is_open_day=last_date >= today)
-    sync_start_date = last_date - timedelta(days=overlap_days)
+    retroactive_days = get_min_retroactive_days()
+    overlap_start_date = last_date - timedelta(days=overlap_days)
+    retroactive_start_date = today - timedelta(days=retroactive_days)
+    sync_start_date = min(overlap_start_date, retroactive_start_date)
     if sync_start_date < INITIAL_SYNC_START_DATE:
         sync_start_date = INITIAL_SYNC_START_DATE
     return sync_start_date

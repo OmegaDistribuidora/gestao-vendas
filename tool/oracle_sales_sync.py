@@ -15,6 +15,7 @@ import requests
 INITIAL_SYNC_START_DATE = date(2026, 1, 1)
 DEFAULT_OPEN_DAY_OVERLAP_DAYS = 0
 DEFAULT_CLOSED_DAY_OVERLAP_DAYS = 7
+DEFAULT_MIN_RETROACTIVE_DAYS = 30
 BATCH_SIZE = 1000
 
 ORACLE_QUERY = """
@@ -120,6 +121,17 @@ def _normalize_text(value: object | None) -> str:
     return str(value or "").strip()
 
 
+def _get_min_retroactive_days() -> int:
+    raw_value = os.getenv("MIN_RETROACTIVE_DAYS", "").strip()
+    if not raw_value:
+        return DEFAULT_MIN_RETROACTIVE_DAYS
+
+    try:
+        return max(0, int(raw_value))
+    except ValueError:
+        return DEFAULT_MIN_RETROACTIVE_DAYS
+
+
 def _init_oracle_client_if_available() -> None:
     candidates = [
         os.getenv("ORACLE_CLIENT_LIB_DIR", "").strip(),
@@ -193,7 +205,10 @@ def get_sync_start_date() -> date:
     last_date = date.fromisoformat(last_date_raw)
     today = date.today()
     overlap_days = _get_overlap_days(is_open_day=last_date >= today)
-    sync_start_date = last_date - timedelta(days=overlap_days)
+    retroactive_days = _get_min_retroactive_days()
+    overlap_start_date = last_date - timedelta(days=overlap_days)
+    retroactive_start_date = today - timedelta(days=retroactive_days)
+    sync_start_date = min(overlap_start_date, retroactive_start_date)
     if sync_start_date < INITIAL_SYNC_START_DATE:
         sync_start_date = INITIAL_SYNC_START_DATE
     return sync_start_date

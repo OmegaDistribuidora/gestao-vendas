@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
 import '../models/app_user.dart';
-import 'access_management_screen.dart';
 import 'change_password_screen.dart';
-import 'modules_management_screen.dart';
 import 'profiles_management_screen.dart';
 import 'reports_screen.dart';
 import 'users_management_screen.dart';
@@ -16,9 +14,7 @@ class AdminScreen extends StatelessWidget {
 
   Future<void> _openProfiles(BuildContext context) {
     return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const ProfilesManagementScreen(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const ProfilesManagementScreen()),
     );
   }
 
@@ -26,22 +22,6 @@ class AdminScreen extends StatelessWidget {
     return Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => UsersManagementScreen(currentUser: currentUser),
-      ),
-    );
-  }
-
-  Future<void> _openModules(BuildContext context) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const ModulesManagementScreen(),
-      ),
-    );
-  }
-
-  Future<void> _openAccesses(BuildContext context) {
-    return Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const AccessManagementScreen(),
       ),
     );
   }
@@ -118,23 +98,8 @@ class AdminScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _AdminAccessTile(
-            title: 'Acessar módulos BI',
-            description: 'Gerencie links, filtros e status dos módulos.',
-            icon: Icons.dashboard_customize_outlined,
-            onTap: () => _openModules(context),
-          ),
-          const SizedBox(height: 12),
-          _AdminAccessTile(
-            title: 'Acessar liberações de módulos',
-            description:
-                'Defina qual usuário acessa qual módulo e com qual filtro.',
-            icon: Icons.link_outlined,
-            onTap: () => _openAccesses(context),
-          ),
-          const SizedBox(height: 12),
-          _AdminAccessTile(
             title: 'Acessar relatórios',
-            description: 'Veja logins, aberturas e tempo de uso.',
+            description: 'Veja logins e atividade geral de uso do sistema.',
             icon: Icons.insights_outlined,
             onTap: () => _openReports(context),
           ),
@@ -161,16 +126,16 @@ class _AdminAccessTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 14,
+        ),
         leading: CircleAvatar(
           backgroundColor: const Color(0xFFE7EBFF),
           foregroundColor: primaryColor,
           child: Icon(icon),
         ),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Text(description),
