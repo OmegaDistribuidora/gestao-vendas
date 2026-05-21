@@ -28,6 +28,11 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
     locale: 'pt_BR',
     symbol: 'R\$',
   );
+  final NumberFormat _compactCurrencyFormat = NumberFormat.compactCurrency(
+    locale: 'pt_BR',
+    symbol: 'R\$',
+    decimalDigits: 1,
+  );
   final NumberFormat _decimalFormat = NumberFormat.decimalPattern('pt_BR');
   final DateFormat _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
   final DateFormat _dateTimeFormat = DateFormat(
@@ -221,8 +226,125 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
 
   String _formatCurrency(double value) => _currencyFormat.format(value);
 
+  String _formatMetricCurrency(double value) {
+    if (value.abs() >= 10000) {
+      return _compactCurrencyFormat.format(value);
+    }
+    return _formatCurrency(value);
+  }
+
   String _formatNumber(double value) =>
       _decimalFormat.format(double.parse(value.toStringAsFixed(1)));
+
+  String _formatDate(DateTime? value) {
+    if (value == null) {
+      return '--';
+    }
+    return _dateFormat.format(value);
+  }
+
+  Widget _buildMetricCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color accentColor,
+    required Color accentBackgroundColor,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: accentBackgroundColor,
+              foregroundColor: accentColor,
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF5E6A7C),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        color: accentColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricsSection() {
+    Widget pair(Widget left, Widget right) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: left),
+          const SizedBox(width: 12),
+          Expanded(child: right),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        pair(
+          _buildMetricCard(
+            title: 'Financeiro',
+            value: _formatMetricCurrency(_analysis.totalReturnAmount),
+            icon: Icons.attach_money_outlined,
+            accentColor: const Color(0xFFB42318),
+            accentBackgroundColor: const Color(0xFFFDECEC),
+          ),
+          _buildMetricCard(
+            title: 'Clientes',
+            value: '${_analysis.totalClients}',
+            icon: Icons.people_outline,
+            accentColor: const Color(0xFF1D4ED8),
+            accentBackgroundColor: const Color(0xFFE8EEFF),
+          ),
+        ),
+        const SizedBox(height: 12),
+        pair(
+          _buildMetricCard(
+            title: 'Volume',
+            value: _formatNumber(_analysis.totalVolume),
+            icon: Icons.widgets_outlined,
+            accentColor: const Color(0xFF7C3AED),
+            accentBackgroundColor: const Color(0xFFF2EAFE),
+          ),
+          _buildMetricCard(
+            title: 'Pedidos',
+            value: '${_analysis.totalOrders}',
+            icon: Icons.assignment_return_outlined,
+            accentColor: const Color(0xFFFF7A00),
+            accentBackgroundColor: const Color(0xFFFFF0DD),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildLastUpdateCard() {
     return Card(
@@ -377,6 +499,82 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
     );
   }
 
+  Widget _buildOrderRow(ReturnOrderSummary order) {
+    return InkWell(
+      onTap: () => _showOrderDetails(order),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDECEC),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: const Icon(
+                Icons.assignment_return_outlined,
+                color: primaryColor,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Pedido #${order.numped}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    order.returnReason.isEmpty
+                        ? '${order.codcli} - ${order.clientName}'
+                        : order.returnReason,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF5E6A7C),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  order.returnDate != null
+                      ? _formatDate(order.returnDate)
+                      : '--',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF5E6A7C),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatCurrency(order.totalValue),
+                  style: const TextStyle(
+                    color: primaryColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF8A94A6)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -515,30 +713,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                                   ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 16),
-                            Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: [
-                                _SummaryMetricCard(
-                                  title: 'Financeiro devolvido',
-                                  value: _formatCurrency(
-                                    _analysis.totalReturnAmount,
-                                  ),
-                                ),
-                                _SummaryMetricCard(
-                                  title: 'Clientes com devolução',
-                                  value: '${_analysis.totalClients}',
-                                ),
-                                _SummaryMetricCard(
-                                  title: 'Volume devolvido',
-                                  value: _formatNumber(_analysis.totalVolume),
-                                ),
-                                _SummaryMetricCard(
-                                  title: 'Pedidos devolvidos',
-                                  value: '${_analysis.totalOrders}',
-                                ),
-                              ],
-                            ),
+                            _buildMetricsSection(),
                           ],
                         ),
                       ),
@@ -554,67 +729,23 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                         ),
                       )
                     else
-                      ..._filteredOrders.map(
-                        (order) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Card(
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 12,
-                              ),
-                              leading: Container(
-                                width: 48,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFDECEC),
-                                  borderRadius: BorderRadius.circular(16),
+                      Card(
+                        child: Column(
+                          children: [
+                            for (
+                              var index = 0;
+                              index < _filteredOrders.length;
+                              index++
+                            ) ...[
+                              _buildOrderRow(_filteredOrders[index]),
+                              if (index != _filteredOrders.length - 1)
+                                const Divider(
+                                  height: 1,
+                                  indent: 18,
+                                  endIndent: 18,
                                 ),
-                                child: const Icon(
-                                  Icons.assignment_return_outlined,
-                                  color: primaryColor,
-                                ),
-                              ),
-                              title: Text(
-                                '${order.codcli} • ${order.clientName}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Pedido ${order.numped}'),
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        order.sellerName.trim().isNotEmpty
-                                            ? 'Vendedor: ${order.codusur} • ${order.sellerName}'
-                                            : 'Vendedor: ${order.codusur}',
-                                      ),
-                                    ),
-                                    if (order.returnReason.isNotEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: Text(
-                                          'Motivo: ${order.returnReason}',
-                                        ),
-                                      ),
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        'Valor: ${_formatCurrency(order.totalValue)} • Volume: ${_formatNumber(order.totalVolume)} • Itens: ${order.itemCount}',
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () => _showOrderDetails(order),
-                            ),
-                          ),
+                            ],
+                          ],
                         ),
                       ),
                     const SizedBox(height: 8),
@@ -622,53 +753,6 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                   ],
                 ),
         ),
-      ),
-    );
-  }
-}
-
-class _SummaryMetricCard extends StatelessWidget {
-  const _SummaryMetricCard({required this.title, required this.value});
-
-  final String title;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 154,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FF),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE1E6F5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF5E6A7C),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 30,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                maxLines: 1,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

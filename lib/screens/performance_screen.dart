@@ -435,54 +435,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     );
   }
 
-  Widget _buildLegendCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Legenda da projecao',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'A projecao considera dias uteis de segunda a sexta, excluindo feriados nacionais e do Ceara.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: const [
-                _LegendBadge(
-                  label: 'Realizado',
-                  color: Color(0xFF0F766E),
-                  style: _LegendBadgeStyle.solid,
-                ),
-                _LegendBadge(
-                  label: 'Projecao ate o fim do mes',
-                  color: Color(0xFF4F7CFF),
-                  style: _LegendBadgeStyle.projected,
-                ),
-                _LegendBadge(
-                  label: 'Meta do mes (100%)',
-                  color: Color(0xFF7A8597),
-                  style: _LegendBadgeStyle.goal,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   List<_MetricPanelData> _buildMetricPanels(PerformanceOverviewItem item) {
     final panels = <_MetricPanelData>[_buildFinancialPanel(item)];
 
@@ -761,8 +713,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
         children: [
           _buildMonthFilterCard(),
-          const SizedBox(height: 12),
-          _buildLegendCard(),
           const SizedBox(height: 16),
           if (!_overview.supported)
             _buildUnsupportedCard()
@@ -1297,98 +1247,6 @@ class _InfoPill extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-enum _LegendBadgeStyle { solid, projected, goal }
-
-class _LegendBadge extends StatelessWidget {
-  const _LegendBadge({
-    required this.label,
-    required this.color,
-    required this.style,
-  });
-
-  final String label;
-  final Color color;
-  final _LegendBadgeStyle style;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFF),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFE1E6F5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 28,
-            child: CustomPaint(
-              painter: _LegendMarkPainter(color: color, style: style),
-              size: const Size(28, 10),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF334155),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegendMarkPainter extends CustomPainter {
-  const _LegendMarkPainter({required this.color, required this.style});
-
-  final Color color;
-  final _LegendBadgeStyle style;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final y = size.height / 2;
-    final paint = Paint()
-      ..color = style == _LegendBadgeStyle.goal
-          ? color
-          : color.withValues(
-              alpha: style == _LegendBadgeStyle.projected ? 0.8 : 1,
-            )
-      ..strokeWidth = style == _LegendBadgeStyle.goal ? 2 : 4
-      ..strokeCap = StrokeCap.round;
-
-    if (style == _LegendBadgeStyle.goal) {
-      canvas.drawLine(
-        Offset(size.width / 2, 0),
-        Offset(size.width / 2, size.height),
-        paint,
-      );
-      return;
-    }
-
-    if (style == _LegendBadgeStyle.solid) {
-      canvas.drawLine(Offset(2, y), Offset(size.width - 2, y), paint);
-      return;
-    }
-
-    var x = 2.0;
-    while (x < size.width - 2) {
-      final endX = math.min<double>(x + 6, size.width - 2);
-      canvas.drawLine(Offset(x, y), Offset(endX, y), paint);
-      x += 9;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _LegendMarkPainter oldDelegate) {
-    return oldDelegate.color != color || oldDelegate.style != style;
   }
 }
 

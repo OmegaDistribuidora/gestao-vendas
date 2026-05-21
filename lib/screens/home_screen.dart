@@ -9,6 +9,7 @@ import '../models/kpi_metric_source.dart';
 import '../models/seller_home_kpis.dart';
 import '../services/app_repository.dart';
 import 'admin_screen.dart';
+import 'blocked_orders_screen.dart';
 import 'change_password_screen.dart';
 import 'delinquency_screen.dart';
 import 'performance_screen.dart';
@@ -342,6 +343,17 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const DelinquencyScreen()));
+  }
+
+  Future<void> _openBlockedOrdersFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const BlockedOrdersScreen()),
+    );
   }
 
   Future<void> _openChangePasswordFromDrawer() async {
@@ -748,6 +760,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                       onTap: _openDelinquencyFromDrawer,
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.lock_clock_outlined),
+                      title: const Text('Pedidos Bloqueados'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      onTap: _openBlockedOrdersFromDrawer,
                     ),
                     if (_isAdmin) ...[
                       const SizedBox(height: 8),

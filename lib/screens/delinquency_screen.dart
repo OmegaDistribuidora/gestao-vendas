@@ -20,6 +20,11 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
     locale: 'pt_BR',
     symbol: 'R\$',
   );
+  final NumberFormat _compactCurrencyFormat = NumberFormat.compactCurrency(
+    locale: 'pt_BR',
+    symbol: 'R\$',
+    decimalDigits: 1,
+  );
   final DateFormat _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
   final DateFormat _dateTimeFormat = DateFormat(
     "dd/MM/yyyy 'as' HH:mm",
@@ -294,11 +299,70 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
 
   String _formatCurrency(double value) => _currencyFormat.format(value);
 
+  String _formatMetricCurrency(double value) {
+    if (value.abs() >= 10000) {
+      return _compactCurrencyFormat.format(value);
+    }
+    return _formatCurrency(value);
+  }
+
   String _formatDate(DateTime? value) {
     if (value == null) {
       return '--';
     }
     return _dateFormat.format(value);
+  }
+
+  Widget _buildMetricCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color accentColor,
+    required Color accentBackgroundColor,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: accentBackgroundColor,
+              foregroundColor: accentColor,
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF5E6A7C),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        color: accentColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildHeaderCard() {
@@ -369,6 +433,17 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
   }
 
   Widget _buildSummaryCard() {
+    Widget pair(Widget left, Widget right) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: left),
+          const SizedBox(width: 12),
+          Expanded(child: right),
+        ],
+      );
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -382,22 +457,35 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
+            pair(
+              _buildMetricCard(
+                title: 'Valor em aberto',
+                value: _formatMetricCurrency(_overview.totalAmount),
+                icon: Icons.attach_money_outlined,
+                accentColor: const Color(0xFFB42318),
+                accentBackgroundColor: const Color(0xFFFDECEC),
+              ),
+              _buildMetricCard(
+                title: 'Pedidos',
+                value: '${_overview.totalOrders}',
+                icon: Icons.receipt_long_outlined,
+                accentColor: const Color(0xFF1D4ED8),
+                accentBackgroundColor: const Color(0xFFE8EEFF),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
               children: [
-                _SummaryMetricCard(
-                  title: 'Valor em aberto',
-                  value: _formatCurrency(_overview.totalAmount),
+                Expanded(
+                  child: _buildMetricCard(
+                    title: 'Clientes',
+                    value: '${_overview.totalClients}',
+                    icon: Icons.people_outline,
+                    accentColor: const Color(0xFF7C3AED),
+                    accentBackgroundColor: const Color(0xFFF2EAFE),
+                  ),
                 ),
-                _SummaryMetricCard(
-                  title: 'Pedidos',
-                  value: '${_overview.totalOrders}',
-                ),
-                _SummaryMetricCard(
-                  title: 'Clientes',
-                  value: '${_overview.totalClients}',
-                ),
+                const Expanded(child: SizedBox.shrink()),
               ],
             ),
           ],
@@ -623,53 +711,6 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
                 ],
               )
             : _buildContent(),
-      ),
-    );
-  }
-}
-
-class _SummaryMetricCard extends StatelessWidget {
-  const _SummaryMetricCard({required this.title, required this.value});
-
-  final String title;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 154,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FF),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE1E6F5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF5E6A7C),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 30,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                maxLines: 1,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

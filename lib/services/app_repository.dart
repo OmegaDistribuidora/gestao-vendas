@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/supabase_config.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
+import '../models/blocked_orders_overview.dart';
 import '../models/delinquency_overview.dart';
 import '../models/kpi_metric_source.dart';
 import '../models/performance_overview.dart';
@@ -489,6 +490,16 @@ class AppRepository {
     }
 
     return DelinquencyOverview.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<BlockedOrdersOverview> getBlockedOrdersOverview() async {
+    final response = await _supabase.rpc('get_blocked_orders_overview');
+
+    if (response is! Map) {
+      return BlockedOrdersOverview.empty();
+    }
+
+    return BlockedOrdersOverview.fromJson(_stringKeyedMap(response));
   }
 
   Future<List<ReturnOrderDetail>> getReturnOrderDetails({
