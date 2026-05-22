@@ -3,20 +3,26 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Iterable
 
 import oracledb
-import requests
+
+from oracle_financial_sync_common import get_sync_window, require_env
+from supabase_sync_common import (
+    SupabaseSession,
+    authenticate_supabase,
+    begin_sync_run,
+    insert_rows,
+    invoke_rpc,
+    mark_sync_run_failed,
+    set_sync_run_rows_staged,
+)
 
 
 INITIAL_SYNC_START_DATE = date(2026, 1, 1)
-DEFAULT_OPEN_DAY_OVERLAP_DAYS = 0
-DEFAULT_CLOSED_DAY_OVERLAP_DAYS = 7
-DEFAULT_MIN_RETROACTIVE_DAYS = 30
-BATCH_SIZE = 1000
 
 ORACLE_QUERY = """
 SELECT
@@ -83,34 +89,6 @@ class SalesRow:
     imported_at: str
 
 
-def _require_env(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    if not value:
-        raise RuntimeError(f"Environment variable {name} is required.")
-    return value
-
-
-def _get_overlap_days(*, is_open_day: bool) -> int:
-    env_name = (
-        "OPEN_DAY_OVERLAP_DAYS"
-        if is_open_day
-        else "CLOSED_DAY_OVERLAP_DAYS"
-    )
-    default_value = (
-        DEFAULT_OPEN_DAY_OVERLAP_DAYS
-        if is_open_day
-        else DEFAULT_CLOSED_DAY_OVERLAP_DAYS
-    )
-    raw_value = os.getenv(env_name, "").strip()
-    if not raw_value:
-        return default_value
-
-    try:
-        return max(0, int(raw_value))
-    except ValueError:
-        return default_value
-
-
 def _to_float(value: Decimal | float | int | None) -> float:
     if value is None:
         return 0.0
@@ -119,17 +97,6 @@ def _to_float(value: Decimal | float | int | None) -> float:
 
 def _normalize_text(value: object | None) -> str:
     return str(value or "").strip()
-
-
-def _get_min_retroactive_days() -> int:
-    raw_value = os.getenv("MIN_RETROACTIVE_DAYS", "").strip()
-    if not raw_value:
-        return DEFAULT_MIN_RETROACTIVE_DAYS
-
-    try:
-        return max(0, int(raw_value))
-    except ValueError:
-        return DEFAULT_MIN_RETROACTIVE_DAYS
 
 
 def _init_oracle_client_if_available() -> None:
@@ -153,71 +120,10 @@ def _init_oracle_client_if_available() -> None:
                 continue
 
 
-def authenticate_supabase() -> tuple[str, str]:
-    supabase_url = _require_env("SUPABASE_URL")
-    publishable_key = _require_env("SUPABASE_PUBLISHABLE_KEY")
-    admin_email = _require_env("SUPABASE_ADMIN_EMAIL")
-    admin_password = _require_env("SUPABASE_ADMIN_PASSWORD")
-
-    response = requests.post(
-        f"{supabase_url}/auth/v1/token?grant_type=password",
-        headers={
-            "apikey": publishable_key,
-            "Content-Type": "application/json",
-        },
-        json={
-            "email": admin_email,
-            "password": admin_password,
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    access_token = response.json()["access_token"]
-    return supabase_url, access_token
-
-
-def get_sync_start_date() -> date:
-    supabase_url, access_token = authenticate_supabase()
-    publishable_key = _require_env("SUPABASE_PUBLISHABLE_KEY")
-
-    response = requests.get(
-        f"{supabase_url}/rest/v1/app_sales_daily_snapshots",
-        headers={
-            "apikey": publishable_key,
-            "Authorization": f"Bearer {access_token}",
-        },
-        params={
-            "select": "sales_date",
-            "order": "sales_date.desc",
-            "limit": "1",
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    rows = response.json()
-    if not rows:
-        return INITIAL_SYNC_START_DATE
-
-    last_date_raw = str(rows[0].get("sales_date") or "").strip()
-    if not last_date_raw:
-        return INITIAL_SYNC_START_DATE
-
-    last_date = date.fromisoformat(last_date_raw)
-    today = date.today()
-    overlap_days = _get_overlap_days(is_open_day=last_date >= today)
-    retroactive_days = _get_min_retroactive_days()
-    overlap_start_date = last_date - timedelta(days=overlap_days)
-    retroactive_start_date = today - timedelta(days=retroactive_days)
-    sync_start_date = min(overlap_start_date, retroactive_start_date)
-    if sync_start_date < INITIAL_SYNC_START_DATE:
-        sync_start_date = INITIAL_SYNC_START_DATE
-    return sync_start_date
-
-
 def fetch_oracle_rows(sync_start_date: date) -> list[SalesRow]:
-    oracle_user = _require_env("ORACLE_USER")
-    oracle_password = _require_env("ORACLE_PASSWORD")
-    oracle_dsn = _require_env("ORACLE_DSN")
+    oracle_user = require_env("ORACLE_USER")
+    oracle_password = require_env("ORACLE_PASSWORD")
+    oracle_dsn = require_env("ORACLE_DSN")
 
     _init_oracle_client_if_available()
     connection = oracledb.connect(
@@ -267,32 +173,11 @@ def fetch_oracle_rows(sync_start_date: date) -> list[SalesRow]:
         connection.close()
 
 
-def purge_supabase_window(sync_start_date: date) -> int:
-    supabase_url, access_token = authenticate_supabase()
-    publishable_key = _require_env("SUPABASE_PUBLISHABLE_KEY")
-
-    response = requests.delete(
-        f"{supabase_url}/rest/v1/app_sales_daily_snapshots",
-        headers={
-            "apikey": publishable_key,
-            "Authorization": f"Bearer {access_token}",
-            "Prefer": "return=representation",
-        },
-        params={
-            "sales_date": f"gte.{sync_start_date.isoformat()}",
-        },
-        timeout=300,
-    )
-    if not response.ok:
-        raise RuntimeError(
-            f"Supabase purge failed: {response.status_code} {response.text}"
-        )
-
-    deleted_rows = response.json() if response.text.strip() else []
-    return len(deleted_rows) if isinstance(deleted_rows, list) else 0
-
-
-def upsert_supabase_rows(rows: Iterable[SalesRow]) -> int:
+def stage_sales_rows(
+    session: SupabaseSession,
+    run_id: str,
+    rows: Iterable[SalesRow],
+) -> int:
     deduped_rows: dict[tuple[str, str, str, str, str], SalesRow] = {}
     for row in rows:
         deduped_rows[
@@ -301,6 +186,7 @@ def upsert_supabase_rows(rows: Iterable[SalesRow]) -> int:
 
     payload = [
         {
+            "run_id": run_id,
             "sales_date": row.sales_date,
             "numped": row.numped,
             "codcli": row.codcli,
@@ -315,52 +201,54 @@ def upsert_supabase_rows(rows: Iterable[SalesRow]) -> int:
         for row in deduped_rows.values()
     ]
 
-    if not payload:
-        return 0
+    return insert_rows(session, "etl_stg_sales_daily_snapshots", payload)
 
-    supabase_url, access_token = authenticate_supabase()
-    publishable_key = _require_env("SUPABASE_PUBLISHABLE_KEY")
 
-    headers = {
-        "apikey": publishable_key,
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=minimal",
-    }
-
-    for start in range(0, len(payload), BATCH_SIZE):
-        chunk = payload[start : start + BATCH_SIZE]
-        response = requests.post(
-            (
-                f"{supabase_url}/rest/v1/app_sales_daily_snapshots"
-                "?on_conflict=sales_date,numped,codcli,codusur,codfornec"
-            ),
-            headers=headers,
-            data=json.dumps(chunk),
-            timeout=300,
-        )
-        if not response.ok:
-            raise RuntimeError(
-                f"Supabase upsert failed on batch starting at {start}: "
-                f"{response.status_code} {response.text}"
-            )
-    return len(payload)
+def apply_sales_sync(session: SupabaseSession, run_id: str) -> dict[str, object]:
+    response = invoke_rpc(
+        session,
+        "apply_sales_sync",
+        {"p_run_id": run_id},
+    )
+    if not isinstance(response, dict):
+        return {}
+    return {str(key): value for key, value in response.items()}
 
 
 def main() -> None:
-    sync_start_date = get_sync_start_date()
+    scope_type, sync_start_date, sync_end_date = get_sync_window()
     rows = fetch_oracle_rows(sync_start_date)
-    purged_count = purge_supabase_window(sync_start_date)
-    upserted_count = upsert_supabase_rows(rows)
+    session = authenticate_supabase(require_env)
+    run_id = begin_sync_run(
+        session,
+        job_name="oracle_sales_sync",
+        target_name="app_sales_daily_snapshots",
+        scope_type=scope_type,
+        window_start=sync_start_date.isoformat(),
+        window_end=sync_end_date.isoformat(),
+    )
+
+    try:
+        staged_count = stage_sales_rows(session, run_id, rows)
+        set_sync_run_rows_staged(session, run_id, staged_count)
+        apply_result = apply_sales_sync(session, run_id)
+    except Exception as error:
+        mark_sync_run_failed(session, run_id, str(error))
+        raise
+
     total_venda = sum(row.venda for row in rows)
     total_volume = sum(row.volume for row in rows)
     print(
         json.dumps(
             {
+                "scope_type": scope_type,
                 "sync_start_date": sync_start_date.isoformat(),
+                "sync_end_date": sync_end_date.isoformat(),
                 "rows": len(rows),
-                "purged": purged_count,
-                "upserted": upserted_count,
+                "rows_staged": staged_count,
+                "rows_inserted": apply_result.get("rows_inserted", 0),
+                "rows_updated": apply_result.get("rows_updated", 0),
+                "rows_deleted": apply_result.get("rows_deleted", 0),
                 "total_venda": round(total_venda, 2),
                 "total_volume": round(total_volume, 2),
             },

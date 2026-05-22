@@ -2,28 +2,32 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import oracledb
-import requests
 
 from oracle_financial_sync_common import (
     INITIAL_SYNC_START_DATE,
-    authenticate_supabase,
+    apply_financial_sync,
+    authenticate_supabase_session,
+    create_financial_sync_run,
     fetch_oracle_rows,
-    get_overlap_days,
-    get_min_retroactive_days,
-    get_sync_start_date,
+    get_sync_window,
     init_oracle_client_if_available,
-    purge_supabase_window,
     require_env,
-    upsert_supabase_rows,
+    stage_financial_rows,
+)
+from supabase_sync_common import (
+    begin_sync_run,
+    insert_rows,
+    invoke_rpc,
+    mark_sync_run_failed,
+    set_sync_run_rows_staged,
 )
 
 
 SNAPSHOT_TYPE = "D"
-BATCH_SIZE = 1000
 
 ORACLE_FINANCIAL_QUERY = """
 SELECT
@@ -246,70 +250,11 @@ def fetch_return_detail_rows(sync_start_date: date) -> list[ReturnDetailRow]:
         connection.close()
 
 
-def purge_return_detail_window(sync_start_date: date) -> int:
-    supabase_url, access_token = authenticate_supabase()
-    publishable_key = require_env("SUPABASE_PUBLISHABLE_KEY")
-
-    response = requests.delete(
-        f"{supabase_url}/rest/v1/app_return_order_items",
-        headers={
-            "apikey": publishable_key,
-            "Authorization": f"Bearer {access_token}",
-            "Prefer": "return=representation",
-        },
-        params={
-            "return_date": f"gte.{sync_start_date.isoformat()}",
-        },
-        timeout=300,
-    )
-    if not response.ok:
-        raise RuntimeError(
-            f"Supabase return detail purge failed: {response.status_code} {response.text}"
-        )
-
-    deleted_rows = response.json() if response.text.strip() else []
-    return len(deleted_rows) if isinstance(deleted_rows, list) else 0
-
-
-def get_return_detail_sync_start_date() -> date:
-    supabase_url, access_token = authenticate_supabase()
-    publishable_key = require_env("SUPABASE_PUBLISHABLE_KEY")
-
-    response = requests.get(
-        f"{supabase_url}/rest/v1/app_return_order_items",
-        headers={
-            "apikey": publishable_key,
-            "Authorization": f"Bearer {access_token}",
-        },
-        params={
-            "select": "return_date",
-            "order": "return_date.desc",
-            "limit": "1",
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    rows = response.json()
-    if not rows:
-        return INITIAL_SYNC_START_DATE
-
-    last_date_raw = str(rows[0].get("return_date") or "").strip()
-    if not last_date_raw:
-        return INITIAL_SYNC_START_DATE
-
-    last_date = date.fromisoformat(last_date_raw)
-    today = date.today()
-    overlap_days = get_overlap_days(is_open_day=last_date >= today)
-    retroactive_days = get_min_retroactive_days()
-    overlap_start_date = last_date - timedelta(days=overlap_days)
-    retroactive_start_date = today - timedelta(days=retroactive_days)
-    sync_start_date = min(overlap_start_date, retroactive_start_date)
-    if sync_start_date < INITIAL_SYNC_START_DATE:
-        sync_start_date = INITIAL_SYNC_START_DATE
-    return sync_start_date
-
-
-def upsert_return_detail_rows(rows: list[ReturnDetailRow]) -> int:
+def stage_return_detail_rows(
+    session,
+    run_id: str,
+    rows: list[ReturnDetailRow],
+) -> int:
     deduped_rows: dict[tuple[str, str, str, str, str, str], ReturnDetailRow] = {}
     for row in rows:
         deduped_rows[
@@ -325,6 +270,7 @@ def upsert_return_detail_rows(rows: list[ReturnDetailRow]) -> int:
 
     payload = [
         {
+            "run_id": run_id,
             "return_date": row.return_date,
             "numped": row.numped,
             "codcli": row.codcli,
@@ -343,65 +289,89 @@ def upsert_return_detail_rows(rows: list[ReturnDetailRow]) -> int:
         }
         for row in deduped_rows.values()
     ]
+    return insert_rows(session, "etl_stg_return_order_items", payload)
 
-    if not payload:
-        return 0
 
-    supabase_url, access_token = authenticate_supabase()
-    publishable_key = require_env("SUPABASE_PUBLISHABLE_KEY")
-    headers = {
-        "apikey": publishable_key,
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-        "Prefer": "resolution=merge-duplicates,return=minimal",
-    }
-
-    for start in range(0, len(payload), BATCH_SIZE):
-        chunk = payload[start : start + BATCH_SIZE]
-        response = requests.post(
-            (
-                f"{supabase_url}/rest/v1/app_return_order_items"
-                "?on_conflict=return_date,numped,codprod,codfornec,codusur,return_reason"
-            ),
-            headers=headers,
-            data=json.dumps(chunk),
-            timeout=300,
-        )
-        if not response.ok:
-            raise RuntimeError(
-                f"Supabase return detail upsert failed on batch starting at {start}: "
-                f"{response.status_code} {response.text}"
-            )
-    return len(payload)
+def apply_return_items_sync(session, run_id: str) -> dict[str, object]:
+    response = invoke_rpc(
+        session,
+        "apply_return_items_sync",
+        {"p_run_id": run_id},
+    )
+    if not isinstance(response, dict):
+        return {}
+    return {str(key): value for key, value in response.items()}
 
 
 def main() -> None:
-    sync_start_date = get_sync_start_date(SNAPSHOT_TYPE)
-    detail_sync_start_date = get_return_detail_sync_start_date()
+    scope_type, sync_start_date, sync_end_date = get_sync_window()
+    if sync_start_date < INITIAL_SYNC_START_DATE:
+        sync_start_date = INITIAL_SYNC_START_DATE
+
     financial_rows = fetch_oracle_rows(
         SNAPSHOT_TYPE,
         ORACLE_FINANCIAL_QUERY,
         sync_start_date,
     )
-    detail_rows = fetch_return_detail_rows(detail_sync_start_date)
-    purged_financial_count = purge_supabase_window(SNAPSHOT_TYPE, sync_start_date)
-    purged_detail_count = purge_return_detail_window(detail_sync_start_date)
-    upserted_financial_count = upsert_supabase_rows(financial_rows)
-    upserted_detail_count = upsert_return_detail_rows(detail_rows)
+    detail_rows = fetch_return_detail_rows(sync_start_date)
+    session = authenticate_supabase_session(require_env)
+
+    financial_run_id = create_financial_sync_run(
+        session,
+        job_name="oracle_returns_financial_sync",
+        scope_type=scope_type,
+        window_start=sync_start_date,
+        window_end=sync_end_date,
+    )
+    detail_run_id = begin_sync_run(
+        session,
+        job_name="oracle_return_items_sync",
+        target_name="app_return_order_items",
+        scope_type=scope_type,
+        window_start=sync_start_date.isoformat(),
+        window_end=sync_end_date.isoformat(),
+    )
+
+    try:
+        staged_financial_count = stage_financial_rows(
+            session,
+            financial_run_id,
+            financial_rows,
+        )
+        set_sync_run_rows_staged(session, financial_run_id, staged_financial_count)
+        financial_apply_result = apply_financial_sync(session, financial_run_id)
+
+        staged_detail_count = stage_return_detail_rows(
+            session,
+            detail_run_id,
+            detail_rows,
+        )
+        set_sync_run_rows_staged(session, detail_run_id, staged_detail_count)
+        detail_apply_result = apply_return_items_sync(session, detail_run_id)
+    except Exception as error:
+        mark_sync_run_failed(session, financial_run_id, str(error))
+        mark_sync_run_failed(session, detail_run_id, str(error))
+        raise
+
     total_faturamento = sum(row.faturamento for row in financial_rows)
     total_volume = sum(row.volume for row in financial_rows)
     print(
         json.dumps(
             {
                 "snapshot_type": SNAPSHOT_TYPE,
+                "scope_type": scope_type,
                 "sync_start_date": sync_start_date.isoformat(),
-                "detail_sync_start_date": detail_sync_start_date.isoformat(),
+                "sync_end_date": sync_end_date.isoformat(),
                 "financial_rows": len(financial_rows),
                 "detail_rows": len(detail_rows),
-                "purged_financial": purged_financial_count,
-                "purged_detail": purged_detail_count,
-                "upserted_financial": upserted_financial_count,
-                "upserted_detail": upserted_detail_count,
+                "staged_financial": staged_financial_count,
+                "staged_detail": staged_detail_count,
+                "financial_inserted": financial_apply_result.get("rows_inserted", 0),
+                "financial_updated": financial_apply_result.get("rows_updated", 0),
+                "financial_deleted": financial_apply_result.get("rows_deleted", 0),
+                "detail_inserted": detail_apply_result.get("rows_inserted", 0),
+                "detail_updated": detail_apply_result.get("rows_updated", 0),
+                "detail_deleted": detail_apply_result.get("rows_deleted", 0),
                 "total_faturamento": round(total_faturamento, 2),
                 "total_volume": round(total_volume, 4),
             },

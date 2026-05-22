@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 
 from oracle_financial_sync_common import (
+    apply_financial_sync,
+    authenticate_supabase_session,
+    create_financial_sync_run,
     fetch_oracle_rows,
-    get_sync_start_date,
-    purge_supabase_window,
-    upsert_supabase_rows,
+    get_sync_window,
+    require_env,
+    stage_financial_rows,
 )
+from supabase_sync_common import mark_sync_run_failed, set_sync_run_rows_staged
 
 
 SNAPSHOT_TYPE = "F"
@@ -73,20 +77,39 @@ ORDER BY
 
 
 def main() -> None:
-    sync_start_date = get_sync_start_date(SNAPSHOT_TYPE)
+    scope_type, sync_start_date, sync_end_date = get_sync_window()
     rows = fetch_oracle_rows(SNAPSHOT_TYPE, ORACLE_QUERY, sync_start_date)
-    purged_count = purge_supabase_window(SNAPSHOT_TYPE, sync_start_date)
-    upserted_count = upsert_supabase_rows(rows)
+    session = authenticate_supabase_session(require_env)
+    run_id = create_financial_sync_run(
+        session,
+        job_name="oracle_billing_sync",
+        scope_type=scope_type,
+        window_start=sync_start_date,
+        window_end=sync_end_date,
+    )
+
+    try:
+        staged_count = stage_financial_rows(session, run_id, rows)
+        set_sync_run_rows_staged(session, run_id, staged_count)
+        apply_result = apply_financial_sync(session, run_id)
+    except Exception as error:
+        mark_sync_run_failed(session, run_id, str(error))
+        raise
+
     total_faturamento = sum(row.faturamento for row in rows)
     total_volume = sum(row.volume for row in rows)
     print(
         json.dumps(
             {
                 "snapshot_type": SNAPSHOT_TYPE,
+                "scope_type": scope_type,
                 "sync_start_date": sync_start_date.isoformat(),
+                "sync_end_date": sync_end_date.isoformat(),
                 "rows": len(rows),
-                "purged": purged_count,
-                "upserted": upserted_count,
+                "rows_staged": staged_count,
+                "rows_inserted": apply_result.get("rows_inserted", 0),
+                "rows_updated": apply_result.get("rows_updated", 0),
+                "rows_deleted": apply_result.get("rows_deleted", 0),
                 "total_faturamento": round(total_faturamento, 2),
                 "total_volume": round(total_volume, 4),
             },
