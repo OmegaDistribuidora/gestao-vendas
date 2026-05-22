@@ -242,6 +242,7 @@ class AppRepository {
   }
 
   Future<void> deleteProfile(String profileId) async {
+    await _ensureCurrentUserAccess();
     await _supabase.rpc(
       'delete_app_profile',
       params: <String, dynamic>{'target_profile_id': profileId},
@@ -249,6 +250,7 @@ class AppRepository {
   }
 
   Future<List<AppUser>> getUsers() async {
+    await _ensureCurrentUserAccess();
     final profilesById = await _loadProfilesById();
     final data = await _supabase.from('app_users').select().order('code');
 
@@ -373,6 +375,7 @@ class AppRepository {
     required DateTime end,
     String? userId,
   }) async {
+    await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
       'get_usage_report',
       params: <String, dynamic>{
@@ -394,6 +397,7 @@ class AppRepository {
     required DateTime end,
     required KpiMetricSource metricSource,
   }) async {
+    await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
       'get_home_kpis',
       params: <String, dynamic>{
@@ -415,6 +419,7 @@ class AppRepository {
     required DateTime end,
     required KpiMetricSource metricSource,
   }) async {
+    await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
       'get_supplier_analysis',
       params: <String, dynamic>{
@@ -437,6 +442,7 @@ class AppRepository {
     String? targetScopeProfileSlug,
     String? targetScopeOwnerCode,
   }) async {
+    await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
       'get_performance_overview',
       params: <String, dynamic>{
@@ -458,6 +464,7 @@ class AppRepository {
     required DateTime start,
     required DateTime end,
   }) async {
+    await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
       'get_return_analysis',
       params: <String, dynamic>{
@@ -477,6 +484,7 @@ class AppRepository {
     String? targetScopeProfileSlug,
     String? targetScopeOwnerCode,
   }) async {
+    await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
       'get_delinquency_overview',
       params: <String, dynamic>{
@@ -493,6 +501,7 @@ class AppRepository {
   }
 
   Future<BlockedOrdersOverview> getBlockedOrdersOverview() async {
+    await _ensureCurrentUserAccess();
     final response = await _supabase.rpc('get_blocked_orders_overview');
 
     if (response is! Map) {
@@ -506,6 +515,7 @@ class AppRepository {
     required DateTime returnDate,
     required String orderNumber,
   }) async {
+    await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
       'get_return_order_details',
       params: <String, dynamic>{
@@ -546,6 +556,10 @@ class AppRepository {
       return null;
     }
     return '$trimmedPassword$trimmedPassword';
+  }
+
+  Future<void> _ensureCurrentUserAccess() async {
+    await _loadCurrentUser(enforceActive: true);
   }
 
   Future<AppUser> _loadCurrentUser({required bool enforceActive}) async {
@@ -690,6 +704,7 @@ class AppRepository {
   Future<Map<String, dynamic>> _invokeAdminUsersFunction(
     Map<String, dynamic> payload,
   ) async {
+    await _ensureCurrentUserAccess();
     try {
       final response = await _supabase.functions.invoke(
         'admin-users',

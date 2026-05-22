@@ -68,6 +68,21 @@ function normalizeCompare(value: string) {
   return normalizeText(value).toLowerCase()
 }
 
+function nullableNormalized(value: unknown) {
+  const normalized = String(value ?? '').trim()
+  return normalized === '' ? null : normalized
+}
+
+function valuesDiffer(currentValue: unknown, nextValue: unknown) {
+  return nullableNormalized(currentValue) !== nullableNormalized(nextValue)
+}
+
+function normalizedValuesDiffer(currentValue: unknown, nextValue: unknown) {
+  const currentNormalized = normalizeCompare(String(currentValue ?? ''))
+  const nextNormalized = normalizeCompare(String(nextValue ?? ''))
+  return currentNormalized !== nextNormalized
+}
+
 function extractFirstLoginToken(displayName: string) {
   const beforeSlash = normalizeText(displayName).split('/')[0] ?? ''
   return normalizeText(beforeSlash).split(/\s+/)[0] ?? ''
@@ -441,24 +456,33 @@ async function syncSellerUsers(
 ) {
   const sellerProfileId = await requireProfileIdBySlug(adminClient, 'vendedor')
   const codes = [...new Set(sellers.map((item) => item.code))]
+  const cpfs = [...new Set(sellers.map((item) => sanitizeDigits(item.cpf)).filter(Boolean))]
   const activeCodeSet = new Set(codes)
   const existingUsersByCode = new Map<string, Record<string, unknown>>()
+  const existingUsersByCpf = new Map<string, Record<string, unknown>>()
 
-  if (codes.length > 0) {
+  if (codes.length > 0 || cpfs.length > 0) {
     const { data: existingUsers, error } = await adminClient
       .from('app_users')
       .select(
-        'auth_user_id, code, display_name, profile_id, origin, requires_admin_password_definition',
+        'auth_user_id, code, display_name, profile_id, origin, requires_admin_password_definition, cpf, is_active, supervisor_code, supervisor_name, coordinator_code, coordinator_name, technical_email',
       )
       .eq('profile_id', sellerProfileId)
-      .in('code', codes)
 
     if (error) {
       throw new Error(error.message)
     }
 
     for (const row of existingUsers ?? []) {
-      existingUsersByCode.set(String(row.code), row as Record<string, unknown>)
+      const mapped = row as Record<string, unknown>
+      const currentCode = String(mapped.code ?? '').trim()
+      const currentCpf = sanitizeDigits(String(mapped.cpf ?? ''))
+      if (currentCode) {
+        existingUsersByCode.set(currentCode, mapped)
+      }
+      if (currentCpf) {
+        existingUsersByCpf.set(currentCpf, mapped)
+      }
     }
   }
 
@@ -468,61 +492,116 @@ async function syncSellerUsers(
   let nameResets = 0
 
   for (const seller of sellers) {
+    const normalizedCpf = sanitizeDigits(seller.cpf)
     const technicalEmail = technicalEmailFromProfileCode('vendedor', seller.code)
-    const existing = existingUsersByCode.get(seller.code)
+    const existing =
+      existingUsersByCpf.get(normalizedCpf) ?? existingUsersByCode.get(seller.code)
 
     if (existing) {
       const userId = String(existing.auth_user_id)
+      const currentCode = String(existing.code ?? '').trim()
       const currentDisplayName = String(existing.display_name ?? '')
-      const nameChanged =
-        currentDisplayName.trim() !== '' &&
-        normalizeCompare(currentDisplayName) !==
-          normalizeCompare(seller.displayName)
-
-      const authPayload: Record<string, unknown> = {
-        email: technicalEmail,
-        user_metadata: { display_name: seller.displayName },
-      }
-      if (nameChanged) {
-        authPayload.password = sellerInitialPassword(seller.cpf)
-      }
-
-      const { error: authError } = await adminClient.auth.admin.updateUserById(
-        userId,
-        authPayload,
+      const codeChanged = currentCode !== seller.code
+      const nameChanged = normalizedValuesDiffer(
+        currentDisplayName,
+        seller.displayName,
       )
+      const cpfChanged = valuesDiffer(existing.cpf, normalizedCpf)
+      const supervisorCodeChanged = valuesDiffer(
+        existing.supervisor_code,
+        seller.supervisorCode,
+      )
+      const supervisorNameChanged = normalizedValuesDiffer(
+        existing.supervisor_name,
+        seller.supervisorName,
+      )
+      const coordinatorCodeChanged = valuesDiffer(
+        existing.coordinator_code,
+        seller.coordinatorCode,
+      )
+      const coordinatorNameChanged = normalizedValuesDiffer(
+        existing.coordinator_name,
+        seller.coordinatorName,
+      )
+      const activeChanged = existing.is_active !== true
+      const originChanged = String(existing.origin ?? '') !== sellerOrigin
+      const credentialsFlagChanged =
+        Boolean(existing.requires_admin_password_definition ?? false) !== false
+      const technicalEmailChanged = valuesDiffer(
+        existing.technical_email,
+        technicalEmail,
+      )
+      const identityChanged = codeChanged || nameChanged
+      const authChanged =
+        identityChanged || technicalEmailChanged
+      const appUserChanged =
+        codeChanged ||
+        nameChanged ||
+        cpfChanged ||
+        supervisorCodeChanged ||
+        supervisorNameChanged ||
+        coordinatorCodeChanged ||
+        coordinatorNameChanged ||
+        activeChanged ||
+        originChanged ||
+        credentialsFlagChanged ||
+        technicalEmailChanged
 
-      if (authError) {
-        throw new Error(authError.message)
+      if (!authChanged && !appUserChanged) {
+        skipped += 1
+        continue
       }
 
-      const { error: updateError } = await adminClient
-        .from('app_users')
-        .update({
+      if (authChanged) {
+        const authPayload: Record<string, unknown> = {
+          email: technicalEmail,
+          user_metadata: { display_name: seller.displayName },
+        }
+        if (identityChanged) {
+          authPayload.password = sellerInitialPassword(seller.cpf)
+        }
+
+        const { error: authError } = await adminClient.auth.admin.updateUserById(
+          userId,
+          authPayload,
+        )
+
+        if (authError) {
+          throw new Error(authError.message)
+        }
+      }
+
+      if (appUserChanged) {
+        const updatePayload: Record<string, unknown> = {
           code: seller.code,
           technical_email: technicalEmail,
           display_name: seller.displayName,
           profile_id: sellerProfileId,
           is_active: true,
-          cpf: seller.cpf,
+          cpf: normalizedCpf,
           supervisor_code: seller.supervisorCode || null,
           supervisor_name: seller.supervisorName || null,
           coordinator_code: seller.coordinatorCode || null,
           coordinator_name: seller.coordinatorName || null,
           origin: sellerOrigin,
           requires_admin_password_definition: false,
-          credentials_updated_at: nameChanged
-            ? new Date().toISOString()
-            : undefined,
-        })
-        .eq('auth_user_id', userId)
+        }
+        if (identityChanged) {
+          updatePayload.credentials_updated_at = new Date().toISOString()
+        }
 
-      if (updateError) {
-        throw new Error(updateError.message)
+        const { error: updateError } = await adminClient
+          .from('app_users')
+          .update(updatePayload)
+          .eq('auth_user_id', userId)
+
+        if (updateError) {
+          throw new Error(updateError.message)
+        }
       }
 
       updated += 1
-      if (nameChanged) {
+      if (identityChanged) {
         nameResets += 1
       }
       continue
@@ -633,22 +712,36 @@ async function syncNamedRoleUsers({
   const codes = users.map((item) => item.code)
   const activeCodeSet = new Set(codes)
   const existingUsersByCode = new Map<string, Record<string, unknown>>()
+  const existingUsersByDisplayName = new Map<string, Record<string, unknown>>()
+  const duplicateDisplayNames = new Set<string>()
 
   if (codes.length > 0) {
     const { data: existingUsers, error } = await adminClient
       .from('app_users')
       .select(
-        'auth_user_id, code, display_name, requires_admin_password_definition',
+        'auth_user_id, code, display_name, requires_admin_password_definition, is_active, technical_email, origin',
       )
       .eq('profile_id', profileId)
-      .in('code', codes)
 
     if (error) {
       throw new Error(error.message)
     }
 
     for (const row of existingUsers ?? []) {
-      existingUsersByCode.set(String(row.code), row as Record<string, unknown>)
+      const mapped = row as Record<string, unknown>
+      const currentCode = String(mapped.code ?? '').trim()
+      const currentDisplayName = normalizeCompare(String(mapped.display_name ?? ''))
+      if (currentCode) {
+        existingUsersByCode.set(currentCode, mapped)
+      }
+      if (currentDisplayName) {
+        if (existingUsersByDisplayName.has(currentDisplayName)) {
+          duplicateDisplayNames.add(currentDisplayName)
+          existingUsersByDisplayName.delete(currentDisplayName)
+        } else if (!duplicateDisplayNames.has(currentDisplayName)) {
+          existingUsersByDisplayName.set(currentDisplayName, mapped)
+        }
+      }
     }
   }
 
@@ -659,51 +752,86 @@ async function syncNamedRoleUsers({
 
   for (const user of users) {
     const technicalEmail = technicalEmailFromProfileCode(profileSlug, user.code)
-    const existing = existingUsersByCode.get(user.code)
+    const existing =
+      existingUsersByCode.get(user.code) ??
+      existingUsersByDisplayName.get(normalizeCompare(user.displayName))
 
     if (existing) {
       const userId = String(existing.auth_user_id)
+      const currentCode = String(existing.code ?? '').trim()
       const currentDisplayName = String(existing.display_name ?? '')
-      const nameChanged =
-        currentDisplayName.trim() !== '' &&
-        normalizeCompare(currentDisplayName) !== normalizeCompare(user.displayName)
-
-      const { error: authError } = await adminClient.auth.admin.updateUserById(
-        userId,
-        {
-          email: technicalEmail,
-          user_metadata: { display_name: user.displayName },
-        },
+      const codeChanged = currentCode !== user.code
+      const nameChanged = normalizedValuesDiffer(
+        currentDisplayName,
+        user.displayName,
       )
+      const technicalEmailChanged = valuesDiffer(
+        existing.technical_email,
+        technicalEmail,
+      )
+      const activeChanged = existing.is_active !== true
+      const originChanged = String(existing.origin ?? '') !== origin
+      const identityChanged = codeChanged || nameChanged
+      const requiredPasswordFlag = identityChanged
+        ? true
+        : Boolean(existing.requires_admin_password_definition ?? false)
+      const credentialsFlagChanged =
+        Boolean(existing.requires_admin_password_definition ?? false) !==
+        requiredPasswordFlag
+      const authChanged = codeChanged || nameChanged || technicalEmailChanged
+      const appUserChanged =
+        codeChanged ||
+        nameChanged ||
+        technicalEmailChanged ||
+        activeChanged ||
+        originChanged ||
+        credentialsFlagChanged
 
-      if (authError) {
-        throw new Error(authError.message)
+      if (!authChanged && !appUserChanged) {
+        skipped += 1
+        continue
       }
 
-      const { error: updateError } = await adminClient
-        .from('app_users')
-        .update({
+      if (authChanged) {
+        const { error: authError } = await adminClient.auth.admin.updateUserById(
+          userId,
+          {
+            email: technicalEmail,
+            user_metadata: { display_name: user.displayName },
+          },
+        )
+
+        if (authError) {
+          throw new Error(authError.message)
+        }
+      }
+
+      if (appUserChanged) {
+        const updatePayload: Record<string, unknown> = {
           code: user.code,
           technical_email: technicalEmail,
           display_name: user.displayName,
           profile_id: profileId,
           is_active: true,
           origin,
-          requires_admin_password_definition: nameChanged
-            ? true
-            : Boolean(existing.requires_admin_password_definition ?? false),
-          credentials_updated_at: nameChanged
-            ? new Date().toISOString()
-            : undefined,
-        })
-        .eq('auth_user_id', userId)
+          requires_admin_password_definition: requiredPasswordFlag,
+        }
+        if (identityChanged) {
+          updatePayload.credentials_updated_at = new Date().toISOString()
+        }
 
-      if (updateError) {
-        throw new Error(updateError.message)
+        const { error: updateError } = await adminClient
+          .from('app_users')
+          .update(updatePayload)
+          .eq('auth_user_id', userId)
+
+        if (updateError) {
+          throw new Error(updateError.message)
+        }
       }
 
       updated += 1
-      if (nameChanged) {
+      if (identityChanged) {
         nameResets += 1
       }
       continue
