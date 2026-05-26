@@ -28,7 +28,7 @@ SELECT DISTINCT
         WHEN pcfornec.codfornec = 4698 THEN 'Assim'
         WHEN pcfornec.codfornec = 4750 THEN 'Mat Inset'
         WHEN pcfornec.codfornec = 4701 THEN 'Albany'
-        WHEN pcfornec.codfornec = 5348 THEN 'Balducco'
+        WHEN pcfornec.codfornec = 5348 THEN 'Bauducco'
         WHEN pcfornec.codfornec = 5537 THEN 'CCM'
         WHEN pcfornec.codfornec = 5569 THEN 'Gallo'
         WHEN pcfornec.codfornec = 6154 THEN 'Stella D''Oro'
@@ -38,6 +38,22 @@ SELECT DISTINCT
 FROM pcfornec
 ORDER BY codfornec
 """
+DOTENV_PATH = Path(__file__).with_name(".env")
+
+
+def _load_local_dotenv() -> None:
+    if not DOTENV_PATH.exists():
+        return
+
+    for raw_line in DOTENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def _require_env(name: str) -> str:
@@ -158,4 +174,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    _load_local_dotenv()
     main()

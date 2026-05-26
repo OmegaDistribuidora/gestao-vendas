@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import csv
-import io
 import json
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 
-import requests
+import psycopg2
 
 from performance_sync_common import (
     INITIAL_SYNC_START_MONTH,
@@ -15,26 +14,29 @@ from performance_sync_common import (
     get_sync_window,
     normalize_owner_code,
     normalize_supplier_code,
-    normalize_text,
-    parse_decimal_pt_br,
-    parse_int_pt_br,
     parse_month_start,
     purge_month_window,
     upsert_rows,
 )
 
 
-SPREADSHEET_ID = "1ahpP8TDBnb207IJQUtUckFq7N_TDhUiBF6aXOhbzkig"
 TARGETS_TABLE_NAME = "app_performance_targets"
 TARGETS_ON_CONFLICT = "profile_slug,owner_code,codfornec,month_start"
+POSTGRES_HOST = os.getenv("APP_POSTGRES_HOST", "localhost")
+POSTGRES_PORT = int(os.getenv("APP_POSTGRES_PORT", "5432"))
+POSTGRES_DB = os.getenv("APP_POSTGRES_DB", "Omega")
+POSTGRES_USER = os.getenv("APP_POSTGRES_USER", "PwBi")
+POSTGRES_PASSWORD = os.getenv("APP_POSTGRES_PASSWORD", "Om3g@123")
+POSTGRES_SCHEMA = os.getenv("APP_POSTGRES_SCHEMA", "filial")
 
 
 @dataclass(frozen=True)
-class SheetConfig:
+class TargetSourceConfig:
     profile_slug: str
     source_sheet: str
-    gid: str
     owner_column: str
+    table_name: str
+    meta_sku_column: str | None = None
 
 
 @dataclass(frozen=True)
@@ -67,70 +69,120 @@ class PerformanceTargetRow:
         }
 
 
-SHEETS = (
-    SheetConfig(
+TARGET_SOURCES = (
+    TargetSourceConfig(
         profile_slug="vendedor",
         source_sheet="MtV",
-        gid="1842567442",
-        owner_column="CODUSUR",
+        owner_column="codusur",
+        table_name="fmetavendedor",
+        meta_sku_column="meta_sku",
     ),
-    SheetConfig(
+    TargetSourceConfig(
         profile_slug="supervisor",
         source_sheet="MtS",
-        gid="1149766167",
-        owner_column="CODSUP",
+        owner_column="codsup",
+        table_name="fmetasupervisor",
+        meta_sku_column="meta_sku",
     ),
-    SheetConfig(
+    TargetSourceConfig(
         profile_slug="coordenador",
         source_sheet="MtC",
-        gid="0",
-        owner_column="CODCOORD",
+        owner_column="codcoord",
+        table_name="fmetacoordenador",
     ),
 )
 
 
-def _sheet_export_url(gid: str) -> str:
-    return (
-        f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export"
-        f"?format=csv&gid={gid}"
+def _to_positive_int(value: object | None) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, Decimal):
+        if value <= 0:
+            return None
+        return int(value)
+    try:
+        parsed_value = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed_value if parsed_value > 0 else None
+
+
+def _to_positive_float(value: object | None) -> float:
+    if value is None or value == "":
+        return 0.0
+    if isinstance(value, Decimal):
+        return float(value) if value > 0 else 0.0
+    try:
+        parsed_value = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return parsed_value if parsed_value > 0 else 0.0
+
+
+def _get_postgres_connection():
+    return psycopg2.connect(
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        dbname=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
     )
 
 
-def _fetch_sheet_rows(config: SheetConfig) -> list[dict[str, str]]:
-    response = requests.get(_sheet_export_url(config.gid), timeout=120)
-    response.raise_for_status()
-    text = response.content.decode("utf-8-sig")
-    return [
-        {key.strip(): value.strip() for key, value in row.items()}
-        for row in csv.DictReader(io.StringIO(text))
+def _fetch_table_rows(config: TargetSourceConfig) -> list[dict[str, object]]:
+    selected_columns = [
+        config.owner_column,
+        "codfornec",
+        "meta_fin",
+        "meta_pos",
+        "mes",
+        "ano",
     ]
+    if config.meta_sku_column:
+        selected_columns.append(config.meta_sku_column)
+
+    query = (
+        f"SELECT {', '.join(selected_columns)} "
+        f"FROM {POSTGRES_SCHEMA}.{config.table_name}"
+    )
+
+    with _get_postgres_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            column_names = [description[0] for description in cursor.description]
+            return [
+                dict(zip(column_names, row, strict=False))
+                for row in cursor.fetchall()
+            ]
 
 
 def _build_target_rows(
-    config: SheetConfig,
+    config: TargetSourceConfig,
     *,
     start_month,
     end_month,
     imported_at: str,
 ) -> list[PerformanceTargetRow]:
-    rows = _fetch_sheet_rows(config)
+    rows = _fetch_table_rows(config)
     merged_rows: dict[tuple[str, str, str, str], dict[str, object]] = {}
 
     for row in rows:
         owner_code = normalize_owner_code(row.get(config.owner_column))
-        codfornec = normalize_supplier_code(row.get("CODFORNEC"))
+        codfornec = normalize_supplier_code(row.get("codfornec"))
         month_start = parse_month_start(
-            year_value=row.get("ANO"),
-            month_value=row.get("MES"),
+            year_value=row.get("ano"),
+            month_value=row.get("mes"),
         )
         if not owner_code or not codfornec or month_start is None:
             continue
         if month_start < start_month or month_start > end_month:
             continue
 
-        meta_fin = parse_decimal_pt_br(row.get("META_FIN"))
-        meta_pos = parse_int_pt_br(row.get("META_POS"))
-        meta_sku = parse_int_pt_br(row.get("META_SKU"))
+        meta_fin = _to_positive_float(row.get("meta_fin"))
+        meta_pos = _to_positive_int(row.get("meta_pos"))
+        meta_sku = _to_positive_int(
+            row.get(config.meta_sku_column) if config.meta_sku_column else None
+        )
         if meta_fin <= 0 and meta_pos is None and meta_sku is None:
             continue
 
@@ -184,9 +236,10 @@ def _build_target_rows(
 
 def main() -> None:
     force_full_sync = os.getenv("PERFORMANCE_TARGETS_FULL_SYNC", "").strip()
+    current_month_start = get_current_month_start()
     if force_full_sync in {"1", "true", "TRUE", "yes", "YES"}:
         sync_start_month = INITIAL_SYNC_START_MONTH
-        sync_end_month = get_current_month_start()
+        sync_end_month = current_month_start
     else:
         sync_start_month, sync_end_month = get_sync_window(TARGETS_TABLE_NAME)
     imported_at = datetime.now(UTC).isoformat(timespec="seconds").replace(
@@ -196,7 +249,7 @@ def main() -> None:
 
     all_rows = []
     row_counts_by_sheet: dict[str, int] = {}
-    for config in SHEETS:
+    for config in TARGET_SOURCES:
         target_rows = _build_target_rows(
             config,
             start_month=sync_start_month,
@@ -206,11 +259,14 @@ def main() -> None:
         all_rows.extend(target.to_payload() for target in target_rows)
         row_counts_by_sheet[config.source_sheet] = len(target_rows)
 
-    purged_count = purge_month_window(
-        TARGETS_TABLE_NAME,
-        start_month=sync_start_month,
-        end_month=sync_end_month,
-    )
+    purge_start_month = sync_start_month if force_full_sync in {"1", "true", "TRUE", "yes", "YES"} else current_month_start
+    purged_count = 0
+    if purge_start_month >= sync_start_month and purge_start_month <= sync_end_month:
+        purged_count = purge_month_window(
+            TARGETS_TABLE_NAME,
+            start_month=purge_start_month,
+            end_month=purge_start_month if purge_start_month == current_month_start else sync_end_month,
+        )
     upserted_count = upsert_rows(
         TARGETS_TABLE_NAME,
         on_conflict=TARGETS_ON_CONFLICT,

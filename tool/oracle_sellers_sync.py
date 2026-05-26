@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -9,6 +10,20 @@ from typing import Iterable
 import oracledb
 import requests
 
+
+DOTENV_PATH = Path(__file__).with_name(".env")
+
+# Some CPFs currently exist in Oracle under more than one seller code.
+# The Supabase admin sync expects a single stable account per CPF, so we keep
+# the seller code that already updates successfully for these known collisions.
+PREFERRED_SELLER_CODE_BY_CPF = {
+    "41647599334": "1018",
+    "64619583391": "595",
+    "16379748334": "1264",
+    "00533818311": "1901",
+    "01665564326": "712",
+    "30201829304": "582",
+}
 
 ORACLE_QUERY = """
 SELECT
@@ -40,6 +55,21 @@ class SellerRow:
     seller_code: str
     seller_name: str
     cpf: str
+
+
+def _load_local_dotenv() -> None:
+    if not DOTENV_PATH.exists():
+        return
+
+    for raw_line in DOTENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def _require_env(name: str) -> str:
@@ -168,8 +198,38 @@ def _build_coordinators(rows: Iterable[SellerRow]) -> list[dict[str, str]]:
     return list(coordinators.values())
 
 
+def _resolve_duplicate_cpfs(rows: Iterable[SellerRow]) -> tuple[list[SellerRow], int]:
+    grouped_rows: dict[str, list[SellerRow]] = defaultdict(list)
+    ordered_rows = list(rows)
+    for row in ordered_rows:
+        grouped_rows[row.cpf].append(row)
+
+    resolved_rows: list[SellerRow] = []
+    duplicates_skipped = 0
+
+    for row in ordered_rows:
+        group = grouped_rows[row.cpf]
+        if not group:
+            continue
+        if len(group) == 1:
+            resolved_rows.append(row)
+            grouped_rows[row.cpf] = []
+            continue
+
+        preferred_code = PREFERRED_SELLER_CODE_BY_CPF.get(row.cpf, "").strip()
+        chosen_row = next(
+            (candidate for candidate in group if candidate.seller_code == preferred_code),
+            group[0],
+        )
+        resolved_rows.append(chosen_row)
+        duplicates_skipped += len(group) - 1
+        grouped_rows[row.cpf] = []
+
+    return resolved_rows, duplicates_skipped
+
+
 def sync_sellers(rows: Iterable[SellerRow]) -> dict[str, object]:
-    rows = list(rows)
+    rows, duplicates_skipped = _resolve_duplicate_cpfs(rows)
     sellers = [
         {
             "code": row.seller_code,
@@ -205,7 +265,9 @@ def sync_sellers(rows: Iterable[SellerRow]) -> dict[str, object]:
         timeout=240,
     )
     response.raise_for_status()
-    return response.json()
+    result = response.json()
+    result["duplicatesSkipped"] = duplicates_skipped
+    return result
 
 
 def main() -> None:
@@ -223,4 +285,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    _load_local_dotenv()
     main()

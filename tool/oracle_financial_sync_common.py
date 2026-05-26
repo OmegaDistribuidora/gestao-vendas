@@ -21,6 +21,8 @@ from supabase_sync_common import (
 INITIAL_SYNC_START_DATE = date(2026, 1, 1)
 DEFAULT_FAST_LOOKBACK_DAYS = 1
 DEFAULT_RECONCILIATION_LOOKBACK_DAYS = 30
+BATCH_SIZE = 1000
+DOTENV_PATH = Path(__file__).with_name(".env")
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,21 @@ def require_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"Environment variable {name} is required.")
     return value
+
+
+def load_local_dotenv() -> None:
+    if not DOTENV_PATH.exists():
+        return
+
+    for raw_line in DOTENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def normalize_text(value: object | None) -> str:
@@ -261,3 +278,6 @@ def apply_financial_sync(session: SupabaseSession, run_id: str) -> dict[str, obj
     if not isinstance(response, dict):
         return {}
     return {str(key): value for key, value in response.items()}
+
+
+load_local_dotenv()

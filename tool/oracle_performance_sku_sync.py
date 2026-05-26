@@ -362,6 +362,7 @@ def fetch_oracle_rows(
 
 def main() -> None:
     sync_start_month, sync_end_month = get_sku_sync_window()
+    current_month_start = get_current_month_start()
     rows = [
         *fetch_oracle_rows(
             sync_start_month,
@@ -380,11 +381,13 @@ def main() -> None:
         if row.month_start <= sync_end_month.isoformat()
     ]
 
-    purged_count = purge_month_window(
-        SKU_TABLE_NAME,
-        start_month=sync_start_month,
-        end_month=sync_end_month,
-    )
+    purged_count = 0
+    if current_month_start >= sync_start_month and current_month_start <= sync_end_month:
+        purged_count = purge_month_window(
+            SKU_TABLE_NAME,
+            start_month=current_month_start,
+            end_month=current_month_start,
+        )
     upserted_count = upsert_rows(
         SKU_TABLE_NAME,
         on_conflict=SKU_ON_CONFLICT,
