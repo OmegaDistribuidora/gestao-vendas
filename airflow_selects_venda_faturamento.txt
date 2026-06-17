@@ -26,8 +26,8 @@ JOIN pcusuari
   ON pcpedi.codusur = pcusuari.codusur
 JOIN pcsuperv
   ON pcusuari.codsupervisor = pcsuperv.codsupervisor
-WHERE pcpedi.data >= :sync_start_date
-  AND pcpedi.data < TRUNC(SYSDATE) + 1
+WHERE pcpedc.data >= :sync_start_date
+  AND pcpedc.data < TRUNC(SYSDATE) + 1
   AND pcpedc.codfilial IN (1, 3, 4)
   AND pcpedc.condvenda = 1
   AND pcpedc.dtcancel IS NULL
