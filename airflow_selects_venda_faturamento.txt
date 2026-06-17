@@ -1,0 +1,113 @@
+APP_oracle_sales_sync
+APP_oracle_sales_reconcile_sync
+script: C:\Users\POWERBI\OneDrive - omegadistribuidora.com.br\Projetos\William\app\oracle_sales_sync.py
+
+SELECT
+  pcpedi.numped,
+  TRUNC(pcpedc.data) AS data,
+  pcpedi.codcli,
+  pcpedi.codusur,
+  pcusuari.codsupervisor,
+  pcsuperv.codgerente,
+  CASE
+    WHEN pcprodut.codfornec IN (1535, 1968) THEN 1968
+    WHEN pcprodut.codfornec IN (1443, 967) THEN 967
+    WHEN pcprodut.codfornec IN (1630, 2445) THEN 1630
+    ELSE pcprodut.codfornec
+  END AS codfornec,
+  SUM(pcpedi.qt * pcpedi.pvenda) AS venda,
+  SUM(pcpedi.qt / NULLIF(pcprodut.qtunitcx, 0)) AS volume
+FROM pcpedi
+JOIN pcpedc
+  ON pcpedi.numped = pcpedc.numped
+JOIN pcprodut
+  ON pcpedi.codprod = pcprodut.codprod
+JOIN pcusuari
+  ON pcpedi.codusur = pcusuari.codusur
+JOIN pcsuperv
+  ON pcusuari.codsupervisor = pcsuperv.codsupervisor
+WHERE pcpedi.data >= :sync_start_date
+  AND pcpedi.data < TRUNC(SYSDATE) + 1
+  AND pcpedc.codfilial IN (1, 3, 4)
+  AND pcpedc.condvenda = 1
+  AND pcpedc.dtcancel IS NULL
+GROUP BY
+  pcpedi.numped,
+  TRUNC(pcpedc.data),
+  pcpedi.codcli,
+  pcpedi.codusur,
+  pcusuari.codsupervisor,
+  pcsuperv.codgerente,
+  CASE
+    WHEN pcprodut.codfornec IN (1535, 1968) THEN 1968
+    WHEN pcprodut.codfornec IN (1443, 967) THEN 967
+    WHEN pcprodut.codfornec IN (1630, 2445) THEN 1630
+    ELSE pcprodut.codfornec
+  END
+ORDER BY
+  data,
+  pcpedi.codusur,
+  pcpedi.numped,
+  codfornec;
+
+
+APP_oracle_billing_sync
+APP_oracle_billing_reconcile_sync
+script: C:\Users\POWERBI\OneDrive - omegadistribuidora.com.br\Projetos\William\app\oracle_billing_sync.py
+
+SELECT
+    pcmov.numped,
+    TRUNC(pcmov.dtmov) AS data,
+    pcmov.codcli,
+    pcmov.codusur,
+    pcpedc.codsupervisor,
+    pcsuperv.codgerente,
+    CASE
+        WHEN pcfornec.codfornec IN (1535, 1968) THEN 1968
+        WHEN pcfornec.codfornec IN (1443, 967) THEN 967
+        WHEN pcfornec.codfornec IN (1630, 2445) THEN 1630
+        ELSE pcfornec.codfornec
+    END AS codfornec,
+    SUM(pcmov.qt * pcmov.custofin) AS custo,
+    SUM(pcmov.qt * pcmov.punit)
+      + SUM(pcmov.qt * NVL(pcmov.vloutros, 0)) AS faturamento,
+    COUNT(DISTINCT pcmov.codprod) AS mix,
+    SUM(pcmov.qt / NULLIF(pcprodut.qtunitcx, 0)) AS volume,
+    SUM(pcmov.qt * pcmov.punit) - SUM(pcmov.qt * pcmov.custofin) AS lucro
+FROM pcmov
+JOIN pcnfsaid
+    ON pcmov.numtransvenda = pcnfsaid.numtransvenda
+JOIN pcpedc
+    ON pcmov.numped = pcpedc.numped
+JOIN pcusuari
+    ON pcmov.codusur = pcusuari.codusur
+JOIN pcsuperv
+    ON pcpedc.codsupervisor = pcsuperv.codsupervisor
+JOIN pcprodut
+    ON pcmov.codprod = pcprodut.codprod
+JOIN pcfornec
+    ON pcprodut.codfornec = pcfornec.codfornec
+WHERE pcmov.dtmov >= :sync_start_date
+  AND pcmov.dtmov < TRUNC(SYSDATE) + 1
+  AND pcpedc.codfilial IN (1, 3, 4)
+  AND pcpedc.condvenda IN (1)
+  AND pcmov.dtcancel IS NULL
+  AND pcmov.codoper NOT IN ('SR', 'SO')
+GROUP BY
+    pcmov.numped,
+    TRUNC(pcmov.dtmov),
+    pcmov.codcli,
+    pcmov.codusur,
+    pcpedc.codsupervisor,
+    pcsuperv.codgerente,
+    CASE
+        WHEN pcfornec.codfornec IN (1535, 1968) THEN 1968
+        WHEN pcfornec.codfornec IN (1443, 967) THEN 967
+        WHEN pcfornec.codfornec IN (1630, 2445) THEN 1630
+        ELSE pcfornec.codfornec
+    END
+ORDER BY
+    TRUNC(pcmov.dtmov),
+    pcmov.codusur,
+    pcmov.numped,
+    codfornec;

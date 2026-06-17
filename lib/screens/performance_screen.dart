@@ -179,7 +179,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
 
     final selectedScope = _scopeFromValue(value);
     await _loadOverview(
-      monthStart: null,
+      monthStart: _overview.selectedMonthStart,
       metricSource: _selectedMetricSource,
       targetScopeProfileSlug: selectedScope?.profileSlug,
       targetScopeOwnerCode: selectedScope?.ownerCode,
@@ -258,6 +258,10 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       return 'Todos os supervisores';
     }
     return 'Todos';
+  }
+
+  Widget _dropdownLabel(String text) {
+    return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
   }
 
   String _supplierLogoUrl(String supplierCode) {
@@ -371,6 +375,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
               DropdownButtonFormField<String?>(
                 key: ValueKey<String?>(_selectedScopeValue),
                 initialValue: _selectedScopeValue,
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: _scopeSelectorLabel(),
                   prefixIcon: const Icon(Icons.account_tree_outlined),
@@ -378,12 +383,12 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                 items: <DropdownMenuItem<String?>>[
                   DropdownMenuItem<String?>(
                     value: null,
-                    child: Text(_allScopesLabel()),
+                    child: _dropdownLabel(_allScopesLabel()),
                   ),
                   ..._overview.availableScopes.map(
                     (scope) => DropdownMenuItem<String?>(
                       value: scope.value,
-                      child: Text(
+                      child: _dropdownLabel(
                         '${_profileLabel(scope.profileSlug)} • ${scope.label}',
                       ),
                     ),
@@ -396,6 +401,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
             if (_showsMetricSourceSelector) ...[
               DropdownButtonFormField<KpiMetricSource>(
                 initialValue: _selectedMetricSource,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Fonte dos indicadores',
                   prefixIcon: Icon(Icons.tune_outlined),
@@ -404,7 +410,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                     .map(
                       (source) => DropdownMenuItem<KpiMetricSource>(
                         value: source,
-                        child: Text(source.label),
+                        child: _dropdownLabel(source.label),
                       ),
                     )
                     .toList(),
@@ -415,6 +421,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
             DropdownButtonFormField<String>(
               key: ValueKey<String>(_selectedMonthValue ?? ''),
               initialValue: _selectedMonthValue,
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Mes de referencia',
                 prefixIcon: Icon(Icons.calendar_month_outlined),
@@ -423,7 +430,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                   .map(
                     (month) => DropdownMenuItem<String>(
                       value: month.value,
-                      child: Text(month.label),
+                      child: _dropdownLabel(month.label),
                     ),
                   )
                   .toList(),

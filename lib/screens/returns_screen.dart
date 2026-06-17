@@ -28,11 +28,6 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
     locale: 'pt_BR',
     symbol: 'R\$',
   );
-  final NumberFormat _compactCurrencyFormat = NumberFormat.compactCurrency(
-    locale: 'pt_BR',
-    symbol: 'R\$',
-    decimalDigits: 1,
-  );
   final NumberFormat _decimalFormat = NumberFormat.decimalPattern('pt_BR');
   final DateFormat _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
   final DateFormat _dateTimeFormat = DateFormat(
@@ -227,9 +222,6 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   String _formatCurrency(double value) => _currencyFormat.format(value);
 
   String _formatMetricCurrency(double value) {
-    if (value.abs() >= 10000) {
-      return _compactCurrencyFormat.format(value);
-    }
     return _formatCurrency(value);
   }
 
@@ -252,16 +244,10 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   }) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: accentBackgroundColor,
-              foregroundColor: accentColor,
-              child: Icon(icon),
-            ),
-            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,25 +255,42 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: Color(0xFF5E6A7C),
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                        color: accentColor,
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 40,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          height: 1.05,
+                          color: accentColor,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(width: 16),
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: accentBackgroundColor,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(icon, color: accentColor),
             ),
           ],
         ),
@@ -296,51 +299,38 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
   }
 
   Widget _buildMetricsSection() {
-    Widget pair(Widget left, Widget right) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: left),
-          const SizedBox(width: 12),
-          Expanded(child: right),
-        ],
-      );
-    }
-
     return Column(
       children: [
-        pair(
-          _buildMetricCard(
-            title: 'Financeiro',
-            value: _formatMetricCurrency(_analysis.totalReturnAmount),
-            icon: Icons.attach_money_outlined,
-            accentColor: const Color(0xFFB42318),
-            accentBackgroundColor: const Color(0xFFFDECEC),
-          ),
-          _buildMetricCard(
-            title: 'Clientes',
-            value: '${_analysis.totalClients}',
-            icon: Icons.people_outline,
-            accentColor: const Color(0xFF1D4ED8),
-            accentBackgroundColor: const Color(0xFFE8EEFF),
-          ),
+        _buildMetricCard(
+          title: 'Financeiro',
+          value: _formatMetricCurrency(_analysis.totalReturnAmount),
+          icon: Icons.attach_money_outlined,
+          accentColor: const Color(0xFFB42318),
+          accentBackgroundColor: const Color(0xFFFDECEC),
         ),
         const SizedBox(height: 12),
-        pair(
-          _buildMetricCard(
-            title: 'Volume',
-            value: _formatNumber(_analysis.totalVolume),
-            icon: Icons.widgets_outlined,
-            accentColor: const Color(0xFF7C3AED),
-            accentBackgroundColor: const Color(0xFFF2EAFE),
-          ),
-          _buildMetricCard(
-            title: 'Pedidos',
-            value: '${_analysis.totalOrders}',
-            icon: Icons.assignment_return_outlined,
-            accentColor: const Color(0xFFFF7A00),
-            accentBackgroundColor: const Color(0xFFFFF0DD),
-          ),
+        _buildMetricCard(
+          title: 'Clientes',
+          value: '${_analysis.totalClients}',
+          icon: Icons.people_outline,
+          accentColor: const Color(0xFF1D4ED8),
+          accentBackgroundColor: const Color(0xFFE8EEFF),
+        ),
+        const SizedBox(height: 12),
+        _buildMetricCard(
+          title: 'Volume',
+          value: _formatNumber(_analysis.totalVolume),
+          icon: Icons.widgets_outlined,
+          accentColor: const Color(0xFF7C3AED),
+          accentBackgroundColor: const Color(0xFFF2EAFE),
+        ),
+        const SizedBox(height: 12),
+        _buildMetricCard(
+          title: 'Pedidos',
+          value: '${_analysis.totalOrders}',
+          icon: Icons.assignment_return_outlined,
+          accentColor: const Color(0xFFFF7A00),
+          accentBackgroundColor: const Color(0xFFFFF0DD),
         ),
       ],
     );
@@ -622,6 +612,7 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
                             const SizedBox(height: 18),
                             DropdownButtonFormField<_ReturnPeriodPreset>(
                               initialValue: _selectedPeriod,
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: 'Período',
                                 prefixIcon: Icon(Icons.date_range_outlined),

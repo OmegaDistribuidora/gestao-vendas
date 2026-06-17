@@ -17,15 +17,6 @@ import 'reports_screen.dart';
 import 'returns_screen.dart';
 import 'supplier_analysis_screen.dart';
 
-enum _HomePeriodPreset {
-  today,
-  yesterday,
-  currentMonth,
-  previousMonth,
-  currentYear,
-  custom,
-}
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
     super.key,
@@ -47,20 +38,15 @@ class _HomeScreenState extends State<HomeScreen> {
     symbol: 'R\$',
   );
   final NumberFormat _decimalFormat = NumberFormat.decimalPattern('pt_BR');
-  final DateFormat _dateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
   final DateFormat _dateTimeFormat = DateFormat(
-    "dd/MM/yyyy 'às' HH:mm",
+    "dd/MM/yyyy 'as' HH:mm",
     'pt_BR',
   );
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Versao 0.4.2+6';
+  String _appVersionLabel = 'Versao 0.4.5+9';
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
-  _HomePeriodPreset _selectedPeriod = _HomePeriodPreset.today;
-  KpiMetricSource _selectedMetricSource = KpiMetricSource.venda;
-  DateTime? _customStartDate;
-  DateTime? _customEndDate;
 
   bool get _isAdmin => widget.currentUser.isAdmin;
   bool get _isSeller => widget.currentUser.profileSlug == AppProfile.sellerSlug;
@@ -71,6 +57,14 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _showsHomeKpis => !_isAdmin;
   bool get _isNamedKpiProfile => _isSeller || _isSupervisor || _isCoordinator;
   bool get _showsPerformanceModule => true;
+
+  double get _netAmount => _homeKpis.grossAmount + _homeKpis.returnAmount;
+  double get _netVolume => _homeKpis.grossVolume + _homeKpis.returnVolume;
+  int get _netOrders => _homeKpis.grossOrders - _homeKpis.returnOrders;
+  int get _netPositivation =>
+      _homeKpis.grossPositivation - _homeKpis.returnPositivation;
+
+  int _clampPositiveCount(int value) => value < 0 ? 0 : value;
 
   @override
   void initState() {
@@ -98,79 +92,8 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Versao 0.4.2+6';
+        _appVersionLabel = 'Versao 0.4.5+9';
       });
-    }
-  }
-
-  DateTime get _periodStart {
-    final now = DateTime.now();
-    switch (_selectedPeriod) {
-      case _HomePeriodPreset.today:
-        return DateTime(now.year, now.month, now.day);
-      case _HomePeriodPreset.yesterday:
-        final yesterday = now.subtract(const Duration(days: 1));
-        return DateTime(yesterday.year, yesterday.month, yesterday.day);
-      case _HomePeriodPreset.currentMonth:
-        return DateTime(now.year, now.month, 1);
-      case _HomePeriodPreset.previousMonth:
-        return DateTime(now.year, now.month - 1, 1);
-      case _HomePeriodPreset.currentYear:
-        return DateTime(now.year, 1, 1);
-      case _HomePeriodPreset.custom:
-        final customStart = _customStartDate ?? now;
-        return DateTime(customStart.year, customStart.month, customStart.day);
-    }
-  }
-
-  DateTime get _periodEnd {
-    final now = DateTime.now();
-    switch (_selectedPeriod) {
-      case _HomePeriodPreset.today:
-        return DateTime(now.year, now.month, now.day, 23, 59, 59);
-      case _HomePeriodPreset.yesterday:
-        final yesterday = now.subtract(const Duration(days: 1));
-        return DateTime(
-          yesterday.year,
-          yesterday.month,
-          yesterday.day,
-          23,
-          59,
-          59,
-        );
-      case _HomePeriodPreset.currentMonth:
-        return DateTime(now.year, now.month, now.day, 23, 59, 59);
-      case _HomePeriodPreset.previousMonth:
-        return DateTime(now.year, now.month, 0, 23, 59, 59);
-      case _HomePeriodPreset.currentYear:
-        return DateTime(now.year, now.month, now.day, 23, 59, 59);
-      case _HomePeriodPreset.custom:
-        final customEnd = _customEndDate ?? _customStartDate ?? now;
-        return DateTime(
-          customEnd.year,
-          customEnd.month,
-          customEnd.day,
-          23,
-          59,
-          59,
-        );
-    }
-  }
-
-  String get _periodDescription {
-    switch (_selectedPeriod) {
-      case _HomePeriodPreset.today:
-        return 'Hoje';
-      case _HomePeriodPreset.yesterday:
-        return 'Ontem';
-      case _HomePeriodPreset.currentMonth:
-        return 'Mês atual';
-      case _HomePeriodPreset.previousMonth:
-        return 'Mês anterior';
-      case _HomePeriodPreset.currentYear:
-        return 'Ano atual';
-      case _HomePeriodPreset.custom:
-        return '${_dateFormat.format(_periodStart)} até ${_dateFormat.format(_periodEnd)}';
     }
   }
 
@@ -180,11 +103,15 @@ class _HomeScreenState extends State<HomeScreen> {
       _errorMessage = null;
     });
 
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
     try {
       final homeKpis = await _repository.getHomeKpis(
-        start: _periodStart,
-        end: _periodEnd,
-        metricSource: _selectedMetricSource,
+        start: start,
+        end: end,
+        metricSource: KpiMetricSource.venda,
       );
 
       if (!mounted) {
@@ -202,72 +129,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _loading = false;
-        _errorMessage = 'Falha ao carregar os módulos.\n$error';
+        _errorMessage = 'Falha ao carregar os modulos.\n$error';
       });
     }
-  }
-
-  Future<void> _pickCustomDate({required bool isStart}) async {
-    final initialDate = isStart
-        ? (_customStartDate ?? DateTime.now())
-        : (_customEndDate ?? _customStartDate ?? DateTime.now());
-
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(2026, 1, 1),
-      lastDate: DateTime.now(),
-      locale: const Locale('pt', 'BR'),
-    );
-
-    if (picked == null) {
-      return;
-    }
-
-    setState(() {
-      if (isStart) {
-        _customStartDate = picked;
-        if (_customEndDate != null && _customEndDate!.isBefore(picked)) {
-          _customEndDate = picked;
-        }
-      } else {
-        _customEndDate = picked;
-        if (_customStartDate != null && _customStartDate!.isAfter(picked)) {
-          _customStartDate = picked;
-        }
-      }
-    });
-
-    await _loadContent();
-  }
-
-  Future<void> _handlePeriodChanged(_HomePeriodPreset? preset) async {
-    if (preset == null) {
-      return;
-    }
-
-    setState(() {
-      _selectedPeriod = preset;
-      if (preset == _HomePeriodPreset.custom) {
-        final today = DateTime.now();
-        _customStartDate ??= DateTime(today.year, today.month, today.day);
-        _customEndDate ??= _customStartDate;
-      }
-    });
-
-    await _loadContent();
-  }
-
-  Future<void> _handleMetricSourceChanged(KpiMetricSource? source) async {
-    if (source == null || source == _selectedMetricSource) {
-      return;
-    }
-
-    setState(() {
-      _selectedMetricSource = source;
-    });
-
-    await _loadContent();
   }
 
   Future<void> _openAdministration() async {
@@ -277,6 +141,52 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     await _loadContent();
+  }
+
+  Future<void> _openReports() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ReportsScreen(currentUser: widget.currentUser),
+      ),
+    );
+  }
+
+  Future<void> _openSupplierAnalysis() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const SupplierAnalysisScreen()),
+    );
+  }
+
+  Future<void> _openPerformance() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const PerformanceScreen()));
+  }
+
+  Future<void> _openReturns() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ReturnsScreen()));
+  }
+
+  Future<void> _openDelinquency() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const DelinquencyScreen()));
+  }
+
+  Future<void> _openBlockedOrders() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const BlockedOrdersScreen()),
+    );
+  }
+
+  Future<void> _openChangePassword() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ChangePasswordScreen(currentUser: widget.currentUser),
+      ),
+    );
   }
 
   Future<void> _openAdministrationFromDrawer() async {
@@ -294,11 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) {
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ReportsScreen(currentUser: widget.currentUser),
-      ),
-    );
+    await _openReports();
   }
 
   Future<void> _openSupplierAnalysisFromDrawer() async {
@@ -307,9 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) {
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SupplierAnalysisScreen()),
-    );
+    await _openSupplierAnalysis();
   }
 
   Future<void> _openPerformanceFromDrawer() async {
@@ -318,9 +222,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) {
       return;
     }
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const PerformanceScreen()));
+    await _openPerformance();
   }
 
   Future<void> _openReturnsFromDrawer() async {
@@ -329,9 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) {
       return;
     }
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const ReturnsScreen()));
+    await _openReturns();
   }
 
   Future<void> _openDelinquencyFromDrawer() async {
@@ -340,9 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) {
       return;
     }
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const DelinquencyScreen()));
+    await _openDelinquency();
   }
 
   Future<void> _openBlockedOrdersFromDrawer() async {
@@ -351,9 +249,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) {
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const BlockedOrdersScreen()),
-    );
+    await _openBlockedOrders();
   }
 
   Future<void> _openChangePasswordFromDrawer() async {
@@ -362,11 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) {
       return;
     }
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ChangePasswordScreen(currentUser: widget.currentUser),
-      ),
-    );
+    await _openChangePassword();
   }
 
   String _formatCurrency(double value) => _currencyFormat.format(value);
@@ -376,41 +268,114 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _formatDateTime(DateTime value) => _dateTimeFormat.format(value);
 
-  Widget _buildLastUpdatesCard() {
-    final lines = <String>[
-      _homeKpis.lastSalesUpdatedAt != null
-          ? 'Última atualização das vendas: ${_formatDateTime(_homeKpis.lastSalesUpdatedAt!)}'
-          : 'Última atualização das vendas: ainda não disponível',
+  String get _welcomeTitle {
+    final displayName = widget.currentUser.displayName?.trim();
+    if (_isAdmin) {
+      return 'Painel da administracao';
+    }
+    if (displayName != null && displayName.isNotEmpty) {
+      return 'Ola, $displayName';
+    }
+    return 'Ola, ${widget.currentUser.label}';
+  }
+
+  List<_HomeShortcutData> get _shortcutItems {
+    final items = <_HomeShortcutData>[
+      if (_showsPerformanceModule)
+        _HomeShortcutData(
+          title: 'Performance',
+          icon: Icons.auto_graph_rounded,
+          accent: const Color(0xFF4B61FF),
+          onTap: _openPerformance,
+        ),
+      _HomeShortcutData(
+        title: 'Fornecedor',
+        icon: Icons.inventory_2_outlined,
+        accent: const Color(0xFF00838F),
+        onTap: _openSupplierAnalysis,
+      ),
+      _HomeShortcutData(
+        title: 'Devolucoes',
+        icon: Icons.assignment_return_outlined,
+        accent: const Color(0xFFE45C5C),
+        onTap: _openReturns,
+      ),
+      _HomeShortcutData(
+        title: 'Inadimplencia',
+        icon: Icons.account_balance_wallet_outlined,
+        accent: const Color(0xFFFF9800),
+        onTap: _openDelinquency,
+      ),
+      _HomeShortcutData(
+        title: 'Bloqueados',
+        icon: Icons.lock_clock_outlined,
+        accent: const Color(0xFF7E57C2),
+        onTap: _openBlockedOrders,
+      ),
+      if (_isAdmin)
+        _HomeShortcutData(
+          title: 'Administracao',
+          icon: Icons.admin_panel_settings_outlined,
+          accent: const Color(0xFF0B6E4F),
+          onTap: _openAdministration,
+        ),
+      if (_isAdmin)
+        _HomeShortcutData(
+          title: 'Relatorios',
+          icon: Icons.insights_outlined,
+          accent: const Color(0xFF1E88E5),
+          onTap: _openReports,
+        ),
     ];
 
-    if (_homeKpis.lastFinancialUpdatedAt != null) {
-      lines.add(
-        'Última atualização de faturamento/devolução: ${_formatDateTime(_homeKpis.lastFinancialUpdatedAt!)}',
-      );
-    }
+    return items;
+  }
+
+  Widget _buildWelcomeCard() {
+    final roleLabel = widget.currentUser.profileName.trim().isNotEmpty
+        ? widget.currentUser.profileName.trim()
+        : widget.currentUser.label;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.all(20),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
-              padding: EdgeInsets.only(top: 2),
-              child: Icon(Icons.schedule_outlined, color: primaryColor),
+            Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: Color(0xFFE7EBFF),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.person_outline,
+                color: primaryColor,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                _welcomeTitle,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: lines
-                    .map(
-                      (line) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(line),
-                      ),
-                    )
-                    .toList(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0F3FF),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                roleLabel,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: primaryColor,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -419,44 +384,231 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildKpiCarousel({
-    required String title,
-    required String subtitle,
-    required List<_HomeKpiCardData> cards,
-  }) {
+  Widget _buildKpiOverviewSection() {
+    final compactMetrics = [
+      _HomeCompactMetricData(
+        label: 'Volume liquido',
+        value: _formatDecimal(_netVolume),
+        icon: Icons.stacked_bar_chart_rounded,
+        accent: const Color(0xFF00838F),
+      ),
+      _HomeCompactMetricData(
+        label: 'Positivacao liquida',
+        value: '${_clampPositiveCount(_netPositivation)}',
+        icon: Icons.people_alt_outlined,
+        accent: const Color(0xFF0B6E4F),
+      ),
+    ];
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              title,
+              _isNamedKpiProfile ? 'Seu resumo de hoje' : 'Resumo de hoje',
               style: Theme.of(
                 context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              subtitle,
+              'Indicadores liquidos de venda, ja considerando as devolucoes.',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              height: 138,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: cards
-                    .map(
-                      (card) => _HomeKpiCard(
-                        title: card.title,
-                        value: card.value,
-                        color: card.color,
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F7FF),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFE3E9F5)),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Venda liquida',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
                       ),
-                    )
-                    .toList(),
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.94),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.trending_up_rounded,
+                          color: Color(0xFF4864FF),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 40,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _formatCurrency(_netAmount),
+                        maxLines: 1,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: const Color(0xFF4864FF),
+                            ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Hoje • ${_clampPositiveCount(_netOrders)} pedidos liquidos',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF5E6A7C),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final pillWidth = constraints.maxWidth >= 320
+                          ? (constraints.maxWidth - 10) / 2
+                          : constraints.maxWidth;
+
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: compactMetrics
+                            .map(
+                              (item) => SizedBox(
+                                width: pillWidth,
+                                child: _HomeCompactMetricPill(data: item),
+                              ),
+                            )
+                            .toList(),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModuleSection() {
+    final shortcuts = _shortcutItems;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Modulos',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Acessos diretos aos principais fluxos do aplicativo.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
+            ),
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final crossAxisCount = width >= 620
+                    ? 4
+                    : width >= 360
+                    ? 3
+                    : 2;
+
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    mainAxisExtent: 104,
+                  ),
+                  itemCount: shortcuts.length,
+                  itemBuilder: (context, index) {
+                    return _HomeShortcutTile(data: shortcuts[index]);
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLastUpdatesCard() {
+    final items = <_HomeUpdateRowData>[
+      _HomeUpdateRowData(
+        label: 'Vendas',
+        value: _homeKpis.lastSalesUpdatedAt != null
+            ? _formatDateTime(_homeKpis.lastSalesUpdatedAt!)
+            : 'Aguardando sincronizacao',
+        icon: Icons.query_stats_outlined,
+        accent: const Color(0xFF4864FF),
+      ),
+    ];
+
+    if (_homeKpis.lastFinancialUpdatedAt != null) {
+      items.add(
+        _HomeUpdateRowData(
+          label: 'Financeiro',
+          value: _formatDateTime(_homeKpis.lastFinancialUpdatedAt!),
+          icon: Icons.account_balance_wallet_outlined,
+          accent: const Color(0xFF0B6E4F),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Atualizacoes',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Ultimas referencias de carga para os dados exibidos na home.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
+            ),
+            const SizedBox(height: 14),
+            ...items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _HomeUpdateRow(data: item),
               ),
             ),
           ],
@@ -466,8 +618,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBody() {
-    final displayName = widget.currentUser.displayName?.trim();
-
     return RefreshIndicator(
       color: primaryColor,
       onRefresh: _loadContent,
@@ -475,201 +625,17 @@ class _HomeScreenState extends State<HomeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _isAdmin
-                        ? 'Bem-vindo, Administração'
-                        : 'Bem-vindo, ${displayName?.isNotEmpty == true ? displayName : widget.currentUser.label}',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _isAdmin
-                        ? 'Acesse a área administrativa para gerenciar usuários, perfis e relatórios.'
-                        : 'Use o menu à esquerda para acessar os módulos permanentes do aplicativo.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF5E6A7C),
-                    ),
-                  ),
-                  if (_isAdmin)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 18),
-                      child: FilledButton.icon(
-                        onPressed: _openAdministration,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                        ),
-                        icon: const Icon(Icons.settings_outlined),
-                        label: const Text('Abrir administração'),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+          _buildWelcomeCard(),
           if (_showsHomeKpis) ...[
-            const SizedBox(height: 18),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _isNamedKpiProfile
-                          ? 'Seu desempenho no período'
-                          : 'Indicadores do período',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _periodDescription,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF5E6A7C),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<KpiMetricSource>(
-                      initialValue: _selectedMetricSource,
-                      decoration: const InputDecoration(
-                        labelText: 'Fonte dos indicadores',
-                        prefixIcon: Icon(Icons.tune_outlined),
-                      ),
-                      items: KpiMetricSource.values
-                          .map(
-                            (source) => DropdownMenuItem(
-                              value: source,
-                              child: Text(source.label),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: _handleMetricSourceChanged,
-                    ),
-                    const SizedBox(height: 14),
-                    DropdownButtonFormField<_HomePeriodPreset>(
-                      key: ValueKey<_HomePeriodPreset>(_selectedPeriod),
-                      initialValue: _selectedPeriod,
-                      decoration: const InputDecoration(
-                        labelText: 'Período',
-                        prefixIcon: Icon(Icons.date_range_outlined),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: _HomePeriodPreset.today,
-                          child: Text('Hoje'),
-                        ),
-                        DropdownMenuItem(
-                          value: _HomePeriodPreset.yesterday,
-                          child: Text('Ontem'),
-                        ),
-                        DropdownMenuItem(
-                          value: _HomePeriodPreset.currentMonth,
-                          child: Text('Mês atual'),
-                        ),
-                        DropdownMenuItem(
-                          value: _HomePeriodPreset.previousMonth,
-                          child: Text('Mês anterior'),
-                        ),
-                        DropdownMenuItem(
-                          value: _HomePeriodPreset.currentYear,
-                          child: Text('Ano atual'),
-                        ),
-                        DropdownMenuItem(
-                          value: _HomePeriodPreset.custom,
-                          child: Text('Personalizado'),
-                        ),
-                      ],
-                      onChanged: _handlePeriodChanged,
-                    ),
-                    if (_selectedPeriod == _HomePeriodPreset.custom) ...[
-                      const SizedBox(height: 14),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () => _pickCustomDate(isStart: true),
-                            icon: const Icon(Icons.event_outlined),
-                            label: Text(_dateFormat.format(_periodStart)),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => _pickCustomDate(isStart: false),
-                            icon: const Icon(Icons.event_busy_outlined),
-                            label: Text(_dateFormat.format(_periodEnd)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildKpiCarousel(
-              title: _selectedMetricSource == KpiMetricSource.venda
-                  ? 'Indicadores brutos de venda'
-                  : 'Indicadores brutos de faturamento',
-              subtitle: _periodDescription,
-              cards: [
-                _HomeKpiCardData(
-                  title: 'Financeiro Bruto',
-                  value: _formatCurrency(_homeKpis.grossAmount),
-                ),
-                _HomeKpiCardData(
-                  title: 'Volume Bruto',
-                  value: _formatDecimal(_homeKpis.grossVolume),
-                ),
-                _HomeKpiCardData(
-                  title: 'Pedidos Brutos',
-                  value: '${_homeKpis.grossOrders}',
-                ),
-                _HomeKpiCardData(
-                  title: 'Positivação Bruta',
-                  value: '${_homeKpis.grossPositivation}',
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildKpiCarousel(
-              title: 'Devoluções no período',
-              subtitle:
-                  'Dados de devolução para o mesmo intervalo selecionado.',
-              cards: [
-                _HomeKpiCardData(
-                  title: 'Financeiro Devolvido',
-                  value: _formatCurrency(_homeKpis.returnAmount),
-                  color: const Color(0xFFFDECEC),
-                ),
-                _HomeKpiCardData(
-                  title: 'Volume Devolvido',
-                  value: _formatDecimal(_homeKpis.returnVolume),
-                  color: const Color(0xFFFDECEC),
-                ),
-                _HomeKpiCardData(
-                  title: 'Pedidos Devolvidos',
-                  value: '${_homeKpis.returnOrders}',
-                  color: const Color(0xFFFDECEC),
-                ),
-                _HomeKpiCardData(
-                  title: 'Positivação Devolvida',
-                  value: '${_homeKpis.returnPositivation}',
-                  color: const Color(0xFFFDECEC),
-                ),
-              ],
-            ),
+            const SizedBox(height: 14),
+            _buildKpiOverviewSection(),
           ],
-          const SizedBox(height: 12),
-          _buildLastUpdatesCard(),
+          const SizedBox(height: 14),
+          _buildModuleSection(),
+          if (_showsHomeKpis || _homeKpis.lastSalesUpdatedAt != null) ...[
+            const SizedBox(height: 14),
+            _buildLastUpdatesCard(),
+          ],
         ],
       ),
     );
@@ -689,7 +655,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Gestão de Vendas',
+                      'Gestao de Vendas',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -739,7 +705,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ListTile(
                       leading: const Icon(Icons.storefront_outlined),
-                      title: const Text('Análise por Fornecedor'),
+                      title: const Text('Analise por Fornecedor'),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -747,7 +713,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     ListTile(
                       leading: const Icon(Icons.assignment_return_outlined),
-                      title: const Text('Devoluções'),
+                      title: const Text('Devolucoes'),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -773,7 +739,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 8),
                       ListTile(
                         leading: const Icon(Icons.settings_outlined),
-                        title: const Text('Administração'),
+                        title: const Text('Administracao'),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -781,7 +747,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       ListTile(
                         leading: const Icon(Icons.analytics_outlined),
-                        title: const Text('Relatórios'),
+                        title: const Text('Relatorios'),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -824,7 +790,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       appBar: AppBar(
         title: Text(
-          _isAdmin ? 'Bem-vindo, Administração' : 'Bem-vindo',
+          _isAdmin ? 'Bem-vindo, Administracao' : 'Bem-vindo',
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
@@ -886,63 +852,153 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _HomeKpiCardData {
-  const _HomeKpiCardData({
-    required this.title,
+class _HomeCompactMetricData {
+  const _HomeCompactMetricData({
+    required this.label,
     required this.value,
-    this.color = const Color(0xFFF7F9FF),
+    required this.icon,
+    required this.accent,
   });
 
-  final String title;
+  final String label;
   final String value;
-  final Color color;
+  final IconData icon;
+  final Color accent;
 }
 
-class _HomeKpiCard extends StatelessWidget {
-  const _HomeKpiCard({
+class _HomeShortcutData {
+  const _HomeShortcutData({
     required this.title,
-    required this.value,
-    required this.color,
+    required this.icon,
+    required this.accent,
+    required this.onTap,
   });
 
   final String title;
+  final IconData icon;
+  final Color accent;
+  final Future<void> Function() onTap;
+}
+
+class _HomeUpdateRowData {
+  const _HomeUpdateRowData({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accent,
+  });
+
+  final String label;
   final String value;
-  final Color color;
+  final IconData icon;
+  final Color accent;
+}
+
+class _HomeCompactMetricPill extends StatelessWidget {
+  const _HomeCompactMetricPill({required this.data});
+
+  final _HomeCompactMetricData data;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 154,
-      margin: const EdgeInsets.only(right: 12),
-      child: Card(
-        child: Container(
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(22),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFDDE4F4)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: data.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(data.icon, color: data.accent, size: 20),
           ),
-          padding: const EdgeInsets.all(14),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF6C7787),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  height: 24,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      data.value,
+                      maxLines: 1,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeShortcutTile extends StatelessWidget {
+  const _HomeShortcutTile({required this.data});
+
+  final _HomeShortcutData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: data.onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: const Color(0xFFE3E9F5)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                title,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: const Color(0xFF5E6A7C),
-                  fontWeight: FontWeight.w600,
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: data.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
+                child: Icon(data.icon, color: data.accent, size: 20),
               ),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 34,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
+              const SizedBox(height: 8),
+              Expanded(
+                child: Center(
                   child: Text(
-                    value,
-                    maxLines: 1,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
+                    data.title,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
                     ),
                   ),
                 ),
@@ -950,6 +1006,59 @@ class _HomeKpiCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _HomeUpdateRow extends StatelessWidget {
+  const _HomeUpdateRow({required this.data});
+
+  final _HomeUpdateRowData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE3E9F5)),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: data.accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(data.icon, color: data.accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF6C7787),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  data.value,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

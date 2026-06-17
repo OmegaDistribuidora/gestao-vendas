@@ -243,16 +243,10 @@ class _BlockedOrdersScreenState extends State<BlockedOrdersScreen> {
   }) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 22,
-              backgroundColor: accentBackgroundColor,
-              foregroundColor: accentColor,
-              child: Icon(icon),
-            ),
-            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,25 +254,42 @@ class _BlockedOrdersScreenState extends State<BlockedOrdersScreen> {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       color: Color(0xFF5E6A7C),
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: accentColor,
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 40,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          height: 1.05,
+                          color: accentColor,
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(width: 16),
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: accentBackgroundColor,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(icon, color: accentColor),
             ),
           ],
         ),
@@ -287,68 +298,54 @@ class _BlockedOrdersScreenState extends State<BlockedOrdersScreen> {
   }
 
   Widget _buildMetricsSection() {
-    Widget pair(Widget left, Widget right) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: left),
-          const SizedBox(width: 12),
-          Expanded(child: right),
-        ],
-      );
-    }
-
     return Column(
       children: [
-        pair(
-          _buildMetricCard(
-            title: 'Venda bloqueada',
-            value: _formatCurrency(_overview.salesBlockedAmount),
-            icon: Icons.monetization_on_outlined,
-            accentColor: const Color(0xFF16924C),
-            accentBackgroundColor: const Color(0xFFE7F6EC),
-          ),
-          _buildMetricCard(
-            title: 'Pedidos de venda',
-            value: '${_overview.salesBlockedOrders}',
-            icon: Icons.shopping_cart_outlined,
-            accentColor: const Color(0xFF1D4ED8),
-            accentBackgroundColor: const Color(0xFFE8EEFF),
-          ),
+        _buildMetricCard(
+          title: 'Venda bloqueada',
+          value: _formatCurrency(_overview.salesBlockedAmount),
+          icon: Icons.monetization_on_outlined,
+          accentColor: const Color(0xFF16924C),
+          accentBackgroundColor: const Color(0xFFE7F6EC),
         ),
         const SizedBox(height: 12),
-        pair(
-          _buildMetricCard(
-            title: 'Bonificação bloqueada',
-            value: _formatCurrency(_overview.bonusBlockedAmount),
-            icon: Icons.card_giftcard,
-            accentColor: const Color(0xFF6D28D9),
-            accentBackgroundColor: const Color(0xFFF2EAFE),
-          ),
-          _buildMetricCard(
-            title: 'Pedidos de bonificação',
-            value: '${_overview.bonusBlockedOrders}',
-            icon: Icons.inventory_2_outlined,
-            accentColor: const Color(0xFFFF7A00),
-            accentBackgroundColor: const Color(0xFFFFF0DD),
-          ),
+        _buildMetricCard(
+          title: 'Pedidos de venda',
+          value: '${_overview.salesBlockedOrders}',
+          icon: Icons.shopping_cart_outlined,
+          accentColor: const Color(0xFF1D4ED8),
+          accentBackgroundColor: const Color(0xFFE8EEFF),
         ),
         const SizedBox(height: 12),
-        pair(
-          _buildMetricCard(
-            title: 'Total bloqueado',
-            value: _formatCurrency(_overview.totalBlockedAmount),
-            icon: Icons.attach_money_outlined,
-            accentColor: const Color(0xFF0F766E),
-            accentBackgroundColor: const Color(0xFFE7F6F3),
-          ),
-          _buildMetricCard(
-            title: 'Total de pedidos',
-            value: '${_overview.totalBlockedOrders}',
-            icon: Icons.lock_outline,
-            accentColor: primaryColor,
-            accentBackgroundColor: const Color(0xFFE8EEFF),
-          ),
+        _buildMetricCard(
+          title: 'Bonificação bloqueada',
+          value: _formatCurrency(_overview.bonusBlockedAmount),
+          icon: Icons.card_giftcard,
+          accentColor: const Color(0xFF6D28D9),
+          accentBackgroundColor: const Color(0xFFF2EAFE),
+        ),
+        const SizedBox(height: 12),
+        _buildMetricCard(
+          title: 'Pedidos de bonificação',
+          value: '${_overview.bonusBlockedOrders}',
+          icon: Icons.inventory_2_outlined,
+          accentColor: const Color(0xFFFF7A00),
+          accentBackgroundColor: const Color(0xFFFFF0DD),
+        ),
+        const SizedBox(height: 12),
+        _buildMetricCard(
+          title: 'Total bloqueado',
+          value: _formatCurrency(_overview.totalBlockedAmount),
+          icon: Icons.attach_money_outlined,
+          accentColor: const Color(0xFF0F766E),
+          accentBackgroundColor: const Color(0xFFE7F6F3),
+        ),
+        const SizedBox(height: 12),
+        _buildMetricCard(
+          title: 'Total de pedidos',
+          value: '${_overview.totalBlockedOrders}',
+          icon: Icons.lock_outline,
+          accentColor: primaryColor,
+          accentBackgroundColor: const Color(0xFFE8EEFF),
         ),
       ],
     );

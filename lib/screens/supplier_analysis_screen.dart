@@ -44,6 +44,46 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
   DateTime? _customStartDate;
   DateTime? _customEndDate;
 
+  List<SupplierAnalysisItem> get _supplierItemsWithGeneral {
+    if (_analysis.suppliers.isEmpty) {
+      return const <SupplierAnalysisItem>[];
+    }
+
+    final totalAmount = _analysis.suppliers.fold<double>(
+      0,
+      (sum, item) => sum + item.grossAmount,
+    );
+    final totalVolume = _analysis.suppliers.fold<double>(
+      0,
+      (sum, item) => sum + item.grossVolume,
+    );
+    final totalReturnAmount = _analysis.suppliers.fold<double>(
+      0,
+      (sum, item) => sum + item.returnAmount,
+    );
+    final totalOrders = _analysis.suppliers.fold<int>(
+      0,
+      (sum, item) => sum + item.grossOrders,
+    );
+    final totalPositivation = _analysis.suppliers.fold<int>(
+      0,
+      (sum, item) => sum + item.grossPositivation,
+    );
+
+    return [
+      SupplierAnalysisItem(
+        code: '__geral__',
+        supplierName: 'Geral',
+        grossAmount: totalAmount,
+        returnAmount: totalReturnAmount,
+        grossVolume: totalVolume,
+        grossOrders: totalOrders,
+        grossPositivation: totalPositivation,
+      ),
+      ..._analysis.suppliers,
+    ];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -287,6 +327,7 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                             const SizedBox(height: 18),
                             DropdownButtonFormField<KpiMetricSource>(
                               initialValue: _selectedMetricSource,
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: 'Fonte dos indicadores',
                                 prefixIcon: Icon(Icons.tune_outlined),
@@ -304,6 +345,7 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                             const SizedBox(height: 14),
                             DropdownButtonFormField<_SupplierPeriodPreset>(
                               initialValue: _selectedPeriod,
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: 'Período',
                                 prefixIcon: Icon(Icons.date_range_outlined),
@@ -407,14 +449,16 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                         ),
                       )
                     else
-                      ..._analysis.suppliers.map(
+                      ..._supplierItemsWithGeneral.map(
                         (supplier) => Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _SupplierCard(
                             supplier: supplier,
+                            metricSource: _selectedMetricSource,
                             formatCurrency: _formatCurrency,
                             formatVolume: _formatVolume,
                             logoUrl: _supplierLogoUrl(supplier.code),
+                            isGeneral: supplier.code == '__geral__',
                           ),
                         ),
                       ),
@@ -431,15 +475,32 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
 class _SupplierCard extends StatelessWidget {
   const _SupplierCard({
     required this.supplier,
+    required this.metricSource,
     required this.formatCurrency,
     required this.formatVolume,
     required this.logoUrl,
+    required this.isGeneral,
   });
 
   final SupplierAnalysisItem supplier;
+  final KpiMetricSource metricSource;
   final String Function(double value) formatCurrency;
   final String Function(double value) formatVolume;
   final String logoUrl;
+  final bool isGeneral;
+
+  double get _displayAmount {
+    if (metricSource == KpiMetricSource.faturamento) {
+      return supplier.grossAmount + supplier.returnAmount;
+    }
+    return supplier.grossAmount;
+  }
+
+  String get _financialTitle {
+    return metricSource == KpiMetricSource.faturamento
+        ? 'Financeiro Liquido'
+        : 'Financeiro Bruto';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -451,34 +512,63 @@ class _SupplierCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(14),
-                  child: Image.network(
-                    logoUrl,
+                if (isGeneral)
+                  Container(
                     width: 46,
                     height: 46,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE7EBFF),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.public_outlined,
+                      color: primaryColor,
+                    ),
+                  )
+                else
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.network(
+                      logoUrl,
                       width: 46,
                       height: 46,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE7EBFF),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(
-                        Icons.inventory_2_outlined,
-                        color: primaryColor,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE7EBFF),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.inventory_2_outlined,
+                          color: primaryColor,
+                        ),
                       ),
                     ),
                   ),
-                ),
                 const SizedBox(width: 14),
                 Expanded(
-                  child: Text(
-                    supplier.supplierName,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        supplier.supplierName,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      if (isGeneral) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Consolidado de todos os fornecedores',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: const Color(0xFF5E6A7C),
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -489,8 +579,8 @@ class _SupplierCard extends StatelessWidget {
               runSpacing: 10,
               children: [
                 _MiniMetricTile(
-                  title: 'Financeiro Bruto',
-                  value: formatCurrency(supplier.grossAmount),
+                  title: _financialTitle,
+                  value: formatCurrency(_displayAmount),
                 ),
                 _MiniMetricTile(
                   title: 'Volume Bruto',

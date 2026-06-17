@@ -51,6 +51,7 @@ class SupplierAnalysisItem {
     required this.code,
     required this.supplierName,
     required this.grossAmount,
+    required this.returnAmount,
     required this.grossVolume,
     required this.grossOrders,
     required this.grossPositivation,
@@ -59,6 +60,7 @@ class SupplierAnalysisItem {
   final String code;
   final String supplierName;
   final double grossAmount;
+  final double returnAmount;
   final double grossVolume;
   final int grossOrders;
   final int grossPositivation;
@@ -70,10 +72,10 @@ class SupplierAnalysisItem {
         json['supplier_name'] as String? ?? '',
       ),
       grossAmount: (json['gross_amount'] as num?)?.toDouble() ?? 0,
+      returnAmount: (json['return_amount'] as num?)?.toDouble() ?? 0,
       grossVolume: (json['gross_volume'] as num?)?.toDouble() ?? 0,
       grossOrders: (json['gross_orders'] as num?)?.toInt() ?? 0,
-      grossPositivation:
-          (json['gross_positivation'] as num?)?.toInt() ?? 0,
+      grossPositivation: (json['gross_positivation'] as num?)?.toInt() ?? 0,
     );
   }
 }

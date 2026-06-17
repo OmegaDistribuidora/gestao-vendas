@@ -494,8 +494,9 @@ async function syncSellerUsers(
   for (const seller of sellers) {
     const normalizedCpf = sanitizeDigits(seller.cpf)
     const technicalEmail = technicalEmailFromProfileCode('vendedor', seller.code)
+    // Prefer the active Oracle code when stale duplicate accounts share the same CPF.
     const existing =
-      existingUsersByCpf.get(normalizedCpf) ?? existingUsersByCode.get(seller.code)
+      existingUsersByCode.get(seller.code) ?? existingUsersByCpf.get(normalizedCpf)
 
     if (existing) {
       const userId = String(existing.auth_user_id)
