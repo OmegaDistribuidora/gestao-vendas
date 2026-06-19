@@ -49,11 +49,22 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       _overview.profileSlug == AppProfile.coordinatorSlug;
   bool get _isNamedProfile => _isSeller || _isSupervisor || _isCoordinator;
   bool get _showsMetricSourceSelector => !_isNamedProfile;
-  bool get _showsScopeSelector => _overview.availableScopes.isNotEmpty;
+  bool get _showsScopeSelector => _scopeOptions.isNotEmpty;
   bool get _viewerIsSupervisor =>
       _overview.viewerProfileSlug == AppProfile.supervisorSlug;
   bool get _viewerIsCoordinator =>
       _overview.viewerProfileSlug == AppProfile.coordinatorSlug;
+
+  List<PerformanceScopeOption> get _scopeOptions {
+    final seenValues = <String>{};
+    final options = <PerformanceScopeOption>[];
+    for (final scope in _overview.availableScopes) {
+      if (seenValues.add(scope.value)) {
+        options.add(scope);
+      }
+    }
+    return options;
+  }
 
   DateTime get _projectionMonthStart {
     final selectedMonthStart = _overview.selectedMonthStart;
@@ -92,6 +103,10 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
         return;
       }
 
+      final nextScopeValue = _scopeValue(
+        profileSlug: overview.selectedScopeProfileSlug,
+        ownerCode: overview.selectedScopeOwnerCode,
+      );
       setState(() {
         _overview = overview;
         _selectedMetricSource = overview.metricSource;
@@ -99,10 +114,9 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
             ?.toIso8601String()
             .split('T')
             .first;
-        _selectedScopeValue = _scopeValue(
-          profileSlug: overview.selectedScopeProfileSlug,
-          ownerCode: overview.selectedScopeOwnerCode,
-        );
+        _selectedScopeValue = _scopeValueExists(overview, nextScopeValue)
+            ? nextScopeValue
+            : null;
         _loading = false;
       });
     } catch (error) {
@@ -160,7 +174,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       return null;
     }
 
-    for (final scope in _overview.availableScopes) {
+    for (final scope in _scopeOptions) {
       if (scope.value == value) {
         return scope;
       }
@@ -171,6 +185,19 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
 
   PerformanceScopeOption? get _selectedScope =>
       _scopeFromValue(_selectedScopeValue);
+
+  bool _scopeValueExists(PerformanceOverview overview, String? value) {
+    if (value == null) {
+      return true;
+    }
+    final seenValues = <String>{};
+    for (final scope in overview.availableScopes) {
+      if (seenValues.add(scope.value) && scope.value == value) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   Future<void> _handleScopeChanged(String? value) async {
     if (value == _selectedScopeValue) {
@@ -208,6 +235,30 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     }
     final fixed = double.parse(value.toStringAsFixed(1));
     return '${_percentFormat.format(fixed)}%';
+  }
+
+  String _formatRequiredCurrency(BusinessDayProjectionSummary summary) {
+    final targetValue = summary.targetValue;
+    if (targetValue == null || targetValue <= 0) {
+      return 'Sem meta';
+    }
+    final requiredValue = summary.requiredPerBusinessDay;
+    if (requiredValue == null) {
+      return 'Sem dias uteis';
+    }
+    return '${_formatCompactCurrency(requiredValue)}/dia util';
+  }
+
+  String _formatRequiredInteger(BusinessDayProjectionSummary summary) {
+    final targetValue = summary.targetValue;
+    if (targetValue == null || targetValue <= 0) {
+      return 'Sem meta';
+    }
+    final requiredValue = summary.requiredPerBusinessDay;
+    if (requiredValue == null) {
+      return 'Sem dias uteis';
+    }
+    return '${_formatInteger(requiredValue.ceil())}/dia util';
   }
 
   String _profileLabel(String slug) {
@@ -374,7 +425,9 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
             if (_showsScopeSelector) ...[
               DropdownButtonFormField<String?>(
                 key: ValueKey<String?>(_selectedScopeValue),
-                initialValue: _selectedScopeValue,
+                initialValue: _scopeValueExists(_overview, _selectedScopeValue)
+                    ? _selectedScopeValue
+                    : null,
                 isExpanded: true,
                 decoration: InputDecoration(
                   labelText: _scopeSelectorLabel(),
@@ -385,7 +438,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                     value: null,
                     child: _dropdownLabel(_allScopesLabel()),
                   ),
-                  ..._overview.availableScopes.map(
+                  ..._scopeOptions.map(
                     (scope) => DropdownMenuItem<String?>(
                       value: scope.value,
                       child: _dropdownLabel(
@@ -475,6 +528,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       ),
       averageLabel:
           '${_formatCompactCurrency(summary.averagePerBusinessDay)}/dia util',
+      requiredDailyLabel: _formatRequiredCurrency(summary),
       actualProgressPct: summary.actualProgressPct,
       projectedProgressPct: summary.projectedProgressPct,
       elapsedBusinessDays: summary.monthContext.elapsedBusinessDays,
@@ -514,6 +568,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
             ),
       averageLabel:
           '${_formatInteger(summary.averagePerBusinessDay.round())}/dia util',
+      requiredDailyLabel: _formatRequiredInteger(summary),
       actualProgressPct: summary.actualProgressPct,
       projectedProgressPct: summary.projectedProgressPct,
       elapsedBusinessDays: summary.monthContext.elapsedBusinessDays,
@@ -789,6 +844,7 @@ class _MetricPanelData {
     required this.projectedLabel,
     required this.remainingLabel,
     required this.averageLabel,
+    required this.requiredDailyLabel,
     required this.actualProgressPct,
     required this.projectedProgressPct,
     required this.elapsedBusinessDays,
@@ -806,6 +862,7 @@ class _MetricPanelData {
   final String projectedLabel;
   final String remainingLabel;
   final String averageLabel;
+  final String requiredDailyLabel;
   final double? actualProgressPct;
   final double? projectedProgressPct;
   final int elapsedBusinessDays;
@@ -942,6 +999,11 @@ class _MetricProjectionPanel extends StatelessWidget {
                     icon: Icons.calendar_month_outlined,
                     label:
                         'Dias uteis: ${data.elapsedBusinessDays}/${data.totalBusinessDays}',
+                    maxWidth: constraints.maxWidth,
+                  ),
+                  _InfoPill(
+                    icon: Icons.flag_outlined,
+                    label: 'Nec. Diária: ${data.requiredDailyLabel}',
                     maxWidth: constraints.maxWidth,
                   ),
                   _InfoPill(

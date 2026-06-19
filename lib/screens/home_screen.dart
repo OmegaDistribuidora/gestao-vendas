@@ -11,6 +11,7 @@ import '../services/app_repository.dart';
 import 'admin_screen.dart';
 import 'blocked_orders_screen.dart';
 import 'change_password_screen.dart';
+import 'customers_without_purchase_screen.dart';
 import 'delinquency_screen.dart';
 import 'performance_screen.dart';
 import 'reports_screen.dart';
@@ -57,6 +58,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _showsHomeKpis => !_isAdmin;
   bool get _isNamedKpiProfile => _isSeller || _isSupervisor || _isCoordinator;
   bool get _showsPerformanceModule => true;
+  bool get _showsCustomersWithoutPurchaseModule =>
+      _isSeller || _isSupervisor || _isCoordinator;
 
   double get _netAmount => _homeKpis.grossAmount + _homeKpis.returnAmount;
   double get _netVolume => _homeKpis.grossVolume + _homeKpis.returnVolume;
@@ -181,6 +184,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openCustomersWithoutPurchase() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const CustomersWithoutPurchaseScreen(),
+      ),
+    );
+  }
+
   Future<void> _openChangePassword() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -252,6 +263,15 @@ class _HomeScreenState extends State<HomeScreen> {
     await _openBlockedOrders();
   }
 
+  Future<void> _openCustomersWithoutPurchaseFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await _openCustomersWithoutPurchase();
+  }
+
   Future<void> _openChangePasswordFromDrawer() async {
     Navigator.of(context).pop();
     await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -312,6 +332,13 @@ class _HomeScreenState extends State<HomeScreen> {
         accent: const Color(0xFF7E57C2),
         onTap: _openBlockedOrders,
       ),
+      if (_showsCustomersWithoutPurchaseModule)
+        _HomeShortcutData(
+          title: 'Clientes sem compra',
+          icon: Icons.person_search_outlined,
+          accent: const Color(0xFFD84315),
+          onTap: _openCustomersWithoutPurchase,
+        ),
       if (_isAdmin)
         _HomeShortcutData(
           title: 'Administracao',
@@ -735,6 +762,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       onTap: _openBlockedOrdersFromDrawer,
                     ),
+                    if (_showsCustomersWithoutPurchaseModule)
+                      ListTile(
+                        leading: const Icon(Icons.person_search_outlined),
+                        title: const Text('Clientes sem compra'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        onTap: _openCustomersWithoutPurchaseFromDrawer,
+                      ),
                     if (_isAdmin) ...[
                       const SizedBox(height: 8),
                       ListTile(

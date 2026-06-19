@@ -3,13 +3,16 @@ class BusinessDayMonthContext {
     required this.monthStart,
     required this.totalBusinessDays,
     required this.elapsedBusinessDays,
+    required this.remainingBusinessDays,
   });
 
   final DateTime monthStart;
   final int totalBusinessDays;
   final int elapsedBusinessDays;
+  final int remainingBusinessDays;
 
   bool get hasElapsedBusinessDays => elapsedBusinessDays > 0;
+  bool get hasRemainingBusinessDays => remainingBusinessDays > 0;
 }
 
 enum ProjectionPaceStatus { onTrack, belowTarget, noTarget }
@@ -21,6 +24,7 @@ class BusinessDayProjectionSummary {
     required this.targetValue,
     required this.projectedValue,
     required this.averagePerBusinessDay,
+    required this.requiredPerBusinessDay,
     required this.actualProgressPct,
     required this.projectedProgressPct,
     required this.paceStatus,
@@ -31,6 +35,7 @@ class BusinessDayProjectionSummary {
   final double? targetValue;
   final double projectedValue;
   final double averagePerBusinessDay;
+  final double? requiredPerBusinessDay;
   final double? actualProgressPct;
   final double? projectedProgressPct;
   final ProjectionPaceStatus paceStatus;
@@ -87,10 +92,19 @@ class BusinessDayProjection {
       _ => 0,
     };
 
+    final remainingBusinessDays = _remainingBusinessDays(
+      monthStart: normalizedMonthStart,
+      totalBusinessDays: totalBusinessDays,
+      elapsedBusinessDays: elapsedBusinessDays,
+      referenceDate: normalizedReferenceDate,
+      lastDayOfMonth: lastDayOfMonth,
+    );
+
     return BusinessDayMonthContext(
       monthStart: normalizedMonthStart,
       totalBusinessDays: totalBusinessDays,
       elapsedBusinessDays: elapsedBusinessDays,
+      remainingBusinessDays: remainingBusinessDays,
     );
   }
 
@@ -111,6 +125,11 @@ class BusinessDayProjection {
     final double projectedValue = monthContext.hasElapsedBusinessDays
         ? averagePerBusinessDay * monthContext.totalBusinessDays
         : actualValue;
+    final requiredPerBusinessDay = _requiredPerBusinessDay(
+      actualValue: actualValue,
+      targetValue: targetValue,
+      remainingBusinessDays: monthContext.remainingBusinessDays,
+    );
     final actualProgressPct = _progressPct(actualValue, targetValue);
     final projectedProgressPct = _progressPct(projectedValue, targetValue);
     final paceStatus = switch (targetValue) {
@@ -126,6 +145,7 @@ class BusinessDayProjection {
       targetValue: targetValue,
       projectedValue: projectedValue,
       averagePerBusinessDay: averagePerBusinessDay,
+      requiredPerBusinessDay: requiredPerBusinessDay,
       actualProgressPct: actualProgressPct,
       projectedProgressPct: projectedProgressPct,
       paceStatus: paceStatus,
@@ -181,6 +201,52 @@ class BusinessDayProjection {
       return null;
     }
     return (value / targetValue) * 100;
+  }
+
+  static double? _requiredPerBusinessDay({
+    required double actualValue,
+    required double? targetValue,
+    required int remainingBusinessDays,
+  }) {
+    if (targetValue == null || targetValue <= 0) {
+      return null;
+    }
+
+    final remainingValue = targetValue - actualValue;
+    if (remainingValue <= 0) {
+      return 0;
+    }
+    if (remainingBusinessDays <= 0) {
+      return null;
+    }
+    return remainingValue / remainingBusinessDays;
+  }
+
+  static int _remainingBusinessDays({
+    required DateTime monthStart,
+    required int totalBusinessDays,
+    required int elapsedBusinessDays,
+    required DateTime referenceDate,
+    required DateTime lastDayOfMonth,
+  }) {
+    final monthComparison = _compareMonths(monthStart, referenceDate);
+    if (monthComparison > 0) {
+      return totalBusinessDays;
+    }
+    if (monthComparison < 0 || referenceDate.isAfter(lastDayOfMonth)) {
+      return 0;
+    }
+
+    final includeReferenceDate = isBusinessDay(referenceDate) ? 1 : 0;
+    final remaining =
+        totalBusinessDays - elapsedBusinessDays + includeReferenceDate;
+    if (remaining <= 0) {
+      return 0;
+    }
+    if (remaining > totalBusinessDays) {
+      return totalBusinessDays;
+    }
+    return remaining;
   }
 
   static int _compareMonths(DateTime monthStart, DateTime referenceDate) {

@@ -61,13 +61,25 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
       0,
       (sum, item) => sum + item.returnAmount,
     );
+    final totalReturnVolume = _analysis.suppliers.fold<double>(
+      0,
+      (sum, item) => sum + item.returnVolume,
+    );
     final totalOrders = _analysis.suppliers.fold<int>(
       0,
       (sum, item) => sum + item.grossOrders,
     );
+    final totalReturnOrders = _analysis.suppliers.fold<int>(
+      0,
+      (sum, item) => sum + item.returnOrders,
+    );
     final totalPositivation = _analysis.suppliers.fold<int>(
       0,
       (sum, item) => sum + item.grossPositivation,
+    );
+    final totalReturnPositivation = _analysis.suppliers.fold<int>(
+      0,
+      (sum, item) => sum + item.returnPositivation,
     );
 
     return [
@@ -76,6 +88,9 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
         supplierName: 'Geral',
         grossAmount: totalAmount,
         returnAmount: totalReturnAmount,
+        returnVolume: totalReturnVolume,
+        returnOrders: totalReturnOrders,
+        returnPositivation: totalReturnPositivation,
         grossVolume: totalVolume,
         grossOrders: totalOrders,
         grossPositivation: totalPositivation,
@@ -158,6 +173,15 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
         return 'Ano atual';
       case _SupplierPeriodPreset.custom:
         return '${_dateFormat.format(_periodStart)} até ${_dateFormat.format(_periodEnd)}';
+    }
+  }
+
+  String _metricSourceLabel(KpiMetricSource source) {
+    switch (source) {
+      case KpiMetricSource.venda:
+        return 'Venda Líquida';
+      case KpiMetricSource.faturamento:
+        return 'Faturamento Líquido';
     }
   }
 
@@ -336,7 +360,7 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                                   .map(
                                     (source) => DropdownMenuItem(
                                       value: source,
-                                      child: Text(source.label),
+                                      child: Text(_metricSourceLabel(source)),
                                     ),
                                   )
                                   .toList(),
@@ -425,7 +449,7 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    '${_selectedMetricSource.label} • $_periodDescription',
+                                    '${_metricSourceLabel(_selectedMetricSource)} • $_periodDescription',
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium
@@ -454,7 +478,6 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                           padding: const EdgeInsets.only(bottom: 12),
                           child: _SupplierCard(
                             supplier: supplier,
-                            metricSource: _selectedMetricSource,
                             formatCurrency: _formatCurrency,
                             formatVolume: _formatVolume,
                             logoUrl: _supplierLogoUrl(supplier.code),
@@ -475,7 +498,6 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
 class _SupplierCard extends StatelessWidget {
   const _SupplierCard({
     required this.supplier,
-    required this.metricSource,
     required this.formatCurrency,
     required this.formatVolume,
     required this.logoUrl,
@@ -483,24 +505,10 @@ class _SupplierCard extends StatelessWidget {
   });
 
   final SupplierAnalysisItem supplier;
-  final KpiMetricSource metricSource;
   final String Function(double value) formatCurrency;
   final String Function(double value) formatVolume;
   final String logoUrl;
   final bool isGeneral;
-
-  double get _displayAmount {
-    if (metricSource == KpiMetricSource.faturamento) {
-      return supplier.grossAmount + supplier.returnAmount;
-    }
-    return supplier.grossAmount;
-  }
-
-  String get _financialTitle {
-    return metricSource == KpiMetricSource.faturamento
-        ? 'Financeiro Liquido'
-        : 'Financeiro Bruto';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -579,20 +587,20 @@ class _SupplierCard extends StatelessWidget {
               runSpacing: 10,
               children: [
                 _MiniMetricTile(
-                  title: _financialTitle,
-                  value: formatCurrency(_displayAmount),
+                  title: 'Financeiro Liquido',
+                  value: formatCurrency(supplier.netAmount),
                 ),
                 _MiniMetricTile(
-                  title: 'Volume Bruto',
-                  value: formatVolume(supplier.grossVolume),
+                  title: 'Volume Liquido',
+                  value: formatVolume(supplier.netVolume),
                 ),
                 _MiniMetricTile(
-                  title: 'Pedidos',
-                  value: '${supplier.grossOrders}',
+                  title: 'Pedidos Liquidos',
+                  value: '${supplier.netOrders}',
                 ),
                 _MiniMetricTile(
-                  title: 'Positivação Bruta',
-                  value: '${supplier.grossPositivation}',
+                  title: 'Positivação Liquida',
+                  value: '${supplier.netPositivation}',
                 ),
               ],
             ),

@@ -8,6 +8,7 @@ import '../core/supabase_config.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
 import '../models/blocked_orders_overview.dart';
+import '../models/customers_without_purchase.dart';
 import '../models/delinquency_overview.dart';
 import '../models/kpi_metric_source.dart';
 import '../models/performance_overview.dart';
@@ -509,6 +510,32 @@ class AppRepository {
     }
 
     return BlockedOrdersOverview.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<CustomersWithoutPurchaseOverview> getCustomersWithoutPurchase({
+    required DateTime start,
+    required DateTime end,
+    String? targetScopeProfileSlug,
+    String? targetScopeOwnerCode,
+    String? targetSupplierCode,
+  }) async {
+    await _ensureCurrentUserAccess();
+    final response = await _supabase.rpc(
+      'get_customers_without_purchase',
+      params: <String, dynamic>{
+        'window_start': start.toUtc().toIso8601String(),
+        'window_end': end.toUtc().toIso8601String(),
+        'target_scope_profile_slug': targetScopeProfileSlug,
+        'target_scope_owner_code': targetScopeOwnerCode,
+        'target_supplier_code': targetSupplierCode,
+      },
+    );
+
+    if (response is! Map) {
+      return CustomersWithoutPurchaseOverview.empty();
+    }
+
+    return CustomersWithoutPurchaseOverview.fromJson(_stringKeyedMap(response));
   }
 
   Future<List<ReturnOrderDetail>> getReturnOrderDetails({

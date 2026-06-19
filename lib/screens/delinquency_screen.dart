@@ -32,11 +32,22 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
   String? _selectedScopeValue;
   String _searchTerm = '';
 
-  bool get _showsScopeSelector => _overview.availableScopes.isNotEmpty;
+  bool get _showsScopeSelector => _scopeOptions.isNotEmpty;
   bool get _viewerIsSupervisor =>
       _overview.viewerProfileSlug == AppProfile.supervisorSlug;
   bool get _viewerIsCoordinator =>
       _overview.viewerProfileSlug == AppProfile.coordinatorSlug;
+
+  List<DelinquencyScopeOption> get _scopeOptions {
+    final seenValues = <String>{};
+    final options = <DelinquencyScopeOption>[];
+    for (final scope in _overview.availableScopes) {
+      if (seenValues.add(scope.value)) {
+        options.add(scope);
+      }
+    }
+    return options;
+  }
 
   List<DelinquencyGroup> get _filteredGroups {
     final term = _searchTerm.trim().toLowerCase();
@@ -92,12 +103,15 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
         return;
       }
 
+      final nextScopeValue = _scopeValue(
+        profileSlug: overview.selectedScopeProfileSlug,
+        ownerCode: overview.selectedScopeOwnerCode,
+      );
       setState(() {
         _overview = overview;
-        _selectedScopeValue = _scopeValue(
-          profileSlug: overview.selectedScopeProfileSlug,
-          ownerCode: overview.selectedScopeOwnerCode,
-        );
+        _selectedScopeValue = _scopeValueExists(overview, nextScopeValue)
+            ? nextScopeValue
+            : null;
         _loading = false;
       });
     } catch (error) {
@@ -124,7 +138,7 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
       return null;
     }
 
-    for (final scope in _overview.availableScopes) {
+    for (final scope in _scopeOptions) {
       if (scope.value == value) {
         return scope;
       }
@@ -135,6 +149,19 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
 
   DelinquencyScopeOption? get _selectedScope =>
       _scopeFromValue(_selectedScopeValue);
+
+  bool _scopeValueExists(DelinquencyOverview overview, String? value) {
+    if (value == null) {
+      return true;
+    }
+    final seenValues = <String>{};
+    for (final scope in overview.availableScopes) {
+      if (seenValues.add(scope.value) && scope.value == value) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   Future<void> _handleScopeChanged(String? value) async {
     if (value == _selectedScopeValue) {
@@ -396,7 +423,9 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
               const SizedBox(height: 18),
               DropdownButtonFormField<String?>(
                 key: ValueKey<String?>(_selectedScopeValue),
-                initialValue: _selectedScopeValue,
+                initialValue: _scopeValueExists(_overview, _selectedScopeValue)
+                    ? _selectedScopeValue
+                    : null,
                 isExpanded: true,
                 decoration: InputDecoration(
                   labelText: _scopeSelectorLabel(),
@@ -407,7 +436,7 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
                     value: null,
                     child: _dropdownLabel(_allScopesLabel()),
                   ),
-                  ..._overview.availableScopes.map(
+                  ..._scopeOptions.map(
                     (scope) => DropdownMenuItem<String?>(
                       value: scope.value,
                       child: _dropdownLabel(

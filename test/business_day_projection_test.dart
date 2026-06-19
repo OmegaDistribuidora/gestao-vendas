@@ -41,4 +41,42 @@ void main() {
     expect(summary.projectedProgressPct, closeTo(100, 0.001));
     expect(summary.paceStatus, ProjectionPaceStatus.onTrack);
   });
+
+  test(
+    'calculates required daily value including the current business day',
+    () {
+      final summary = BusinessDayProjection.summarize(
+        actualValue: 1400,
+        targetValue: 2100,
+        monthStart: DateTime(2026, 3, 1),
+        referenceDate: DateTime(2026, 3, 20),
+      );
+
+      expect(summary.monthContext.remainingBusinessDays, 7);
+      expect(summary.requiredPerBusinessDay, closeTo(100, 0.001));
+    },
+  );
+
+  test('does not include reference date when it is not a business day', () {
+    final summary = BusinessDayProjection.summarize(
+      actualValue: 1400,
+      targetValue: 2000,
+      monthStart: DateTime(2026, 3, 1),
+      referenceDate: DateTime(2026, 3, 21),
+    );
+
+    expect(summary.monthContext.remainingBusinessDays, 6);
+    expect(summary.requiredPerBusinessDay, closeTo(100, 0.001));
+  });
+
+  test('returns zero required daily value when target is already reached', () {
+    final summary = BusinessDayProjection.summarize(
+      actualValue: 2200,
+      targetValue: 2000,
+      monthStart: DateTime(2026, 3, 1),
+      referenceDate: DateTime(2026, 3, 20),
+    );
+
+    expect(summary.requiredPerBusinessDay, 0);
+  });
 }
