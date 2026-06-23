@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:in_app_update/in_app_update.dart';
 
 import '../core/app_theme.dart';
 import '../models/app_user.dart';
@@ -20,6 +23,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   AppUser? _sessionUser;
   String? _errorMessage;
   RememberedLogin? _rememberedLogin;
+  bool _updateCheckStarted = false;
 
   @override
   void initState() {
@@ -53,6 +57,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
         _loading = false;
         _sessionUser = sessionUser;
       });
+      _scheduleUpdateCheck();
     } catch (error) {
       if (!mounted) {
         return;
@@ -62,6 +67,72 @@ class _AppBootstrapState extends State<AppBootstrap> {
         _loading = false;
         _errorMessage = 'Falha ao inicializar os dados remotos.\n$error';
       });
+    }
+  }
+
+  void _scheduleUpdateCheck() {
+    if (_updateCheckStarted) {
+      return;
+    }
+    _updateCheckStarted = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_checkForFlexibleUpdate());
+    });
+  }
+
+  Future<void> _checkForFlexibleUpdate() async {
+    try {
+      final updateInfo = await InAppUpdate.checkForUpdate();
+      if (!mounted) {
+        return;
+      }
+
+      if (updateInfo.installStatus == InstallStatus.downloaded) {
+        _showUpdateReadyMessage();
+        return;
+      }
+
+      if (updateInfo.updateAvailability != UpdateAvailability.updateAvailable ||
+          !updateInfo.flexibleUpdateAllowed) {
+        return;
+      }
+
+      final result = await InAppUpdate.startFlexibleUpdate();
+      if (!mounted || result != AppUpdateResult.success) {
+        return;
+      }
+      _showUpdateReadyMessage();
+    } catch (_) {
+      // Play In-App Updates is unavailable for sideloaded APKs and emulators.
+    }
+  }
+
+  void _showUpdateReadyMessage() {
+    if (!mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Atualizacao pronta para instalar.'),
+        duration: const Duration(days: 1),
+        action: SnackBarAction(
+          label: 'Instalar',
+          onPressed: () {
+            unawaited(_completeFlexibleUpdate());
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _completeFlexibleUpdate() async {
+    try {
+      await InAppUpdate.completeFlexibleUpdate();
+    } catch (_) {
+      // Google Play will offer the update again on a future app session.
     }
   }
 

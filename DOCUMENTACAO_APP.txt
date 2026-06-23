@@ -1,0 +1,614 @@
+DOCUMENTACAO DO APP - GESTAO DE VENDAS
+======================================
+
+Ultima atualizacao desta documentacao: 22/06/2026
+Versao atual do projeto: 0.6.0+12
+Pacote Android: br.com.omegadistribuidora.gestao_vendas
+
+
+1. OBJETIVO DO APLICATIVO
+-------------------------
+
+O Gestao de Vendas e um aplicativo Android interno da Omega Distribuidora.
+Ele centraliza indicadores comerciais, informacoes operacionais e consultas
+por hierarquia de vendedores, supervisores e coordenadores.
+
+O aplicativo usa o Supabase como backend de autenticacao, autorizacao e
+consulta. Os dados operacionais sao extraidos principalmente do Oracle
+WinThor por scripts Python e carregados no Supabase.
+
+
+2. TECNOLOGIAS PRINCIPAIS
+-------------------------
+
+- Flutter e Dart para o aplicativo Android.
+- Material Design para a interface.
+- Supabase Auth para autenticacao.
+- Supabase PostgreSQL para dados, regras, RLS e RPCs.
+- Python para integracoes e cargas ETL.
+- Oracle WinThor como fonte dos dados operacionais.
+- Apache Airflow para agendamento das cargas documentadas no repositorio.
+- Google Play Console para distribuicao em teste fechado e futuras versoes.
+
+Dependencias Flutter relevantes:
+
+- supabase_flutter
+- flutter_secure_storage
+- intl
+- package_info_plus
+- webview_flutter
+- flutter_map
+- latlong2
+
+
+3. ESTRUTURA DO REPOSITORIO
+---------------------------
+
+lib/main.dart
+  Inicializa Flutter e Supabase.
+
+lib/app.dart
+  Configura MaterialApp, tema, localizacao e tela inicial.
+
+lib/screens/app_bootstrap.dart
+  Restaura sessao, carrega login lembrado e decide entre Login e Home.
+
+lib/services/app_repository.dart
+  Camada central de acesso ao Supabase. Contem autenticacao, consultas,
+  chamadas RPC e operacoes administrativas.
+
+lib/models/
+  Modelos Dart que convertem os JSONs retornados pelo Supabase.
+
+lib/screens/
+  Telas dos modulos funcionais e administrativos.
+
+lib/utils/
+  Funcoes auxiliares, normalizacao de texto e projecao por dias uteis.
+
+supabase/migrations/
+  Historico de tabelas, indices, politicas RLS, funcoes e RPCs.
+
+tool/
+  Scripts Python de extracao do Oracle e carga no Supabase.
+
+airflow/
+  DAGs versionadas para orquestracao das cargas.
+
+test/
+  Testes automatizados do projeto Flutter.
+
+
+4. PERFIS DE USUARIO
+---------------------
+
+Perfis principais reconhecidos no app:
+
+- admin
+- vendedor
+- supervisor
+- coordenador
+- diretoria
+- outros
+- sem_perfil
+
+Regras gerais:
+
+- Vendedor visualiza sua propria carteira e seus indicadores.
+- Supervisor visualiza o consolidado dos vendedores ligados a ele e pode
+  filtrar por vendedor nos modulos que oferecem filtro hierarquico.
+- Coordenador visualiza o consolidado dos supervisores e vendedores ligados
+  a ele, com os filtros permitidos por cada modulo.
+- Admin acessa Administracao e Relatorios.
+- Diretoria e Outros usam as regras definidas por cada RPC e modulo.
+- O modulo Clientes sem compra e exclusivo para vendedor, supervisor e
+  coordenador, inclusive com validacao no backend.
+
+As regras de escopo devem sempre ser validadas no Supabase. Esconder um item
+na interface nao substitui a autorizacao no backend.
+
+
+5. AUTENTICACAO E SESSAO
+------------------------
+
+- O usuario informa identificador e senha na tela de login.
+- O backend resolve o contexto de login e a identidade tecnica usada no
+  Supabase Auth.
+- O AppRepository autentica a sessao e carrega o AppUser correspondente.
+- A opcao de lembrar login armazena somente o minimo necessario usando
+  armazenamento seguro local.
+- Ao sair, o app limpa a preferencia local e encerra a sessao no Supabase.
+- Usuarios inativos ou sem acesso valido devem ser bloqueados pelo backend.
+
+
+6. MODULOS FUNCIONAIS
+----------------------
+
+6.1 Home e KPIs
+
+- Exibe boas-vindas, perfil e versao instalada.
+- Mostra atalhos para os modulos permitidos.
+- Apresenta indicadores comerciais conforme perfil e periodo.
+- Os valores financeiros usam as regras de venda, faturamento e devolucao
+  definidas nas RPCs do Supabase.
+
+6.2 Performance
+
+- Acompanha metas e realizado mensal.
+- Trabalha com vendedor, supervisor e coordenador, alem das visoes previstas
+  pelo backend.
+- Possui seletor mensal e filtros hierarquicos.
+- Exibe indicadores financeiros, positivacao, SKU e projecao por dias uteis.
+- Mostra media por dia util e necessidade diaria para atingir a meta.
+- A projecao considera fins de semana e feriados configurados na regra de
+  dias uteis.
+
+6.3 Analise por Fornecedor
+
+- Compara valores por fornecedor no periodo selecionado.
+- Os valores apresentados sao liquidos, com devolucoes deduzidas.
+- Exibe valor, volume, pedidos e positivacao conforme os dados disponiveis.
+- Usa a tabela de fornecedores para nomes e identificacao visual.
+
+6.4 Devolucoes
+
+- Exibe analise de devolucoes por periodo e escopo do usuario.
+- Permite consultar os detalhes dos itens devolvidos.
+- Os detalhes incluem produto, quantidade, volume, valor e motivo.
+
+6.5 Inadimplencia
+
+- Exibe titulos e clientes inadimplentes conforme hierarquia.
+- Permite filtro por vendedor ou supervisor quando aplicavel.
+- Agrupa dados por cliente, pedido e demais identificadores financeiros.
+- O backend limita o acesso ao escopo do usuario autenticado.
+
+6.6 Pedidos Bloqueados
+
+- Exibe pedidos bloqueados no fluxo comercial.
+- Separa informacoes de venda e bonificacao quando aplicavel.
+- Permite expandir os itens do pedido.
+- O escopo e determinado pelo perfil e pela hierarquia do usuario.
+
+6.7 Clientes sem Compra
+
+Disponibilidade:
+
+- Somente vendedor, supervisor e coordenador.
+
+Regra de carteira:
+
+- Vendedor ve clientes das suas bases.
+- Supervisor ve clientes das bases de seus vendedores.
+- Coordenador ve clientes das bases de sua hierarquia.
+- Clientes bloqueados e desbloqueados sao exibidos.
+
+Periodo:
+
+- O filtro e mensal.
+- O cliente aparece quando nao comprou no mes selecionado.
+- O valor de dias sem compra e sempre calculado em relacao ao dia atual,
+  independentemente do mes selecionado.
+
+Filtro por fornecedor:
+
+- Sem fornecedor selecionado, o cliente aparece se nao comprou nenhum
+  fornecedor no mes.
+- Com fornecedor selecionado, o cliente aparece se nao comprou aquele
+  fornecedor no mes.
+- A compra de outro fornecedor no mesmo mes nao remove o cliente do resultado.
+
+Classificacao:
+
+- Regular: comprou nos tres meses anteriores ao mes selecionado.
+- Semi-Regular: comprou nos dois meses imediatamente anteriores.
+- Normal: nao atende as duas condicoes anteriores.
+- Quando ha fornecedor selecionado, a classificacao considera as compras do
+  fornecedor selecionado.
+
+Informacoes do card:
+
+- Codigo e nome do cliente.
+- Fantasia ou CNPJ.
+- Vendedor responsavel.
+- Dias sem compra.
+- Classificacao de regularidade.
+- Status bloqueado com indicacao amarela.
+- Motivo do bloqueio quando informado.
+- Data e valor da ultima compra.
+- Limite de credito.
+- Rua e numero, bairro e cidade/UF separados.
+- Borda de alerta entre amarelo e vermelho conforme dias sem compra.
+
+Pedidos recentes:
+
+- O card abre os tres pedidos mais recentes disponiveis.
+- Cada pedido exibe data, valor, volume e quantidade de itens.
+- O pedido pode ser expandido para mostrar fornecedor, codigo e nome do
+  produto, valor, quantidade e volume.
+
+Busca local:
+
+- Codigo do cliente.
+- Nome e fantasia.
+- CNPJ.
+- Status e motivo do bloqueio.
+- Endereco, bairro e cidade.
+- Vendedor, supervisor e coordenador.
+- Classificacao de regularidade.
+
+6.8 Administracao
+
+- Restrita a administradores.
+- Gerencia usuarios, perfis, acessos e senhas conforme as funcoes disponiveis.
+- Operacoes sensiveis devem permanecer no backend ou em Edge Function.
+
+6.9 Relatorios
+
+- Restritos a administradores.
+- Incluem relatorios de uso e eventos registrados pelo aplicativo.
+
+6.10 Mapa de Oportunidades
+
+Disponibilidade:
+
+- Disponivel para vendedor, supervisor e coordenador.
+- Vendedores com meta de SKU no mes corrente sao considerados redes e nao
+  recebem o modulo.
+- Supervisor precisa selecionar um vendedor. Coordenador precisa selecionar
+  primeiro um supervisor e depois um vendedor.
+- A interface e o RPC validam perfil, hierarquia e vendedor selecionado.
+
+Regra da oportunidade:
+
+- A origem e public.dclientes do PostgreSQL "Bases Henrique".
+- CPF/CNPJ e normalizado para conter somente digitos.
+- Documentos ja existentes em pcclient.cgcent no Oracle WinThor sao
+  removidos da carga.
+- A tabela fvendas complementa atividade, numero do endereco, fornecedores e
+  o potencial de mercado, calculado pela media dos ultimos tres pedidos.
+- Se houver menos de tres pedidos, a media usa apenas os pedidos existentes.
+- Somente registros com cidade e coordenadas validas entram no mapa.
+
+Escopo do vendedor:
+
+- O RPC identifica o codigo do vendedor autenticado.
+- Cidade e bairro atendidos sao obtidos de app_customer_seller_bases e
+  app_customers.
+- O vendedor recebe somente oportunidades cuja combinacao normalizada de
+  cidade e bairro coincide com a carteira atual.
+- O mapa carrega um bairro por vez. O seletor mostra "Cidade - Bairro", a
+  quantidade de pontos e centraliza o mapa na regiao selecionada.
+- Um filtro adicional permite restringir pelo ramo de atividade.
+- A lista inicial usa marcadores compactos com documento e coordenadas.
+  Nome, endereco, credito e fornecedores sao consultados somente ao tocar.
+
+Tela:
+
+- Exibe as oportunidades como marcadores sobre o OpenStreetMap.
+- O botao de centralizacao enquadra todos os pontos visiveis.
+- Ao tocar no marcador, abre nome, fantasia, CPF/CNPJ, atividade, cidade,
+  bairro, endereco completo, sugestao de limite de credito, potencial de
+  mercado e fornecedores conhecidos.
+- O resumo informa quantidade de oportunidades, bairros atendidos e horario
+  da ultima carga.
+
+
+7. FLUXO DE DADOS
+------------------
+
+Fluxo geral:
+
+Oracle WinThor
+  -> script Python em tool/
+  -> tabela de staging no Supabase
+  -> funcao apply_*_sync
+  -> tabela operacional public.app_*
+  -> RPC de consulta
+  -> AppRepository
+  -> modelo Dart
+  -> tela Flutter
+
+As cargas reconciliadas usam public.etl_sync_runs para registrar:
+
+- job executado
+- janela da carga
+- status
+- linhas staged, inseridas, atualizadas e removidas
+- horario de conclusao
+- erro resumido, quando houver
+
+As telas usam os horarios dos ETLs concluidos para informar a ultima
+atualizacao dos dados.
+
+
+8. PRINCIPAIS TABELAS DO SUPABASE
+----------------------------------
+
+Administracao e seguranca:
+
+- app_profiles
+- app_users
+- app_modules
+- app_user_module_accesses
+- app_login_events
+- app_module_usage_events
+
+Dados comerciais:
+
+- app_sales_daily_snapshots
+- app_financial_snapshots
+- app_suppliers
+- app_return_order_items
+- app_performance_targets
+- app_performance_sku_monthly
+- app_delinquency_items
+- app_blocked_orders
+- app_customers
+- app_customer_seller_bases
+- app_sales_order_items
+- app_customer_opportunities
+
+Controle de ETL:
+
+- etl_sync_runs
+- tabelas etl_stg_* usadas pelas cargas reconciliadas
+- etl_stg_customer_opportunities
+
+As tabelas devem usar RLS e as operacoes do aplicativo devem preferir RPCs
+security definer com validacao explicita do usuario e do escopo.
+
+
+9. PRINCIPAIS RPCS CONSUMIDAS PELO APP
+---------------------------------------
+
+- resolve_login_context
+- get_home_kpis
+- get_supplier_analysis
+- get_performance_overview
+- get_return_analysis
+- get_return_order_details
+- get_delinquency_overview
+- get_blocked_orders_overview
+- get_customers_without_purchase
+- get_customer_opportunities
+- get_usage_report
+
+Os nomes e assinaturas definitivos devem ser confirmados na migration mais
+recente, pois funcoes podem ser substituidas por migrations posteriores.
+
+
+10. SCRIPTS DE SINCRONIZACAO
+----------------------------
+
+Scripts principais em tool/:
+
+- oracle_sales_sync.py
+  Vendas agregadas por data, pedido, cliente, vendedor e fornecedor.
+
+- oracle_billing_sync.py
+  Faturamento usado nos indicadores financeiros.
+
+- oracle_returns_sync.py
+  Devolucoes financeiras e detalhes dos itens devolvidos.
+
+- oracle_suppliers_sync.py
+  Cadastro de fornecedores.
+
+- oracle_sellers_sync.py
+  Usuarios vendedores e sua hierarquia.
+
+- oracle_performance_sku_sync.py
+  SKU mensal por perfil e fornecedor.
+
+- performance_targets_sync.py
+  Metas de performance.
+
+- oracle_delinquency_sync.py
+  Itens de inadimplencia.
+
+- oracle_blocked_orders_sync.py
+  Pedidos bloqueados e seus itens.
+
+- oracle_customer_base_sync.py
+  Cadastro de clientes e vinculo cliente/vendedor.
+
+- oracle_sales_order_items_sync.py
+  Itens de venda usados nos detalhes de pedidos de clientes sem compra.
+
+- customer_opportunities_sync.py
+  Le public.dclientes e public.fvendas no PostgreSQL Bases Henrique, compara
+  documentos com pcclient no Oracle e reconcilia app_customer_opportunities.
+  Exige variaveis de ambiente para as duas fontes e para o Supabase.
+  Aceita --dry-run para comparar as fontes sem escrever no Supabase.
+  ORACLE_SQLPLUS_PATH e um fallback opcional para bancos Oracle antigos cujo
+  verificador de senha nao seja aceito pelo modo thin do python-oracledb.
+  A leitura PostgreSQL materializa o resultado em tabela temporaria da sessao
+  e processa lotes por documento para manter o uso de memoria previsivel.
+  Esta e uma carga inicial ou manual; nao deve ser agendada periodicamente,
+  pois as tabelas de origem da base Henrique sao estaticas.
+
+- customer_opportunities_prune.py
+  Consulta somente os documentos cadastrados no WinThor e remove da tabela
+  Supabase as oportunidades que ja passaram a existir em pcclient.
+  Nao rele dclientes nem fvendas e faz uma unica RPC de exclusao indexada.
+
+- oracle_financial_sync_common.py
+  Infraestrutura compartilhada para cargas financeiras.
+
+- supabase_sync_common.py
+  Autenticacao tecnica, staging, chamadas RPC e registro das execucoes.
+
+
+11. DAGS DO AIRFLOW
+--------------------
+
+omega_performance_sync
+
+- Agenda padrao: diariamente as 07:20.
+- Executa metas de performance e depois SKU mensal.
+- O horario pode ser sobrescrito por variavel de ambiente.
+
+omega_customer_base_sync
+
+- Agenda padrao: 07:30, 09:30, 11:30, 13:30, 15:30 e 17:30.
+- Nao executa depois das 18:00 na configuracao padrao.
+- Atualiza clientes/base de vendedores e depois itens de pedidos.
+- O horario pode ser sobrescrito por variavel de ambiente.
+
+omega_customer_opportunities_prune
+
+- Agenda padrao: 07:15, 10:15, 13:15 e 16:15.
+- Remove somente oportunidades que ja foram cadastradas no WinThor.
+- Nao consulta a base Henrique e nao reinsere dados durante a rotina.
+- A agenda pode ser sobrescrita por OMEGA_CUSTOMER_OPPORTUNITIES_SCHEDULE.
+- As credenciais das fontes devem existir somente no ambiente do Airflow.
+
+Os demais scripts podem ser executados por outras DAGs/rotinas operacionais
+fora deste repositorio. Antes de mudar frequencias, verificar carga no Oracle,
+volume de staging e timeout das funcoes do Supabase.
+
+
+12. MIGRATIONS DO SUPABASE
+---------------------------
+
+- A baseline inicial esta em 20260520190000_schema_baseline.sql.
+- Evolucoes posteriores ficam em arquivos cronologicos em supabase/migrations/.
+- Nunca editar uma migration que ja foi aplicada em ambiente remoto.
+- Toda alteracao nova deve criar uma migration com timestamp maior.
+- Antes de aplicar, revisar SQL, indices, RLS, grants, assinatura das RPCs e
+  statement_timeout.
+- Depois de aplicar, testar a RPC com um usuario de cada perfil afetado.
+- Segredos, senhas e tokens nunca devem ser gravados em migrations ou commits.
+
+
+13. VERSAO E DISTRIBUICAO ANDROID
+---------------------------------
+
+Versao atual:
+
+- versionName: 0.6.0
+- versionCode: 12
+- Declaracao Flutter: version: 0.6.0+12
+
+Regras para Google Play:
+
+- Cada novo bundle deve usar versionCode maior que todos os ja enviados.
+- Alterar a versao no pubspec.yaml antes do build.
+- Manter o fallback de versao da Home alinhado ao pubspec.yaml.
+- Confirmar versionCode e versionName no manifesto final antes do upload.
+- O applicationId deve continuar:
+  br.com.omegadistribuidora.gestao_vendas
+- O bundle release usa a assinatura configurada localmente no Android.
+- Arquivos de assinatura e senhas nunca devem ser adicionados ao Git.
+
+Atualizacao dentro do app:
+
+- Usar Google Play In-App Updates, da biblioteca Play Core.
+- O fluxo flexivel esta implementado e e verificado uma vez por processo.
+- A nova versao baixa em segundo plano e o app mostra a acao Instalar quando
+  estiver pronta para reiniciar.
+- Fluxo imediato somente para versoes criticas que impedem o uso seguro.
+- A verificacao usa a faixa da Play Store disponivel para a conta do usuario,
+  sem consulta adicional ao Supabase.
+- Funciona apenas quando o app foi instalado pela Google Play e existe um
+  versionCode superior publicado para a conta/faixa do usuario.
+- Erros esperados em APK instalado manualmente e emulador sao ignorados.
+- Guia oficial: https://developer.android.com/guide/playcore/in-app-updates
+
+Comandos usuais:
+
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --debug
+flutter build appbundle --release
+
+Saida padrao do App Bundle:
+
+build/app/outputs/bundle/release/app-release.aab
+
+
+14. DESENVOLVIMENTO E VALIDACAO
+-------------------------------
+
+Antes de entregar uma alteracao:
+
+1. Ler o codigo e a migration mais recente do modulo.
+2. Preservar alteracoes locais que nao fazem parte da tarefa.
+3. Formatar arquivos Dart alterados.
+4. Executar flutter analyze.
+5. Executar flutter test.
+6. Para mudancas visuais, compilar e instalar APK debug no emulador.
+7. Para mudancas de backend, aplicar migration e validar as RPCs afetadas.
+8. Conferir que nenhum segredo entrou no diff.
+9. Conferir versionCode antes de gerar bundle para Google Play.
+
+Emulador usado no desenvolvimento:
+
+- AVD: Pixel_9_API_36
+- Identificador comum quando iniciado: emulator-5554
+
+
+15. SEGURANCA E INFORMACOES SENSIVEIS
+--------------------------------------
+
+Esta documentacao nao contem credenciais.
+
+Regras obrigatorias:
+
+- Nao salvar senhas, tokens, chaves privadas ou strings de conexao no Git.
+- Nao registrar valores reais de variaveis de ambiente em documentacao.
+- Nao publicar arquivos locais de assinatura Android.
+- Nao expor chaves administrativas no aplicativo Flutter.
+- Usar somente a chave publica permitida no cliente.
+- Manter operacoes administrativas no backend.
+- Usar RLS, grants minimos e validacao de auth.uid() nas RPCs.
+- Conferir arquivos staged antes de cada commit.
+
+
+16. MODELO PARA DOCUMENTAR NOVOS MODULOS
+----------------------------------------
+
+Ao adicionar um novo modulo, registrar:
+
+Nome do modulo:
+Objetivo:
+Perfis autorizados:
+Hierarquia e filtros:
+Fonte Oracle/WinThor:
+Select de origem:
+Tabelas Supabase:
+RPCs:
+Modelos Dart:
+Tela Flutter:
+Campos exibidos:
+Regras de calculo:
+Filtros de periodo:
+Detalhes e expansoes:
+Frequencia da carga:
+DAG responsavel:
+Indices necessarios:
+Timeout esperado:
+Testes de backend:
+Testes de interface:
+Observacoes de seguranca:
+
+
+17. OBSERVACOES PARA MANUTENCAO FUTURA
+---------------------------------------
+
+- O AppRepository e o ponto principal para integrar uma nova RPC ao Flutter.
+- Cada RPC deve retornar JSON estavel e os modelos Dart devem tolerar campos
+  ausentes quando isso for seguro.
+- Filtros hierarquicos devem validar relacoes entre usuario autenticado,
+  supervisor, coordenador e vendedor no banco.
+- Valores financeiros devem declarar claramente se sao brutos ou liquidos.
+- Filtros por fornecedor devem ser aplicados apenas ao fornecedor selecionado,
+  sem eliminar compras de outros fornecedores indevidamente.
+- Calculos dependentes da data atual devem usar o fuso America/Sao_Paulo no
+  backend quando a regra for comercial/local.
+- Cargas grandes devem usar staging, reconciliacao, indices adequados e
+  timeouts coerentes com o volume real.
+- Antes de alterar um modulo existente, consultar este arquivo, a tela,
+  o modelo, o metodo do AppRepository e a migration mais recente relacionada.

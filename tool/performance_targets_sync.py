@@ -26,7 +26,7 @@ POSTGRES_HOST = os.getenv("APP_POSTGRES_HOST", "localhost")
 POSTGRES_PORT = int(os.getenv("APP_POSTGRES_PORT", "5432"))
 POSTGRES_DB = os.getenv("APP_POSTGRES_DB", "Omega")
 POSTGRES_USER = os.getenv("APP_POSTGRES_USER", "PwBi")
-POSTGRES_PASSWORD = os.getenv("APP_POSTGRES_PASSWORD", "Om3g@123")
+POSTGRES_PASSWORD = os.getenv("APP_POSTGRES_PASSWORD", "").strip()
 POSTGRES_SCHEMA = os.getenv("APP_POSTGRES_SCHEMA", "filial")
 
 
@@ -120,6 +120,9 @@ def _to_positive_float(value: object | None) -> float:
 
 
 def _get_postgres_connection():
+    if not POSTGRES_PASSWORD:
+        raise RuntimeError("Environment variable APP_POSTGRES_PASSWORD is required.")
+
     return psycopg2.connect(
         host=POSTGRES_HOST,
         port=POSTGRES_PORT,

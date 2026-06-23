@@ -33,6 +33,13 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Local credentials and environment files
+.env
+.env.*
+!.env.example
+*access token*.txt
+*credentials*.json
+
 # Symbolication related
 app.*.symbols
 

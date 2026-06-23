@@ -11,6 +11,7 @@ import '../services/app_repository.dart';
 import 'admin_screen.dart';
 import 'blocked_orders_screen.dart';
 import 'change_password_screen.dart';
+import 'customer_opportunities_map_screen.dart';
 import 'customers_without_purchase_screen.dart';
 import 'delinquency_screen.dart';
 import 'performance_screen.dart';
@@ -46,7 +47,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Versao 0.4.5+9';
+  String _appVersionLabel = 'Versao 0.6.0+12';
+  bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
 
   bool get _isAdmin => widget.currentUser.isAdmin;
@@ -60,6 +62,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _showsPerformanceModule => true;
   bool get _showsCustomersWithoutPurchaseModule =>
       _isSeller || _isSupervisor || _isCoordinator;
+  bool get _showsCustomerOpportunitiesModule =>
+      (_isSeller || _isSupervisor || _isCoordinator) &&
+      _customerOpportunitiesEnabled;
 
   double get _netAmount => _homeKpis.grossAmount + _homeKpis.returnAmount;
   double get _netVolume => _homeKpis.grossVolume + _homeKpis.returnVolume;
@@ -95,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Versao 0.4.5+9';
+        _appVersionLabel = 'Versao 0.6.0+12';
       });
     }
   }
@@ -116,6 +121,15 @@ class _HomeScreenState extends State<HomeScreen> {
         end: end,
         metricSource: KpiMetricSource.venda,
       );
+      var customerOpportunitiesEnabled = _isSupervisor || _isCoordinator;
+      if (_isSeller) {
+        try {
+          customerOpportunitiesEnabled = await _repository
+              .canAccessCustomerOpportunities();
+        } catch (_) {
+          customerOpportunitiesEnabled = false;
+        }
+      }
 
       if (!mounted) {
         return;
@@ -123,6 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _homeKpis = homeKpis;
+        _customerOpportunitiesEnabled = customerOpportunitiesEnabled;
         _loading = false;
       });
     } catch (error) {
@@ -188,6 +203,14 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const CustomersWithoutPurchaseScreen(),
+      ),
+    );
+  }
+
+  Future<void> _openCustomerOpportunities() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const CustomerOpportunitiesMapScreen(),
       ),
     );
   }
@@ -272,6 +295,15 @@ class _HomeScreenState extends State<HomeScreen> {
     await _openCustomersWithoutPurchase();
   }
 
+  Future<void> _openCustomerOpportunitiesFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await _openCustomerOpportunities();
+  }
+
   Future<void> _openChangePasswordFromDrawer() async {
     Navigator.of(context).pop();
     await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -338,6 +370,13 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.person_search_outlined,
           accent: const Color(0xFFD84315),
           onTap: _openCustomersWithoutPurchase,
+        ),
+      if (_showsCustomerOpportunitiesModule)
+        _HomeShortcutData(
+          title: 'Mapa de oportunidades',
+          icon: Icons.map_outlined,
+          accent: const Color(0xFF087B5A),
+          onTap: _openCustomerOpportunities,
         ),
       if (_isAdmin)
         _HomeShortcutData(
@@ -770,6 +809,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         onTap: _openCustomersWithoutPurchaseFromDrawer,
+                      ),
+                    if (_showsCustomerOpportunitiesModule)
+                      ListTile(
+                        leading: const Icon(Icons.map_outlined),
+                        title: const Text('Mapa de Oportunidades'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        onTap: _openCustomerOpportunitiesFromDrawer,
                       ),
                     if (_isAdmin) ...[
                       const SizedBox(height: 8),

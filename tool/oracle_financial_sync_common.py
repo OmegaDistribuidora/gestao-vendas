@@ -76,6 +76,13 @@ def to_float(value: Decimal | float | int | None) -> float:
 
 
 def init_oracle_client_if_available() -> None:
+    if os.getenv("ORACLE_THIN_MODE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        return
+
     candidates = [
         os.getenv("ORACLE_CLIENT_LIB_DIR", "").strip(),
         r"C:\instantclient_23_7",

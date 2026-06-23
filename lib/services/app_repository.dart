@@ -8,6 +8,7 @@ import '../core/supabase_config.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
 import '../models/blocked_orders_overview.dart';
+import '../models/customer_opportunities.dart';
 import '../models/customers_without_purchase.dart';
 import '../models/delinquency_overview.dart';
 import '../models/kpi_metric_source.dart';
@@ -536,6 +537,56 @@ class AppRepository {
     }
 
     return CustomersWithoutPurchaseOverview.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<CustomerOpportunitiesOverview> getCustomerOpportunities({
+    String? targetNeighborhoodKey,
+    String? targetActivityKey,
+    String? targetSupervisorCode,
+    String? targetSellerCode,
+  }) async {
+    await _ensureCurrentUserAccess();
+    final response = await _supabase.rpc(
+      'get_customer_opportunities',
+      params: <String, dynamic>{
+        'target_neighborhood_key': targetNeighborhoodKey,
+        'target_activity_key': targetActivityKey,
+        'target_supervisor_code': targetSupervisorCode,
+        'target_seller_code': targetSellerCode,
+      },
+    );
+
+    if (response is! Map) {
+      return CustomerOpportunitiesOverview.empty();
+    }
+
+    return CustomerOpportunitiesOverview.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<CustomerOpportunity> getCustomerOpportunityDetails(
+    String taxId, {
+    String? targetSellerCode,
+  }) async {
+    await _ensureCurrentUserAccess();
+    final response = await _supabase.rpc(
+      'get_customer_opportunity_details',
+      params: <String, dynamic>{
+        'target_tax_id': taxId,
+        'target_seller_code': targetSellerCode,
+      },
+    );
+
+    if (response is! Map) {
+      throw const RepositoryException('Oportunidade nao encontrada.');
+    }
+
+    return CustomerOpportunity.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<bool> canAccessCustomerOpportunities() async {
+    await _ensureCurrentUserAccess();
+    final response = await _supabase.rpc('can_access_customer_opportunities');
+    return response == true;
   }
 
   Future<List<ReturnOrderDetail>> getReturnOrderDetails({
