@@ -47,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Versao 0.6.0+12';
+  String _appVersionLabel = 'Versao 0.7.0+13';
   bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
 
@@ -100,7 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Versao 0.6.0+12';
+        _appVersionLabel = 'Versao 0.7.0+13';
       });
     }
   }

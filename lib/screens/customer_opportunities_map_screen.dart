@@ -236,6 +236,11 @@ class _CustomerOpportunitiesMapScreenState
                 maxNativeZoom: 19,
               ),
               MarkerClusterLayerWidget(
+                key: ValueKey<String>(
+                  '${_selectedSellerCode ?? ''}|'
+                  '${_selectedNeighborhoodKey ?? ''}|'
+                  '${_selectedActivityKey ?? ''}',
+                ),
                 options: MarkerClusterLayerOptions(
                   markers: _buildMarkers(),
                   size: const Size(44, 44),
@@ -369,9 +374,9 @@ class _CustomerOpportunitiesMapScreenState
               child: Semantics(
                 button: true,
                 label: 'Abrir oportunidade',
-                child: InkResponse(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: () => _showOpportunity(opportunity),
-                  radius: 24,
                   child: const Icon(
                     Icons.location_on_rounded,
                     size: 42,

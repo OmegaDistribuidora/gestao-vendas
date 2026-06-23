@@ -17,18 +17,34 @@ class AppBootstrap extends StatefulWidget {
   State<AppBootstrap> createState() => _AppBootstrapState();
 }
 
-class _AppBootstrapState extends State<AppBootstrap> {
+class _AppBootstrapState extends State<AppBootstrap>
+    with WidgetsBindingObserver {
   final AppRepository _repository = AppRepository.instance;
   bool _loading = true;
   AppUser? _sessionUser;
   String? _errorMessage;
   RememberedLogin? _rememberedLogin;
   bool _updateCheckStarted = false;
+  bool _updateCheckInProgress = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initialize();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _updateCheckStarted) {
+      unawaited(_checkForFlexibleUpdate());
+    }
   }
 
   Future<void> _initialize() async {
@@ -81,6 +97,10 @@ class _AppBootstrapState extends State<AppBootstrap> {
   }
 
   Future<void> _checkForFlexibleUpdate() async {
+    if (_updateCheckInProgress) {
+      return;
+    }
+    _updateCheckInProgress = true;
     try {
       final updateInfo = await InAppUpdate.checkForUpdate();
       if (!mounted) {
@@ -104,6 +124,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
       _showUpdateReadyMessage();
     } catch (_) {
       // Play In-App Updates is unavailable for sideloaded APKs and emulators.
+    } finally {
+      _updateCheckInProgress = false;
     }
   }
 

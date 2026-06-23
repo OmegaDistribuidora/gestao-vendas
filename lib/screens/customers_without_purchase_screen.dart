@@ -33,6 +33,8 @@ class _CustomersWithoutPurchaseScreenState
   String? _errorMessage;
   String? _selectedScopeValue;
   String? _selectedSupplierCode;
+  String _selectedStatusFilter = 'all';
+  String? _selectedDistrictKey;
   String _searchTerm = '';
   DateTime _selectedMonthStart = DateTime(
     DateTime.now().year,
@@ -71,6 +73,24 @@ class _CustomersWithoutPurchaseScreenState
     return options;
   }
 
+  List<_DistrictFilterOption> get _districtOptions {
+    final labelsByKey = <String, String>{};
+    for (final customer in _overview.customers) {
+      final label = customer.district.trim();
+      if (label.isEmpty) {
+        continue;
+      }
+      labelsByKey.putIfAbsent(label.toLowerCase(), () => label);
+    }
+    final options = labelsByKey.entries
+        .map(
+          (entry) => _DistrictFilterOption(key: entry.key, label: entry.value),
+        )
+        .toList();
+    options.sort((a, b) => a.label.compareTo(b.label));
+    return options;
+  }
+
   List<_MonthOption> get _monthOptions {
     final now = DateTime.now();
     final current = DateTime(now.year, now.month, 1);
@@ -92,11 +112,21 @@ class _CustomersWithoutPurchaseScreenState
 
   List<CustomerWithoutPurchase> get _filteredCustomers {
     final term = _searchTerm.trim().toLowerCase();
-    if (term.isEmpty) {
-      return _overview.customers;
-    }
-
     return _overview.customers.where((customer) {
+      final isBlocked = customer.status.toLowerCase() == 'bloqueado';
+      if (_selectedStatusFilter == 'blocked' && !isBlocked) {
+        return false;
+      }
+      if (_selectedStatusFilter == 'unblocked' && isBlocked) {
+        return false;
+      }
+      if (_selectedDistrictKey != null &&
+          customer.district.trim().toLowerCase() != _selectedDistrictKey) {
+        return false;
+      }
+      if (term.isEmpty) {
+        return true;
+      }
       return customer.codcli.toLowerCase().contains(term) ||
           customer.clientName.toLowerCase().contains(term) ||
           customer.fantasia.toLowerCase().contains(term) ||
@@ -167,6 +197,10 @@ class _CustomersWithoutPurchaseScreenState
         profileSlug: overview.selectedScopeProfileSlug,
         ownerCode: overview.selectedScopeOwnerCode,
       );
+      final availableDistrictKeys = overview.customers
+          .map((customer) => customer.district.trim().toLowerCase())
+          .where((district) => district.isNotEmpty)
+          .toSet();
       setState(() {
         _overview = overview;
         _selectedScopeValue = _scopeValueExists(overview, nextScopeValue)
@@ -177,6 +211,10 @@ class _CustomersWithoutPurchaseScreenState
               (supplier) => supplier.code == _selectedSupplierCode,
             )
             ? _selectedSupplierCode
+            : null;
+        _selectedDistrictKey =
+            availableDistrictKeys.contains(_selectedDistrictKey)
+            ? _selectedDistrictKey
             : null;
         _loading = false;
       });
@@ -274,6 +312,24 @@ class _CustomersWithoutPurchaseScreenState
       _selectedSupplierCode = value;
     });
     await _reloadCurrentOverview();
+  }
+
+  void _handleStatusFilterChanged(String? value) {
+    if (value == null || value == _selectedStatusFilter) {
+      return;
+    }
+    setState(() {
+      _selectedStatusFilter = value;
+    });
+  }
+
+  void _handleDistrictFilterChanged(String? value) {
+    if (value == _selectedDistrictKey) {
+      return;
+    }
+    setState(() {
+      _selectedDistrictKey = value;
+    });
   }
 
   Future<void> _reloadCurrentOverview() {
@@ -543,6 +599,62 @@ class _CustomersWithoutPurchaseScreenState
                 onChanged: _handleSupplierChanged,
               ),
             ],
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: ValueKey<String>('customer-status-$_selectedStatusFilter'),
+              initialValue: _selectedStatusFilter,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Status do cliente',
+                prefixIcon: Icon(Icons.lock_outline_rounded),
+              ),
+              items: const [
+                DropdownMenuItem<String>(
+                  value: 'all',
+                  child: Text('Bloqueados e desbloqueados'),
+                ),
+                DropdownMenuItem<String>(
+                  value: 'blocked',
+                  child: Text('Somente bloqueados'),
+                ),
+                DropdownMenuItem<String>(
+                  value: 'unblocked',
+                  child: Text('Somente desbloqueados'),
+                ),
+              ],
+              onChanged: _handleStatusFilterChanged,
+            ),
+            if (_districtOptions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                key: ValueKey<String>(
+                  'customer-district-${_selectedDistrictKey ?? 'all'}',
+                ),
+                initialValue: _selectedDistrictKey,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Bairro',
+                  prefixIcon: Icon(Icons.holiday_village_outlined),
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('Todos os bairros'),
+                  ),
+                  ..._districtOptions.map(
+                    (district) => DropdownMenuItem<String?>(
+                      value: district.key,
+                      child: Text(
+                        district.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+                onChanged: _handleDistrictFilterChanged,
+              ),
+            ],
           ],
         ),
       ),
@@ -734,7 +846,7 @@ class _CustomersWithoutPurchaseScreenState
                 children: [
                   Expanded(
                     child: _MiniValue(
-                      label: 'Ultima compra',
+                      label: 'Últ. Compra',
                       value: _formatDate(customer.lastPurchaseDate),
                     ),
                   ),
@@ -911,6 +1023,9 @@ class _SummaryPill extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: const Color(0xFF5E6A7C),
               fontWeight: FontWeight.w700,
@@ -1107,6 +1222,13 @@ class _OrderItemRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DistrictFilterOption {
+  const _DistrictFilterOption({required this.key, required this.label});
+
+  final String key;
+  final String label;
 }
 
 class _MonthOption {

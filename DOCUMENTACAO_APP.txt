@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 22/06/2026
-Versao atual do projeto: 0.6.0+12
+Ultima atualizacao desta documentacao: 23/06/2026
+Versao atual do projeto: 0.7.0+13
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -198,6 +198,11 @@ Filtro por fornecedor:
   fornecedor no mes.
 - A compra de outro fornecedor no mesmo mes nao remove o cliente do resultado.
 
+Filtros locais:
+
+- Status: todos, somente bloqueados ou somente desbloqueados.
+- Bairro: lista os bairros presentes no resultado carregado.
+
 Classificacao:
 
 - Regular: comprou nos tres meses anteriores ao mes selecionado.
@@ -282,6 +287,9 @@ Escopo do vendedor:
 - Um filtro adicional permite restringir pelo ramo de atividade.
 - A lista inicial usa marcadores compactos com documento e coordenadas.
   Nome, endereco, credito e fornecedores sao consultados somente ao tocar.
+- Coordenadas fora dos limites do Brasil ou a mais de 25 km da mediana dos
+  pontos do bairro sao ocultadas quando o bairro possui pelo menos cinco
+  oportunidades. Isso remove desvios evidentes, inclusive pontos no mar.
 
 Tela:
 
@@ -487,9 +495,9 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao atual:
 
-- versionName: 0.6.0
-- versionCode: 12
-- Declaracao Flutter: version: 0.6.0+12
+- versionName: 0.7.0
+- versionCode: 13
+- Declaracao Flutter: version: 0.7.0+13
 
 Regras para Google Play:
 
@@ -505,7 +513,8 @@ Regras para Google Play:
 Atualizacao dentro do app:
 
 - Usar Google Play In-App Updates, da biblioteca Play Core.
-- O fluxo flexivel esta implementado e e verificado uma vez por processo.
+- O fluxo flexivel esta implementado na inicializacao e volta a verificar o
+  estado quando o aplicativo retorna ao primeiro plano.
 - A nova versao baixa em segundo plano e o app mostra a acao Instalar quando
   estiver pronta para reiniciar.
 - Fluxo imediato somente para versoes criticas que impedem o uso seguro.
