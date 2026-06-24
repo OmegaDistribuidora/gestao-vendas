@@ -402,6 +402,9 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   }
 
   Widget _buildMonthFilterCard() {
+    final businessDays = BusinessDayProjection.buildMonthContext(
+      _projectionMonthStart,
+    );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -489,6 +492,25 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                   .toList(),
               onChanged: _handleMonthChanged,
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(
+                  Icons.event_available_outlined,
+                  size: 20,
+                  color: primaryColor,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Dias úteis: ${businessDays.elapsedBusinessDays}/'
+                  '${businessDays.totalBusinessDays}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF465267),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -531,8 +553,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       requiredDailyLabel: _formatRequiredCurrency(summary),
       actualProgressPct: summary.actualProgressPct,
       projectedProgressPct: summary.projectedProgressPct,
-      elapsedBusinessDays: summary.monthContext.elapsedBusinessDays,
-      totalBusinessDays: summary.monthContext.totalBusinessDays,
       paceStatus: summary.paceStatus,
     );
   }
@@ -571,8 +591,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       requiredDailyLabel: _formatRequiredInteger(summary),
       actualProgressPct: summary.actualProgressPct,
       projectedProgressPct: summary.projectedProgressPct,
-      elapsedBusinessDays: summary.monthContext.elapsedBusinessDays,
-      totalBusinessDays: summary.monthContext.totalBusinessDays,
       paceStatus: summary.paceStatus,
     );
   }
@@ -847,8 +865,6 @@ class _MetricPanelData {
     required this.requiredDailyLabel,
     required this.actualProgressPct,
     required this.projectedProgressPct,
-    required this.elapsedBusinessDays,
-    required this.totalBusinessDays,
     required this.paceStatus,
   });
 
@@ -865,8 +881,6 @@ class _MetricPanelData {
   final String requiredDailyLabel;
   final double? actualProgressPct;
   final double? projectedProgressPct;
-  final int elapsedBusinessDays;
-  final int totalBusinessDays;
   final ProjectionPaceStatus paceStatus;
 }
 
@@ -995,12 +1009,6 @@ class _MetricProjectionPanel extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _InfoPill(
-                    icon: Icons.calendar_month_outlined,
-                    label:
-                        'Dias uteis: ${data.elapsedBusinessDays}/${data.totalBusinessDays}',
-                    maxWidth: constraints.maxWidth,
-                  ),
                   _InfoPill(
                     icon: Icons.flag_outlined,
                     label: 'Nec. Diária: ${data.requiredDailyLabel}',

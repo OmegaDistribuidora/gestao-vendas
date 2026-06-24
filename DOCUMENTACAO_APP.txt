@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 23/06/2026
-Versao atual do projeto: 0.7.0+13
+Ultima atualizacao desta documentacao: 24/06/2026
+Versao atual do projeto: 0.8.0+14
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -139,6 +139,7 @@ na interface nao substitui a autorizacao no backend.
   pelo backend.
 - Possui seletor mensal e filtros hierarquicos.
 - Exibe indicadores financeiros, positivacao, SKU e projecao por dias uteis.
+- Exibe a quantidade de dias uteis uma unica vez junto ao seletor mensal.
 - Mostra media por dia util e necessidade diaria para atingir a meta.
 - A projecao considera fins de semana e feriados configurados na regra de
   dias uteis.
@@ -202,6 +203,10 @@ Filtros locais:
 
 - Status: todos, somente bloqueados ou somente desbloqueados.
 - Bairro: lista os bairros presentes no resultado carregado.
+- Os indicadores Regular, Semi-Regular e Normal funcionam como filtros
+  rapidos e podem ser alternados por toque.
+- Total e contagens por classificacao sao recalculados considerando periodo,
+  hierarquia, fornecedor, status, bairro, busca e classificacao selecionados.
 
 Classificacao:
 
@@ -462,6 +467,8 @@ omega_customer_base_sync
 - Agenda padrao: 07:30, 09:30, 11:30, 13:30, 15:30 e 17:30.
 - Nao executa depois das 18:00 na configuracao padrao.
 - Atualiza clientes/base de vendedores e depois itens de pedidos.
+- A DAG implantada no Airflow executa os scripts versionados em tool/ e
+  carrega as credenciais somente do arquivo de ambiente operacional externo.
 - O horario pode ser sobrescrito por variavel de ambiente.
 
 omega_customer_opportunities_prune
@@ -495,9 +502,9 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao atual:
 
-- versionName: 0.7.0
-- versionCode: 13
-- Declaracao Flutter: version: 0.7.0+13
+- versionName: 0.8.0
+- versionCode: 14
+- Declaracao Flutter: version: 0.8.0+14
 
 Regras para Google Play:
 
@@ -515,6 +522,8 @@ Atualizacao dentro do app:
 - Usar Google Play In-App Updates, da biblioteca Play Core.
 - O fluxo flexivel esta implementado na inicializacao e volta a verificar o
   estado quando o aplicativo retorna ao primeiro plano.
+- A verificacao comeca no primeiro frame e nao depende do carregamento do
+  Supabase terminar com sucesso.
 - A nova versao baixa em segundo plano e o app mostra a acao Instalar quando
   estiver pronta para reiniciar.
 - Fluxo imediato somente para versoes criticas que impedem o uso seguro.

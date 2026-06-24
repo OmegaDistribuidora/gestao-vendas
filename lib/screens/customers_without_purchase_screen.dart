@@ -35,6 +35,7 @@ class _CustomersWithoutPurchaseScreenState
   String? _selectedSupplierCode;
   String _selectedStatusFilter = 'all';
   String? _selectedDistrictKey;
+  String? _selectedRegularityFilter;
   String _searchTerm = '';
   DateTime _selectedMonthStart = DateTime(
     DateTime.now().year,
@@ -122,6 +123,10 @@ class _CustomersWithoutPurchaseScreenState
       }
       if (_selectedDistrictKey != null &&
           customer.district.trim().toLowerCase() != _selectedDistrictKey) {
+        return false;
+      }
+      if (_selectedRegularityFilter != null &&
+          customer.regularityLabel != _selectedRegularityFilter) {
         return false;
       }
       if (term.isEmpty) {
@@ -329,6 +334,14 @@ class _CustomersWithoutPurchaseScreenState
     }
     setState(() {
       _selectedDistrictKey = value;
+    });
+  }
+
+  void _handleRegularityFilterChanged(String? value) {
+    setState(() {
+      _selectedRegularityFilter = value == _selectedRegularityFilter
+          ? null
+          : value;
     });
   }
 
@@ -662,6 +675,17 @@ class _CustomersWithoutPurchaseScreenState
   }
 
   Widget _buildSummaryCard() {
+    final filteredCustomers = _filteredCustomers;
+    final regularClients = filteredCustomers
+        .where((customer) => customer.regularityLabel == 'Regular')
+        .length;
+    final semiRegularClients = filteredCustomers
+        .where((customer) => customer.regularityLabel == 'Semi-Regular')
+        .length;
+    final normalClients = filteredCustomers
+        .where((customer) => customer.regularityLabel == 'Normal')
+        .length;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -689,23 +713,31 @@ class _CustomersWithoutPurchaseScreenState
               children: [
                 _SummaryPill(
                   label: 'Total',
-                  value: '${_overview.totalClients}',
+                  value: '${filteredCustomers.length}',
                   color: primaryColor,
+                  selected: _selectedRegularityFilter == null,
+                  onTap: () => _handleRegularityFilterChanged(null),
                 ),
                 _SummaryPill(
                   label: 'Regular',
-                  value: '${_overview.regularClients}',
+                  value: '$regularClients',
                   color: const Color(0xFF0B6E4F),
+                  selected: _selectedRegularityFilter == 'Regular',
+                  onTap: () => _handleRegularityFilterChanged('Regular'),
                 ),
                 _SummaryPill(
                   label: 'Semi-Regular',
-                  value: '${_overview.semiRegularClients}',
+                  value: '$semiRegularClients',
                   color: const Color(0xFFFF9800),
+                  selected: _selectedRegularityFilter == 'Semi-Regular',
+                  onTap: () => _handleRegularityFilterChanged('Semi-Regular'),
                 ),
                 _SummaryPill(
                   label: 'Normal',
-                  value: '${_overview.normalClients}',
+                  value: '$normalClients',
                   color: const Color(0xFF5E6A7C),
+                  selected: _selectedRegularityFilter == 'Normal',
+                  onTap: () => _handleRegularityFilterChanged('Normal'),
                 ),
               ],
             ),
@@ -998,40 +1030,55 @@ class _SummaryPill extends StatelessWidget {
     required this.label,
     required this.value,
     required this.color,
+    required this.selected,
+    required this.onTap,
   });
 
   final String label;
   final String value;
   final Color color;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.11),
+    return Material(
+      color: selected
+          ? color.withValues(alpha: 0.18)
+          : color.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
+        side: BorderSide(
+          color: color.withValues(alpha: selected ? 0.72 : 0.18),
+          width: selected ? 1.5 : 1,
+        ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            value,
-            style: TextStyle(color: color, fontWeight: FontWeight.w900),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                value,
+                style: TextStyle(color: color, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: selected ? color : const Color(0xFF5E6A7C),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF5E6A7C),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

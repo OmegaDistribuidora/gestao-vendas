@@ -31,6 +31,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scheduleUpdateCheck();
     _initialize();
   }
 
@@ -73,7 +74,6 @@ class _AppBootstrapState extends State<AppBootstrap>
         _loading = false;
         _sessionUser = sessionUser;
       });
-      _scheduleUpdateCheck();
     } catch (error) {
       if (!mounted) {
         return;
