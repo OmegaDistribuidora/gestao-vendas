@@ -6,6 +6,7 @@ import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_theme.dart';
 import '../models/customer_route.dart';
@@ -23,8 +24,11 @@ class CustomerOpportunitiesMapScreen extends StatefulWidget {
 }
 
 class _CustomerOpportunitiesMapScreenState
-    extends State<CustomerOpportunitiesMapScreen> {
+    extends State<CustomerOpportunitiesMapScreen>
+    with WidgetsBindingObserver {
   static const LatLng _brazilCenter = LatLng(-14.235, -51.9253);
+  static const Duration _routeRefreshInterval = Duration(seconds: 5);
+  static const Duration _routeIdleTimeout = Duration(minutes: 1);
 
   final AppRepository _repository = AppRepository.instance;
   final MapboxDirectionsService _directionsService = MapboxDirectionsService();
@@ -51,6 +55,8 @@ class _CustomerOpportunitiesMapScreenState
   LatLng? _routeOrigin;
   Timer? _locationRefreshTimer;
   bool _locationRefreshInProgress = false;
+  int _routeTrackingGeneration = 0;
+  DateTime? _lastRouteInteractionAt;
   bool _routeLoading = false;
   bool _showRouteDirections = true;
   String? _routeErrorMessage;
@@ -58,15 +64,24 @@ class _CustomerOpportunitiesMapScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stopLocationTracking();
     _directionsService.close();
     _mapController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _stopLocationTracking();
+    }
   }
 
   Future<void> _loadData() async {
@@ -206,6 +221,51 @@ class _CustomerOpportunitiesMapScreenState
           Navigator.of(context).pop();
           await _calculateRoute(opportunity);
         },
+        onOpenExternalRoute: (opportunity) async {
+          Navigator.of(context).pop();
+          await _openRouteInExternalApp(opportunity);
+        },
+      ),
+    );
+  }
+
+  Future<void> _openRouteInExternalApp(CustomerOpportunity opportunity) async {
+    final destination =
+        '${opportunity.latitude.toStringAsFixed(7)},'
+        '${opportunity.longitude.toStringAsFixed(7)}';
+    final directionsUri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'destination': destination,
+      'travelmode': 'driving',
+    });
+    final fallbackUri = Uri.parse(
+      'geo:${opportunity.latitude},${opportunity.longitude}'
+      '?q=${Uri.encodeComponent('$destination (${opportunity.displayName})')}',
+    );
+    final messenger = ScaffoldMessenger.of(context);
+
+    final launchedDirections = await launchUrl(
+      directionsUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (launchedDirections) {
+      return;
+    }
+
+    final launchedFallback = await launchUrl(
+      fallbackUri,
+      mode: LaunchMode.externalApplication,
+    );
+    if (launchedFallback) {
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Nao foi possivel abrir um app de mapa neste aparelho.'),
       ),
     );
   }
@@ -215,6 +275,7 @@ class _CustomerOpportunitiesMapScreenState
     _activeRoute = null;
     _routeOpportunity = null;
     _routeOrigin = null;
+    _lastRouteInteractionAt = null;
     _routeLoading = false;
     _routeErrorMessage = null;
     _showRouteDirections = true;
@@ -282,6 +343,7 @@ class _CustomerOpportunitiesMapScreenState
       setState(() {
         _routeOrigin = origin;
         _activeRoute = route;
+        _lastRouteInteractionAt = DateTime.now();
         _routeLoading = false;
       });
       _startLocationTracking();
@@ -301,9 +363,11 @@ class _CustomerOpportunitiesMapScreenState
 
   void _startLocationTracking() {
     _stopLocationTracking();
+    _lastRouteInteractionAt ??= DateTime.now();
+    final generation = ++_routeTrackingGeneration;
     _locationRefreshTimer = Timer.periodic(
-      const Duration(seconds: 8),
-      (_) => _refreshRouteOrigin(),
+      _routeRefreshInterval,
+      (_) => _refreshRouteFromCurrentLocation(generation),
     );
   }
 
@@ -311,18 +375,43 @@ class _CustomerOpportunitiesMapScreenState
     _locationRefreshTimer?.cancel();
     _locationRefreshTimer = null;
     _locationRefreshInProgress = false;
+    _routeTrackingGeneration++;
   }
 
-  Future<void> _refreshRouteOrigin() async {
+  void _handleRouteInteraction() {
+    if (!_routeModeActive) {
+      return;
+    }
+    _lastRouteInteractionAt = DateTime.now();
+
+    if (_locationRefreshTimer == null &&
+        _activeRoute != null &&
+        _routeOpportunity != null &&
+        !_routeLoading) {
+      _startLocationTracking();
+    }
+  }
+
+  Future<void> _refreshRouteFromCurrentLocation(int generation) async {
     if (!mounted ||
+        generation != _routeTrackingGeneration ||
+        _locationRefreshTimer == null ||
         _locationRefreshInProgress ||
         _routeOpportunity == null ||
         _activeRoute == null) {
       return;
     }
 
+    final lastInteraction = _lastRouteInteractionAt;
+    if (lastInteraction == null ||
+        DateTime.now().difference(lastInteraction) > _routeIdleTimeout) {
+      _stopLocationTracking();
+      return;
+    }
+
     _locationRefreshInProgress = true;
     try {
+      final opportunity = _routeOpportunity!;
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
@@ -340,14 +429,33 @@ class _CustomerOpportunitiesMapScreenState
           timeLimit: Duration(seconds: 12),
         ),
       );
-      if (!mounted || _routeOpportunity == null || _activeRoute == null) {
+      if (!mounted ||
+          generation != _routeTrackingGeneration ||
+          _locationRefreshTimer == null ||
+          _routeOpportunity?.taxId != opportunity.taxId ||
+          _activeRoute == null) {
         return;
       }
+
+      final origin = LatLng(position.latitude, position.longitude);
+      final route = await _directionsService.getDrivingRoute(
+        origin: origin,
+        destination: LatLng(opportunity.latitude, opportunity.longitude),
+      );
+      if (!mounted ||
+          generation != _routeTrackingGeneration ||
+          _locationRefreshTimer == null ||
+          _routeOpportunity?.taxId != opportunity.taxId ||
+          _activeRoute == null) {
+        return;
+      }
+
       setState(() {
-        _routeOrigin = LatLng(position.latitude, position.longitude);
+        _routeOrigin = origin;
+        _activeRoute = route;
       });
     } catch (_) {
-      // Mantem a ultima posicao conhecida se a leitura pontual falhar.
+      // Mantem a rota anterior se a leitura ou o recalc pontual falhar.
     } finally {
       _locationRefreshInProgress = false;
     }
@@ -402,7 +510,7 @@ class _CustomerOpportunitiesMapScreenState
 
     final routeModeActive = _routeModeActive;
 
-    return Stack(
+    final content = Stack(
       children: [
         Positioned.fill(
           child: FlutterMap(
@@ -612,6 +720,18 @@ class _CustomerOpportunitiesMapScreenState
             ),
           ),
       ],
+    );
+
+    if (!routeModeActive) {
+      return content;
+    }
+
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _handleRouteInteraction(),
+      onPointerMove: (_) => _handleRouteInteraction(),
+      onPointerSignal: (_) => _handleRouteInteraction(),
+      child: content,
     );
   }
 
@@ -1136,11 +1256,14 @@ class _OpportunityDetailsSheet extends StatelessWidget {
     required this.opportunity,
     required this.currencyFormat,
     required this.onCalculateRoute,
+    required this.onOpenExternalRoute,
   });
 
   final CustomerOpportunity opportunity;
   final NumberFormat currencyFormat;
   final Future<void> Function(CustomerOpportunity opportunity) onCalculateRoute;
+  final Future<void> Function(CustomerOpportunity opportunity)
+  onOpenExternalRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -1237,6 +1360,7 @@ class _OpportunityDetailsSheet extends StatelessWidget {
                 _AddressRouteRow(
                   address: opportunity.fullAddress,
                   onCalculateRoute: () => onCalculateRoute(opportunity),
+                  onOpenExternalRoute: () => onOpenExternalRoute(opportunity),
                 ),
               const SizedBox(height: 2),
               Row(
@@ -1376,10 +1500,12 @@ class _AddressRouteRow extends StatelessWidget {
   const _AddressRouteRow({
     required this.address,
     required this.onCalculateRoute,
+    required this.onOpenExternalRoute,
   });
 
   final String address;
   final VoidCallback onCalculateRoute;
+  final VoidCallback onOpenExternalRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -1410,10 +1536,9 @@ class _AddressRouteRow extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     );
-                    final routeButton = FilledButton.tonalIcon(
-                      onPressed: onCalculateRoute,
-                      icon: const Icon(Icons.alt_route_rounded),
-                      label: const Text('Calcular Rota'),
+                    final routeButton = _RouteOptionsButton(
+                      onCalculateRoute: onCalculateRoute,
+                      onOpenExternalRoute: onOpenExternalRoute,
                     );
 
                     if (constraints.maxWidth < 330) {
@@ -1446,16 +1571,67 @@ class _AddressRouteRow extends StatelessWidget {
   }
 }
 
+class _RouteOptionsButton extends StatelessWidget {
+  const _RouteOptionsButton({
+    required this.onCalculateRoute,
+    required this.onOpenExternalRoute,
+  });
+
+  final VoidCallback onCalculateRoute;
+  final VoidCallback onOpenExternalRoute;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        MenuItemButton(
+          onPressed: onCalculateRoute,
+          leadingIcon: const Icon(Icons.map_outlined),
+          child: const Text('Calcular no app'),
+        ),
+        MenuItemButton(
+          onPressed: onOpenExternalRoute,
+          leadingIcon: const Icon(Icons.open_in_new_rounded),
+          child: const Text('Usar outro app'),
+        ),
+      ],
+      builder: (context, controller, child) {
+        return FilledButton.tonalIcon(
+          onPressed: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+          icon: const Icon(Icons.alt_route_rounded),
+          label: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Calcular Rota'),
+              SizedBox(width: 4),
+              Icon(Icons.expand_more_rounded, size: 18),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _OpportunityDetailsLoader extends StatelessWidget {
   const _OpportunityDetailsLoader({
     required this.details,
     required this.currencyFormat,
     required this.onCalculateRoute,
+    required this.onOpenExternalRoute,
   });
 
   final Future<CustomerOpportunity> details;
   final NumberFormat currencyFormat;
   final Future<void> Function(CustomerOpportunity opportunity) onCalculateRoute;
+  final Future<void> Function(CustomerOpportunity opportunity)
+  onOpenExternalRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -1500,6 +1676,7 @@ class _OpportunityDetailsLoader extends StatelessWidget {
           opportunity: snapshot.data!,
           currencyFormat: currencyFormat,
           onCalculateRoute: onCalculateRoute,
+          onOpenExternalRoute: onOpenExternalRoute,
         );
       },
     );
