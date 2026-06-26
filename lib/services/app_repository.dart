@@ -13,6 +13,7 @@ import '../models/customers_without_purchase.dart';
 import '../models/delinquency_overview.dart';
 import '../models/kpi_metric_source.dart';
 import '../models/performance_overview.dart';
+import '../models/recovered_customer_opportunities.dart';
 import '../models/remembered_login.dart';
 import '../models/return_analysis.dart';
 import '../models/seller_home_kpis.dart';
@@ -581,6 +582,23 @@ class AppRepository {
     }
 
     return CustomerOpportunity.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<RecoveredCustomerOpportunitiesOverview>
+  getRecoveredCustomerOpportunities({String? search}) async {
+    await _ensureCurrentUserAccess();
+    final response = await _supabase.rpc(
+      'get_recovered_customer_opportunities',
+      params: <String, dynamic>{'target_search': search?.trim()},
+    );
+
+    if (response is! Map) {
+      return RecoveredCustomerOpportunitiesOverview.empty();
+    }
+
+    return RecoveredCustomerOpportunitiesOverview.fromJson(
+      _stringKeyedMap(response),
+    );
   }
 
   Future<bool> canAccessCustomerOpportunities() async {

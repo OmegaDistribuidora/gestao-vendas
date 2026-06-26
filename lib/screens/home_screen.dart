@@ -15,6 +15,7 @@ import 'customer_opportunities_map_screen.dart';
 import 'customers_without_purchase_screen.dart';
 import 'delinquency_screen.dart';
 import 'performance_screen.dart';
+import 'recovered_customers_screen.dart';
 import 'reports_screen.dart';
 import 'returns_screen.dart';
 import 'supplier_analysis_screen.dart';
@@ -65,6 +66,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _showsCustomerOpportunitiesModule =>
       (_isSeller || _isSupervisor || _isCoordinator) &&
       _customerOpportunitiesEnabled;
+  bool get _showsRecoveredCustomersModule =>
+      !_isSeller && !_isSupervisor && !_isCoordinator;
 
   double get _netAmount => _homeKpis.grossAmount + _homeKpis.returnAmount;
   double get _netVolume => _homeKpis.grossVolume + _homeKpis.returnVolume;
@@ -215,6 +218,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openRecoveredCustomers() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const RecoveredCustomersScreen()),
+    );
+  }
+
   Future<void> _openChangePassword() async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -304,6 +313,15 @@ class _HomeScreenState extends State<HomeScreen> {
     await _openCustomerOpportunities();
   }
 
+  Future<void> _openRecoveredCustomersFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await _openRecoveredCustomers();
+  }
+
   Future<void> _openChangePasswordFromDrawer() async {
     Navigator.of(context).pop();
     await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -377,6 +395,13 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.map_outlined,
           accent: const Color(0xFF087B5A),
           onTap: _openCustomerOpportunities,
+        ),
+      if (_showsRecoveredCustomersModule)
+        _HomeShortcutData(
+          title: 'Clientes recuperados',
+          icon: Icons.how_to_reg_outlined,
+          accent: const Color(0xFF2E7D32),
+          onTap: _openRecoveredCustomers,
         ),
       if (_isAdmin)
         _HomeShortcutData(
@@ -818,6 +843,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         onTap: _openCustomerOpportunitiesFromDrawer,
+                      ),
+                    if (_showsRecoveredCustomersModule)
+                      ListTile(
+                        leading: const Icon(Icons.how_to_reg_outlined),
+                        title: const Text('Clientes Recuperados'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        onTap: _openRecoveredCustomersFromDrawer,
                       ),
                     if (_isAdmin) ...[
                       const SizedBox(height: 8),

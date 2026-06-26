@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../core/app_theme.dart';
+import '../models/customer_route.dart';
 import '../models/app_profile.dart';
 import '../models/customer_opportunities.dart';
 import '../services/app_repository.dart';
+import '../services/mapbox_directions_service.dart';
 
 class CustomerOpportunitiesMapScreen extends StatefulWidget {
   const CustomerOpportunitiesMapScreen({super.key});
@@ -22,6 +27,7 @@ class _CustomerOpportunitiesMapScreenState
   static const LatLng _brazilCenter = LatLng(-14.235, -51.9253);
 
   final AppRepository _repository = AppRepository.instance;
+  final MapboxDirectionsService _directionsService = MapboxDirectionsService();
   final MapController _mapController = MapController();
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'pt_BR',
@@ -40,6 +46,14 @@ class _CustomerOpportunitiesMapScreenState
   String? _selectedSellerCode;
   String? _selectedNeighborhoodKey;
   String? _selectedActivityKey;
+  CustomerRoute? _activeRoute;
+  CustomerOpportunity? _routeOpportunity;
+  LatLng? _routeOrigin;
+  Timer? _locationRefreshTimer;
+  bool _locationRefreshInProgress = false;
+  bool _routeLoading = false;
+  bool _showRouteDirections = true;
+  String? _routeErrorMessage;
 
   @override
   void initState() {
@@ -49,6 +63,8 @@ class _CustomerOpportunitiesMapScreenState
 
   @override
   void dispose() {
+    _stopLocationTracking();
+    _directionsService.close();
     _mapController.dispose();
     super.dispose();
   }
@@ -132,6 +148,7 @@ class _CustomerOpportunitiesMapScreenState
       _selectedSellerCode = null;
       _selectedNeighborhoodKey = null;
       _selectedActivityKey = null;
+      _clearRouteState();
     });
     await _loadData();
   }
@@ -144,6 +161,7 @@ class _CustomerOpportunitiesMapScreenState
       _selectedSellerCode = value;
       _selectedNeighborhoodKey = null;
       _selectedActivityKey = null;
+      _clearRouteState();
     });
     await _loadData();
   }
@@ -155,6 +173,7 @@ class _CustomerOpportunitiesMapScreenState
     setState(() {
       _selectedNeighborhoodKey = value;
       _selectedActivityKey = null;
+      _clearRouteState();
     });
     await _loadData();
   }
@@ -166,6 +185,7 @@ class _CustomerOpportunitiesMapScreenState
     }
     setState(() {
       _selectedActivityKey = normalizedValue;
+      _clearRouteState();
     });
     await _loadData();
   }
@@ -182,6 +202,168 @@ class _CustomerOpportunitiesMapScreenState
       builder: (context) => _OpportunityDetailsLoader(
         details: details,
         currencyFormat: _currencyFormat,
+        onCalculateRoute: (opportunity) async {
+          Navigator.of(context).pop();
+          await _calculateRoute(opportunity);
+        },
+      ),
+    );
+  }
+
+  void _clearRouteState() {
+    _stopLocationTracking();
+    _activeRoute = null;
+    _routeOpportunity = null;
+    _routeOrigin = null;
+    _routeLoading = false;
+    _routeErrorMessage = null;
+    _showRouteDirections = true;
+  }
+
+  Future<LatLng> _getCurrentLocation() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw const CustomerRouteException(
+        'Ative a localizacao do aparelho para calcular a rota.',
+      );
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied) {
+      throw const CustomerRouteException(
+        'Permissao de localizacao negada. Autorize para calcular a rota.',
+      );
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw const CustomerRouteException(
+        'Permissao de localizacao bloqueada. Libere nas configuracoes do Android.',
+      );
+    }
+
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 18),
+      ),
+    );
+    return LatLng(position.latitude, position.longitude);
+  }
+
+  Future<void> _calculateRoute(CustomerOpportunity opportunity) async {
+    if (_routeLoading) {
+      return;
+    }
+
+    setState(() {
+      _routeLoading = true;
+      _routeErrorMessage = null;
+      _activeRoute = null;
+      _routeOrigin = null;
+      _routeOpportunity = opportunity;
+      _showRouteDirections = true;
+    });
+
+    try {
+      final origin = await _getCurrentLocation();
+      final destination = LatLng(opportunity.latitude, opportunity.longitude);
+      final route = await _directionsService.getDrivingRoute(
+        origin: origin,
+        destination: destination,
+      );
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _routeOrigin = origin;
+        _activeRoute = route;
+        _routeLoading = false;
+      });
+      _startLocationTracking();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _focusRoute());
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _routeLoading = false;
+        _routeErrorMessage = error is CustomerRouteException
+            ? error.message
+            : 'Nao foi possivel calcular a rota. Tente novamente.';
+      });
+    }
+  }
+
+  void _startLocationTracking() {
+    _stopLocationTracking();
+    _locationRefreshTimer = Timer.periodic(
+      const Duration(seconds: 8),
+      (_) => _refreshRouteOrigin(),
+    );
+  }
+
+  void _stopLocationTracking() {
+    _locationRefreshTimer?.cancel();
+    _locationRefreshTimer = null;
+    _locationRefreshInProgress = false;
+  }
+
+  Future<void> _refreshRouteOrigin() async {
+    if (!mounted ||
+        _locationRefreshInProgress ||
+        _routeOpportunity == null ||
+        _activeRoute == null) {
+      return;
+    }
+
+    _locationRefreshInProgress = true;
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 12),
+        ),
+      );
+      if (!mounted || _routeOpportunity == null || _activeRoute == null) {
+        return;
+      }
+      setState(() {
+        _routeOrigin = LatLng(position.latitude, position.longitude);
+      });
+    } catch (_) {
+      // Mantem a ultima posicao conhecida se a leitura pontual falhar.
+    } finally {
+      _locationRefreshInProgress = false;
+    }
+  }
+
+  void _focusRoute() {
+    final route = _activeRoute;
+    if (route == null || route.points.isEmpty) {
+      return;
+    }
+
+    _mapController.fitCamera(
+      CameraFit.coordinates(
+        coordinates: route.points,
+        padding: const EdgeInsets.fromLTRB(34, 280, 34, 270),
+        maxZoom: 16,
       ),
     );
   }
@@ -218,6 +400,8 @@ class _CustomerOpportunitiesMapScreenState
       );
     }
 
+    final routeModeActive = _routeModeActive;
+
     return Stack(
       children: [
         Positioned.fill(
@@ -235,11 +419,22 @@ class _CustomerOpportunitiesMapScreenState
                 userAgentPackageName: 'br.com.omegadistribuidora.gestao_vendas',
                 maxNativeZoom: 19,
               ),
+              if (_activeRoute != null)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: _activeRoute!.points,
+                      strokeWidth: 5,
+                      color: primaryColor,
+                    ),
+                  ],
+                ),
               MarkerClusterLayerWidget(
                 key: ValueKey<String>(
                   '${_selectedSellerCode ?? ''}|'
                   '${_selectedNeighborhoodKey ?? ''}|'
-                  '${_selectedActivityKey ?? ''}',
+                  '${_selectedActivityKey ?? ''}|'
+                  '${_routeOpportunity?.taxId ?? ''}',
                 ),
                 options: MarkerClusterLayerOptions(
                   markers: _buildMarkers(),
@@ -280,13 +475,38 @@ class _CustomerOpportunitiesMapScreenState
                   ),
                 ),
               ),
+              if (_routeOrigin != null)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _routeOrigin!,
+                      width: 36,
+                      height: 36,
+                      child: const Tooltip(
+                        message: 'Sua localizacao',
+                        child: Icon(
+                          Icons.my_location_rounded,
+                          color: Color(0xFF1E88E5),
+                          size: 30,
+                          shadows: [
+                            Shadow(
+                              color: Color(0x66000000),
+                              blurRadius: 4,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               const RichAttributionWidget(
                 attributions: [TextSourceAttribution('OpenStreetMap')],
               ),
             ],
           ),
         ),
-        if (_overview.opportunities.isEmpty)
+        if (_overview.opportunities.isEmpty && !routeModeActive)
           Positioned.fill(
             child: IgnorePointer(
               child: Center(
@@ -315,38 +535,91 @@ class _CustomerOpportunitiesMapScreenState
               ),
             ),
           ),
-        Positioned(
-          top: 12,
-          left: 12,
-          right: 12,
-          child: _MapSummary(
-            overview: _overview,
-            dateTimeFormat: _dateTimeFormat,
-            selectedSupervisorCode: _selectedSupervisorCode,
-            selectedSellerCode: _selectedSellerCode,
-            selectedNeighborhoodKey: _selectedNeighborhoodKey,
-            selectedActivityKey: _selectedActivityKey,
-            onSupervisorSelected: _handleSupervisorChanged,
-            onSellerSelected: _handleSellerChanged,
-            onNeighborhoodSelected: _handleNeighborhoodChanged,
-            onActivitySelected: _handleActivityChanged,
+        if (!routeModeActive)
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: _MapSummary(
+              overview: _overview,
+              dateTimeFormat: _dateTimeFormat,
+              selectedSupervisorCode: _selectedSupervisorCode,
+              selectedSellerCode: _selectedSellerCode,
+              selectedNeighborhoodKey: _selectedNeighborhoodKey,
+              selectedActivityKey: _selectedActivityKey,
+              onSupervisorSelected: _handleSupervisorChanged,
+              onSellerSelected: _handleSellerChanged,
+              onNeighborhoodSelected: _handleNeighborhoodChanged,
+              onActivitySelected: _handleActivityChanged,
+            ),
           ),
-        ),
         Positioned(
           right: 12,
-          bottom: 32,
+          bottom: _hasRoutePanel
+              ? MediaQuery.sizeOf(context).height * 0.5 + 12
+              : 32,
           child: FloatingActionButton.small(
             heroTag: 'fit-customer-opportunities',
-            tooltip: 'Mostrar todos os pontos',
-            onPressed: _overview.opportunities.isEmpty ? null : _focusSelection,
+            tooltip: _activeRoute == null
+                ? 'Mostrar todos os pontos'
+                : 'Ver rota',
+            onPressed: _activeRoute == null
+                ? (_overview.opportunities.isEmpty ? null : _focusSelection)
+                : _focusRoute,
             backgroundColor: Colors.white,
             foregroundColor: primaryColor,
             child: const Icon(Icons.center_focus_strong_rounded),
           ),
         ),
+        if (_hasRoutePanel)
+          Positioned.fill(
+            child: DraggableScrollableSheet(
+              initialChildSize: _showRouteDirections ? 0.32 : 0.18,
+              minChildSize: 0.16,
+              maxChildSize: 0.5,
+              snap: true,
+              snapSizes: const [0.18, 0.32, 0.5],
+              builder: (context, scrollController) => Padding(
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  0,
+                  12,
+                  MediaQuery.paddingOf(context).bottom + 12,
+                ),
+                child: _RoutePanel(
+                  route: _activeRoute,
+                  opportunity: _routeOpportunity,
+                  loading: _routeLoading,
+                  errorMessage: _routeErrorMessage,
+                  showDirections: _showRouteDirections,
+                  scrollController: scrollController,
+                  onToggleDirections: () {
+                    setState(() {
+                      _showRouteDirections = !_showRouteDirections;
+                    });
+                  },
+                  onClose: () {
+                    setState(_clearRouteState);
+                    WidgetsBinding.instance.addPostFrameCallback(
+                      (_) => _focusSelection(),
+                    );
+                  },
+                  onRetry: _routeOpportunity == null
+                      ? null
+                      : () => _calculateRoute(_routeOpportunity!),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
+
+  bool get _hasRoutePanel =>
+      _routeLoading || _activeRoute != null || _routeErrorMessage != null;
+
+  bool get _routeModeActive =>
+      _routeOpportunity != null || _routeLoading || _activeRoute != null;
 
   String _emptyMapMessage() {
     if (_overview.requiresSupervisor) {
@@ -362,7 +635,12 @@ class _CustomerOpportunitiesMapScreenState
   }
 
   List<Marker> _buildMarkers() {
-    return _overview.opportunities
+    final routeOpportunity = _routeOpportunity;
+    final opportunities = routeOpportunity == null
+        ? _overview.opportunities
+        : [routeOpportunity];
+
+    return opportunities
         .map(
           (opportunity) => Marker(
             point: LatLng(opportunity.latitude, opportunity.longitude),
@@ -607,14 +885,262 @@ class _FilterDropdown extends StatelessWidget {
   }
 }
 
+class _RoutePanel extends StatelessWidget {
+  const _RoutePanel({
+    required this.route,
+    required this.opportunity,
+    required this.loading,
+    required this.errorMessage,
+    required this.showDirections,
+    required this.scrollController,
+    required this.onToggleDirections,
+    required this.onClose,
+    required this.onRetry,
+  });
+
+  final CustomerRoute? route;
+  final CustomerOpportunity? opportunity;
+  final bool loading;
+  final String? errorMessage;
+  final bool showDirections;
+  final ScrollController scrollController;
+  final VoidCallback onToggleDirections;
+  final VoidCallback onClose;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = opportunity?.displayName.trim().isNotEmpty == true
+        ? opportunity!.displayName
+        : 'Rota';
+
+    return Material(
+      color: Colors.white,
+      elevation: 4,
+      shadowColor: const Color(0x33000000),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFDDE3EC)),
+      ),
+      child: ListView(
+        controller: scrollController,
+        padding: const EdgeInsets.fromLTRB(14, 8, 10, 12),
+        children: [
+          Center(
+            child: Container(
+              width: 42,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD4DAE5),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+          if (loading)
+            Row(
+              children: [
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Calculando rota...',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Fechar rota',
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            )
+          else ...[
+            Row(
+              children: [
+                const Icon(Icons.alt_route_rounded, color: primaryColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Fechar rota',
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+            if (errorMessage != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                errorMessage!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFFD84315),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (onRetry != null) ...[
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Tentar novamente'),
+                ),
+              ],
+            ] else if (route != null) ...[
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  _RouteMetric(
+                    icon: Icons.route_outlined,
+                    label: _formatDistance(route!.distanceMeters),
+                  ),
+                  const SizedBox(width: 10),
+                  _RouteMetric(
+                    icon: Icons.schedule_outlined,
+                    label: _formatDuration(route!.durationSeconds),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: onToggleDirections,
+                    icon: Icon(
+                      showDirections
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 18,
+                    ),
+                    label: Text(showDirections ? 'Ocultar' : 'Mostrar'),
+                  ),
+                ],
+              ),
+              if (showDirections) ...[
+                const SizedBox(height: 8),
+                ...List.generate(route!.steps.length, (index) {
+                  final step = route!.steps[index];
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (index > 0) const Divider(height: 12),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: const Color(0xFFE7EBFF),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: primaryColor,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  step.instruction,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF263246),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${_formatDistance(step.distanceMeters)} '
+                                  '- ${_formatDuration(step.durationSeconds)}',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: const Color(0xFF748094),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _formatDistance(double meters) {
+    if (meters >= 1000) {
+      return '${(meters / 1000).toStringAsFixed(1).replaceAll('.', ',')} km';
+    }
+    return '${meters.round()} m';
+  }
+
+  static String _formatDuration(double seconds) {
+    final minutes = (seconds / 60).round();
+    if (minutes < 60) {
+      return '$minutes min';
+    }
+    final hours = minutes ~/ 60;
+    final remainingMinutes = minutes % 60;
+    if (remainingMinutes == 0) {
+      return '${hours}h';
+    }
+    return '${hours}h ${remainingMinutes}min';
+  }
+}
+
+class _RouteMetric extends StatelessWidget {
+  const _RouteMetric({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 17, color: primaryColor),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: const Color(0xFF465267),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _OpportunityDetailsSheet extends StatelessWidget {
   const _OpportunityDetailsSheet({
     required this.opportunity,
     required this.currencyFormat,
+    required this.onCalculateRoute,
   });
 
   final CustomerOpportunity opportunity;
   final NumberFormat currencyFormat;
+  final Future<void> Function(CustomerOpportunity opportunity) onCalculateRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -708,10 +1234,9 @@ class _OpportunityDetailsSheet extends StatelessWidget {
                   value: opportunity.district,
                 ),
               if (opportunity.fullAddress.isNotEmpty)
-                _InfoRow(
-                  icon: Icons.signpost_outlined,
-                  label: 'Endereco',
-                  value: opportunity.fullAddress,
+                _AddressRouteRow(
+                  address: opportunity.fullAddress,
+                  onCalculateRoute: () => onCalculateRoute(opportunity),
                 ),
               const SizedBox(height: 2),
               Row(
@@ -847,14 +1372,90 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
+class _AddressRouteRow extends StatelessWidget {
+  const _AddressRouteRow({
+    required this.address,
+    required this.onCalculateRoute,
+  });
+
+  final String address;
+  final VoidCallback onCalculateRoute;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.signpost_outlined, size: 20, color: primaryColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Endereco',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: const Color(0xFF748094),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final addressText = Text(
+                      address,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF263246),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
+                    final routeButton = FilledButton.tonalIcon(
+                      onPressed: onCalculateRoute,
+                      icon: const Icon(Icons.alt_route_rounded),
+                      label: const Text('Calcular Rota'),
+                    );
+
+                    if (constraints.maxWidth < 330) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          addressText,
+                          const SizedBox(height: 8),
+                          routeButton,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: addressText),
+                        const SizedBox(width: 10),
+                        routeButton,
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _OpportunityDetailsLoader extends StatelessWidget {
   const _OpportunityDetailsLoader({
     required this.details,
     required this.currencyFormat,
+    required this.onCalculateRoute,
   });
 
   final Future<CustomerOpportunity> details;
   final NumberFormat currencyFormat;
+  final Future<void> Function(CustomerOpportunity opportunity) onCalculateRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -898,6 +1499,7 @@ class _OpportunityDetailsLoader extends StatelessWidget {
         return _OpportunityDetailsSheet(
           opportunity: snapshot.data!,
           currencyFormat: currencyFormat,
+          onCalculateRoute: onCalculateRoute,
         );
       },
     );
