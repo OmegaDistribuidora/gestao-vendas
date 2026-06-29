@@ -246,7 +246,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     if (requiredValue == null) {
       return 'Sem dias uteis';
     }
-    return '${_formatCompactCurrency(requiredValue)}/dia util';
+    return '${_formatCompactCurrency(requiredValue)}/dia útil';
   }
 
   String _formatRequiredInteger(BusinessDayProjectionSummary summary) {
@@ -256,9 +256,9 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     }
     final requiredValue = summary.requiredPerBusinessDay;
     if (requiredValue == null) {
-      return 'Sem dias uteis';
+      return 'Sem dias úteis';
     }
-    return '${_formatInteger(requiredValue.ceil())}/dia util';
+    return '${_formatInteger(requiredValue.ceil())}/dia útil';
   }
 
   String _profileLabel(String slug) {
@@ -270,25 +270,12 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       case AppProfile.coordinatorSlug:
         return 'Coordenador';
       case AppProfile.adminSlug:
-        return 'Administracao';
+        return 'Administração';
       case AppProfile.othersSlug:
-        return 'Usuario';
+        return 'Usuário';
       default:
-        return 'Usuario';
+        return 'Usuário';
     }
-  }
-
-  String _profileRuleDescription() {
-    if (_isSeller) {
-      return 'Financeiro em venda liquida. Positivacao e SKU em venda bruta.';
-    }
-    if (_isSupervisor) {
-      return 'Geral com faturamento liquido. Fornecedores, positivacao e SKU em venda bruta.';
-    }
-    if (_isCoordinator) {
-      return 'Financeiro em faturamento liquido. Positivacao e SKU em faturamento bruto.';
-    }
-    return 'Meta consolidada pela soma dos coordenadores. Positivacao sempre como metrica secundaria.';
   }
 
   String _scopeSelectorLabel() {
@@ -323,7 +310,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     final lines = <String>[
       _overview.lastTargetsUpdatedAt != null
           ? 'Metas atualizadas em ${_dateTimeFormat.format(_overview.lastTargetsUpdatedAt!.toLocal())}'
-          : 'Metas: atualizacao ainda nao disponivel',
+          : 'Metas: atualização ainda não disponível',
     ];
 
     if (_showsMetricSourceSelector &&
@@ -331,7 +318,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       lines.add(
         _overview.lastSalesUpdatedAt != null
             ? 'Venda atualizada em ${_dateTimeFormat.format(_overview.lastSalesUpdatedAt!.toLocal())}'
-            : 'Venda: atualizacao ainda nao disponivel',
+            : 'Venda: atualização ainda não disponível',
       );
     }
 
@@ -339,7 +326,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       lines.add(
         _overview.lastSalesUpdatedAt != null
             ? 'Venda atualizada em ${_dateTimeFormat.format(_overview.lastSalesUpdatedAt!.toLocal())}'
-            : 'Venda: atualizacao ainda nao disponivel',
+            : 'Venda: atualização ainda não disponível',
       );
     }
 
@@ -350,8 +337,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
         _isCoordinator) {
       lines.add(
         _overview.lastFinancialUpdatedAt != null
-            ? 'Faturamento/devolucao atualizado em ${_dateTimeFormat.format(_overview.lastFinancialUpdatedAt!.toLocal())}'
-            : 'Faturamento/devolucao: atualizacao ainda nao disponivel',
+            ? 'Faturamento/devolução atualizado em ${_dateTimeFormat.format(_overview.lastFinancialUpdatedAt!.toLocal())}'
+            : 'Faturamento/devolução: atualização ainda não disponível',
       );
     }
 
@@ -360,7 +347,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       lines.add(
         _overview.lastSkuUpdatedAt != null
             ? 'SKU de $skuSourceLabel atualizado em ${_dateTimeFormat.format(_overview.lastSkuUpdatedAt!.toLocal())}'
-            : 'SKU: atualizacao ainda nao disponivel',
+            : 'SKU: atualização ainda não disponível',
       );
     }
 
@@ -381,7 +368,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                 const Icon(Icons.schedule_outlined, color: primaryColor),
                 const SizedBox(width: 10),
                 Text(
-                  'Ultimas atualizacoes',
+                  'Últimas atualizações',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -416,13 +403,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
               style: Theme.of(
                 context,
               ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${_profileLabel(_overview.profileSlug)}. ${_profileRuleDescription()}',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
             ),
             const SizedBox(height: 16),
             if (_showsScopeSelector) ...[
@@ -479,7 +459,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
               initialValue: _selectedMonthValue,
               isExpanded: true,
               decoration: const InputDecoration(
-                labelText: 'Mes de referencia',
+                labelText: 'Mês de referência',
                 prefixIcon: Icon(Icons.calendar_month_outlined),
               ),
               items: _overview.availableMonths
@@ -549,7 +529,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
         math.max(item.targetFin - item.actualFin, 0),
       ),
       averageLabel:
-          '${_formatCompactCurrency(summary.averagePerBusinessDay)}/dia util',
+          '${_formatCompactCurrency(summary.averagePerBusinessDay)}/dia útil',
       requiredDailyLabel: _formatRequiredCurrency(summary),
       actualProgressPct: summary.actualProgressPct,
       projectedProgressPct: summary.projectedProgressPct,
@@ -587,7 +567,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
               math.max(item.secondaryTarget! - item.secondaryActual, 0),
             ),
       averageLabel:
-          '${_formatInteger(summary.averagePerBusinessDay.round())}/dia util',
+          '${_formatInteger(summary.averagePerBusinessDay.round())}/dia útil',
       requiredDailyLabel: _formatRequiredInteger(summary),
       actualProgressPct: summary.actualProgressPct,
       projectedProgressPct: summary.projectedProgressPct,
@@ -671,73 +651,11 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   Widget _buildSupplierCard(PerformanceOverviewItem item) {
     final panels = _buildMetricPanels(item);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.network(
-                    _supplierLogoUrl(item.code),
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE7EBFF),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.inventory_2_outlined,
-                        color: primaryColor,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.supplierName,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Fornecedor ${item.code}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF5E6A7C),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            ...panels.asMap().entries.map(
-              (entry) => Padding(
-                padding: EdgeInsets.only(
-                  bottom: entry.key == panels.length - 1 ? 0 : 12,
-                ),
-                child: _MetricProjectionPanel(
-                  data: entry.value,
-                  formatPercent: _formatPercent,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return _SupplierPerformanceCard(
+      item: item,
+      panels: panels,
+      logoUrl: _supplierLogoUrl(item.code),
+      formatPercent: _formatPercent,
     );
   }
 
@@ -884,6 +802,323 @@ class _MetricPanelData {
   final ProjectionPaceStatus paceStatus;
 }
 
+class _SupplierPerformanceCard extends StatefulWidget {
+  const _SupplierPerformanceCard({
+    required this.item,
+    required this.panels,
+    required this.logoUrl,
+    required this.formatPercent,
+  });
+
+  final PerformanceOverviewItem item;
+  final List<_MetricPanelData> panels;
+  final String logoUrl;
+  final String Function(double? value) formatPercent;
+
+  @override
+  State<_SupplierPerformanceCard> createState() =>
+      _SupplierPerformanceCardState();
+}
+
+class _SupplierPerformanceCardState extends State<_SupplierPerformanceCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final panels = widget.panels;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          iconColor: primaryColor,
+          collapsedIconColor: const Color(0xFF64748B),
+          shape: const RoundedRectangleBorder(side: BorderSide.none),
+          collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
+          onExpansionChanged: (value) {
+            setState(() {
+              _expanded = value;
+            });
+          },
+          title: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  widget.logoUrl,
+                  width: 46,
+                  height: 46,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE7EBFF),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.inventory_2_outlined,
+                      color: primaryColor,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.supplierName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Fornecedor ${item.code}',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: const Color(0xFF64748B),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          subtitle: _expanded
+              ? null
+              : Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Column(
+                    children: [
+                      _CompactSupplierProgress(
+                        data: panels.first,
+                        formatPercent: widget.formatPercent,
+                      ),
+                      if (panels.length > 1) ...[
+                        const SizedBox(height: 10),
+                        _CompactSupplierProgress(
+                          data: panels[1],
+                          formatPercent: widget.formatPercent,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+          children: [
+            ...panels.asMap().entries.map(
+              (entry) => Padding(
+                padding: EdgeInsets.only(
+                  bottom: entry.key == panels.length - 1 ? 0 : 12,
+                ),
+                child: _MetricProjectionPanel(
+                  data: entry.value,
+                  formatPercent: widget.formatPercent,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactSupplierProgress extends StatelessWidget {
+  const _CompactSupplierProgress({
+    required this.data,
+    required this.formatPercent,
+  });
+
+  final _MetricPanelData data;
+  final String Function(double? value) formatPercent;
+
+  @override
+  Widget build(BuildContext context) {
+    final actualFraction = _normalizedProgress(data.actualProgressPct);
+    final projectedFraction = data.showProjection
+        ? _normalizedProgress(data.projectedProgressPct)
+        : actualFraction;
+    final trendLabel = data.projectedProgressPct == null
+        ? '--'
+        : formatPercent(data.projectedProgressPct);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                data.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: const Color(0xFF64748B),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                data.showProjection
+                    ? '${formatPercent(data.actualProgressPct)} / Tend. $trendLabel'
+                    : formatPercent(data.actualProgressPct),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: data.accentColor,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 5),
+        Row(
+          children: [
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Realizado ${data.actualLabel}',
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: const Color(0xFF334155),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Meta ${data.targetLabel}',
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _CompactProjectedProgressBar(
+          color: data.accentColor,
+          actualFraction: actualFraction,
+          projectedFraction: projectedFraction,
+        ),
+      ],
+    );
+  }
+
+  double _normalizedProgress(double? value) {
+    if (value == null) {
+      return 0;
+    }
+    return (value / 100).clamp(0.0, 1.0);
+  }
+}
+
+class _CompactProjectedProgressBar extends StatelessWidget {
+  const _CompactProjectedProgressBar({
+    required this.color,
+    required this.actualFraction,
+    required this.projectedFraction,
+  });
+
+  final Color color;
+  final double actualFraction;
+  final double projectedFraction;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final trackWidth = constraints.maxWidth;
+        final normalizedActual = actualFraction.clamp(0.0, 1.0);
+        final normalizedProjected = projectedFraction.clamp(0.0, 1.0);
+        final actualWidth = trackWidth * normalizedActual;
+        final projectedWidth = trackWidth * normalizedProjected;
+        final projectedExtensionWidth = math.max<double>(
+          projectedWidth - actualWidth,
+          0,
+        );
+
+        return SizedBox(
+          height: 9,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8EEF8),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              if (actualWidth > 0)
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: actualWidth,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.horizontal(
+                        left: const Radius.circular(999),
+                        right: Radius.circular(
+                          projectedExtensionWidth > 0 ? 2 : 999,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (projectedExtensionWidth > 0)
+                Positioned(
+                  left: actualWidth,
+                  top: 0,
+                  bottom: 0,
+                  width: projectedExtensionWidth,
+                  child: CustomPaint(
+                    painter: _ProjectedBorderPainter(color),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.14),
+                        borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(2),
+                          right: Radius.circular(999),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _MetricProjectionPanel extends StatelessWidget {
   const _MetricProjectionPanel({
     required this.data,
@@ -991,7 +1226,7 @@ class _MetricProjectionPanel extends StatelessWidget {
               _MetricInfoTile(title: 'Realizado', value: data.actualLabel),
               if (data.showProjection) ...[
                 const SizedBox(height: 8),
-                _MetricInfoTile(title: 'Tendencia', value: data.projectedLabel),
+                _MetricInfoTile(title: 'Tendência', value: data.projectedLabel),
               ],
               const SizedBox(height: 8),
               _MetricInfoTile(
@@ -1016,7 +1251,7 @@ class _MetricProjectionPanel extends StatelessWidget {
                   ),
                   _InfoPill(
                     icon: Icons.bar_chart_outlined,
-                    label: 'Media/dia util: ${data.averageLabel}',
+                    label: 'Média/dia útil: ${data.averageLabel}',
                     maxWidth: constraints.maxWidth,
                   ),
                   if (statusData != null)

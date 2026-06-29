@@ -779,13 +779,6 @@ class _CustomerOpportunitiesMapScreenState
                     Icons.location_on_rounded,
                     size: 42,
                     color: Color(0xFFE43D30),
-                    shadows: [
-                      Shadow(
-                        color: Color(0x66000000),
-                        blurRadius: 5,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
                   ),
                 ),
               ),
@@ -825,6 +818,15 @@ class _MapSummary extends StatelessWidget {
       overview.viewerProfileSlug == AppProfile.coordinatorSlug;
   bool get _selectsSeller =>
       overview.viewerProfileSlug == AppProfile.supervisorSlug || _isCoordinator;
+  int get _sellerTotalOpportunities {
+    final totalFromNeighborhoods = overview.servedNeighborhoods.fold<int>(
+      0,
+      (sum, neighborhood) => sum + neighborhood.opportunityCount,
+    );
+    return totalFromNeighborhoods > 0
+        ? totalFromNeighborhoods
+        : overview.totalOpportunities;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -848,7 +850,8 @@ class _MapSummary extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${overview.totalOpportunities} oportunidades',
+                    '${overview.totalOpportunities} oportunidades / '
+                    '$_sellerTotalOpportunities Total de oportunidades',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                       color: const Color(0xFF172033),
@@ -913,8 +916,7 @@ class _MapSummary extends StatelessWidget {
                       (neighborhood) => DropdownMenuItem<String>(
                         value: neighborhood.key,
                         child: Text(
-                          '${neighborhood.label} '
-                          '(${neighborhood.opportunityCount})',
+                          neighborhood.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -937,7 +939,7 @@ class _MapSummary extends StatelessWidget {
                     (activity) => DropdownMenuItem<String>(
                       value: activity.key,
                       child: Text(
-                        '${activity.label} (${activity.opportunityCount})',
+                        activity.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),

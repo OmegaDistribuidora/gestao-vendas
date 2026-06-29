@@ -66,9 +66,9 @@ class AppUser {
       loginAlias: TextSanitizer.normalizeNullable(
         json['login_alias'] as String?,
       ),
-      displayName: TextSanitizer.normalizeNullable(
-        json['display_name'] as String?,
-      ),
+      displayName: json['display_name'] == null
+          ? null
+          : TextSanitizer.toNameCase(json['display_name'] as String?),
       profile: profileJson is Map<String, dynamic>
           ? AppProfile.fromJson(profileJson)
           : null,

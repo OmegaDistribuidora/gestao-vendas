@@ -100,6 +100,7 @@ class BlockedOrderEntry {
     required this.codusur,
     required this.sellerName,
     required this.codsupervisor,
+    required this.supervisorName,
     required this.codgerente,
     required this.tipoVenda,
     required this.motivoBloqueio,
@@ -119,6 +120,7 @@ class BlockedOrderEntry {
   final String codusur;
   final String sellerName;
   final String codsupervisor;
+  final String supervisorName;
   final String codgerente;
   final int tipoVenda;
   final String motivoBloqueio;
@@ -155,6 +157,9 @@ class BlockedOrderEntry {
       codusur: '${json['codusur'] ?? ''}'.trim(),
       sellerName: TextSanitizer.normalize(json['seller_name'] as String? ?? ''),
       codsupervisor: '${json['codsupervisor'] ?? ''}'.trim(),
+      supervisorName: TextSanitizer.toNameCase(
+        json['supervisor_name'] as String? ?? '',
+      ),
       codgerente: '${json['codgerente'] ?? ''}'.trim(),
       tipoVenda: BlockedOrdersOverview._toInt(json['tipo_venda']),
       motivoBloqueio: TextSanitizer.normalize(

@@ -75,6 +75,35 @@ class TextSanitizer {
     return normalize(rawValue);
   }
 
+  static String toNameCase(String? rawValue) {
+    final value = normalize(rawValue).trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (value.isEmpty) {
+      return value;
+    }
+
+    const lowercaseParticles = <String>{'da', 'das', 'de', 'do', 'dos', 'e'};
+
+    final words = value.toLowerCase().split(' ');
+    return words
+        .asMap()
+        .entries
+        .map((entry) {
+          final word = entry.value;
+          if (entry.key > 0 && lowercaseParticles.contains(word)) {
+            return word;
+          }
+          return word.split('-').map(_capitalizeWord).join('-');
+        })
+        .join(' ');
+  }
+
+  static String _capitalizeWord(String value) {
+    if (value.isEmpty) {
+      return value;
+    }
+    return '${value[0].toUpperCase()}${value.substring(1)}';
+  }
+
   static String _tryRepairUtf8(String value) {
     try {
       return utf8.decode(latin1.encode(value), allowMalformed: true);

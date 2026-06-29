@@ -72,7 +72,9 @@ class PerformanceOverview {
       selectedScopeProfileSlug: _toNullableString(
         json['selected_scope_profile_slug'],
       ),
-      selectedScopeOwnerCode: _toNullableString(json['selected_scope_owner_code']),
+      selectedScopeOwnerCode: _toNullableString(
+        json['selected_scope_owner_code'],
+      ),
       metricSource: parseKpiMetricSource(json['metric_source'] as String?),
       selectedMonthStart: _parseDateTime(json['selected_month_start']),
       availableScopes: rawScopes is List
@@ -214,11 +216,11 @@ class PerformanceOverviewItem {
   int get secondaryActual => usesSkuMetric ? actualSku : actualPos;
   double? get secondaryProgressPct =>
       usesSkuMetric ? skuProgressPct : posProgressPct;
-  String get secondaryLabel => usesSkuMetric ? 'SKU' : 'Positivacao';
+  String get secondaryLabel => usesSkuMetric ? 'SKU' : 'Positivação';
   String get financialLabel =>
       financialMetricSource == KpiMetricSource.faturamento
       ? 'Faturamento Liquido'
-      : 'Venda Liquida';
+      : 'Venda Líquida';
 
   factory PerformanceOverviewItem.fromJson(Map<String, dynamic> json) {
     return PerformanceOverviewItem(

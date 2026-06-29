@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../components/compact_metric_tile.dart';
 import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/blocked_orders_overview.dart';
@@ -241,113 +242,72 @@ class _BlockedOrdersScreenState extends State<BlockedOrdersScreen> {
     required Color accentColor,
     required Color accentBackgroundColor,
   }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF5E6A7C),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 40,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        value,
-                        maxLines: 1,
-                        softWrap: false,
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          height: 1.05,
-                          color: accentColor,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: accentBackgroundColor,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Icon(icon, color: accentColor),
-            ),
-          ],
-        ),
-      ),
+    return CompactMetricTile(
+      title: title,
+      value: value,
+      icon: icon,
+      accentColor: accentColor,
+      accentBackgroundColor: accentBackgroundColor,
     );
   }
 
   Widget _buildMetricsSection() {
-    return Column(
-      children: [
-        _buildMetricCard(
-          title: 'Venda bloqueada',
-          value: _formatCurrency(_overview.salesBlockedAmount),
-          icon: Icons.monetization_on_outlined,
-          accentColor: const Color(0xFF16924C),
-          accentBackgroundColor: const Color(0xFFE7F6EC),
-        ),
-        const SizedBox(height: 12),
-        _buildMetricCard(
-          title: 'Pedidos de venda',
-          value: '${_overview.salesBlockedOrders}',
-          icon: Icons.shopping_cart_outlined,
-          accentColor: const Color(0xFF1D4ED8),
-          accentBackgroundColor: const Color(0xFFE8EEFF),
-        ),
-        const SizedBox(height: 12),
-        _buildMetricCard(
-          title: 'Bonificação bloqueada',
-          value: _formatCurrency(_overview.bonusBlockedAmount),
-          icon: Icons.card_giftcard,
-          accentColor: const Color(0xFF6D28D9),
-          accentBackgroundColor: const Color(0xFFF2EAFE),
-        ),
-        const SizedBox(height: 12),
-        _buildMetricCard(
-          title: 'Pedidos de bonificação',
-          value: '${_overview.bonusBlockedOrders}',
-          icon: Icons.inventory_2_outlined,
-          accentColor: const Color(0xFFFF7A00),
-          accentBackgroundColor: const Color(0xFFFFF0DD),
-        ),
-        const SizedBox(height: 12),
-        _buildMetricCard(
-          title: 'Total bloqueado',
-          value: _formatCurrency(_overview.totalBlockedAmount),
-          icon: Icons.attach_money_outlined,
-          accentColor: const Color(0xFF0F766E),
-          accentBackgroundColor: const Color(0xFFE7F6F3),
-        ),
-        const SizedBox(height: 12),
-        _buildMetricCard(
-          title: 'Total de pedidos',
-          value: '${_overview.totalBlockedOrders}',
-          icon: Icons.lock_outline,
-          accentColor: primaryColor,
-          accentBackgroundColor: const Color(0xFFE8EEFF),
-        ),
-      ],
+    final metrics = [
+      _buildMetricCard(
+        title: 'Venda',
+        value: _formatCurrency(_overview.salesBlockedAmount),
+        icon: Icons.monetization_on_outlined,
+        accentColor: const Color(0xFF16924C),
+        accentBackgroundColor: const Color(0xFFE7F6EC),
+      ),
+      _buildMetricCard(
+        title: 'Pedidos de venda',
+        value: '${_overview.salesBlockedOrders}',
+        icon: Icons.shopping_cart_outlined,
+        accentColor: const Color(0xFF1D4ED8),
+        accentBackgroundColor: const Color(0xFFE8EEFF),
+      ),
+      _buildMetricCard(
+        title: 'Bonificação',
+        value: _formatCurrency(_overview.bonusBlockedAmount),
+        icon: Icons.card_giftcard,
+        accentColor: const Color(0xFF6D28D9),
+        accentBackgroundColor: const Color(0xFFF2EAFE),
+      ),
+      _buildMetricCard(
+        title: 'Pedidos de bonificação',
+        value: '${_overview.bonusBlockedOrders}',
+        icon: Icons.inventory_2_outlined,
+        accentColor: const Color(0xFFFF7A00),
+        accentBackgroundColor: const Color(0xFFFFF0DD),
+      ),
+      _buildMetricCard(
+        title: 'Total',
+        value: _formatCurrency(_overview.totalBlockedAmount),
+        icon: Icons.attach_money_outlined,
+        accentColor: const Color(0xFF0F766E),
+        accentBackgroundColor: const Color(0xFFE7F6F3),
+      ),
+      _buildMetricCard(
+        title: 'Total de pedidos',
+        value: '${_overview.totalBlockedOrders}',
+        icon: Icons.lock_outline,
+        accentColor: primaryColor,
+        accentBackgroundColor: const Color(0xFFE8EEFF),
+      ),
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        mainAxisExtent: 104,
+      ),
+      itemCount: metrics.length,
+      itemBuilder: (context, index) => metrics[index],
     );
   }
 
@@ -430,6 +390,19 @@ class _BlockedOrdersScreenState extends State<BlockedOrdersScreen> {
                     color: const Color(0xFF5E6A7C),
                   ),
                 ),
+                if (order.codsupervisor.isNotEmpty ||
+                    order.supervisorName.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    order.supervisorName.isEmpty ||
+                            order.supervisorName == order.codsupervisor
+                        ? 'Supervisor: ${order.codsupervisor}'
+                        : 'Supervisor: ${order.codsupervisor} - ${order.supervisorName}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF5E6A7C),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Text(
                   'Motivo: ${order.motivoBloqueio.isEmpty ? 'Nao informado' : order.motivoBloqueio}',

@@ -11,6 +11,7 @@ class SellerHomeKpis {
     required this.returnVolume,
     required this.returnOrders,
     required this.returnPositivation,
+    required this.distinctProducts,
     required this.lastSalesUpdatedAt,
     required this.lastFinancialUpdatedAt,
   });
@@ -24,6 +25,7 @@ class SellerHomeKpis {
   final double returnVolume;
   final int returnOrders;
   final int returnPositivation;
+  final int distinctProducts;
   final DateTime? lastSalesUpdatedAt;
   final DateTime? lastFinancialUpdatedAt;
 
@@ -38,6 +40,7 @@ class SellerHomeKpis {
       returnVolume: 0,
       returnOrders: 0,
       returnPositivation: 0,
+      distinctProducts: 0,
       lastSalesUpdatedAt: null,
       lastFinancialUpdatedAt: null,
     );
@@ -65,8 +68,11 @@ class SellerHomeKpis {
       returnAmount: (json['return_amount'] as num?)?.toDouble() ?? 0,
       returnVolume: (json['return_volume'] as num?)?.toDouble() ?? 0,
       returnOrders: (json['return_orders'] as num?)?.toInt() ?? 0,
-      returnPositivation:
-          (json['return_positivation'] as num?)?.toInt() ?? 0,
+      returnPositivation: (json['return_positivation'] as num?)?.toInt() ?? 0,
+      distinctProducts:
+          (json['distinct_products'] as num?)?.toInt() ??
+          (json['total_sku'] as num?)?.toInt() ??
+          0,
       lastSalesUpdatedAt: _parseDate(json['last_sales_updated_at']),
       lastFinancialUpdatedAt: _parseDate(json['last_financial_updated_at']),
     );

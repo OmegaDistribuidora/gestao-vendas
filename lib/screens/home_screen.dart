@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../components/compact_metric_tile.dart';
 import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
@@ -41,14 +42,10 @@ class _HomeScreenState extends State<HomeScreen> {
     symbol: 'R\$',
   );
   final NumberFormat _decimalFormat = NumberFormat.decimalPattern('pt_BR');
-  final DateFormat _dateTimeFormat = DateFormat(
-    "dd/MM/yyyy 'as' HH:mm",
-    'pt_BR',
-  );
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Versao 0.8.0+14';
+  String _appVersionLabel = 'Versão 0.9.2+17';
   bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
 
@@ -71,7 +68,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   double get _netAmount => _homeKpis.grossAmount + _homeKpis.returnAmount;
   double get _netVolume => _homeKpis.grossVolume + _homeKpis.returnVolume;
-  int get _netOrders => _homeKpis.grossOrders - _homeKpis.returnOrders;
   int get _netPositivation =>
       _homeKpis.grossPositivation - _homeKpis.returnPositivation;
 
@@ -90,8 +86,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final version = packageInfo.version.trim();
       final buildNumber = packageInfo.buildNumber.trim();
       final versionLabel = buildNumber.isEmpty
-          ? 'Versao $version'
-          : 'Versao $version+$buildNumber';
+          ? 'Versão $version'
+          : 'Versão $version+$buildNumber';
       if (!mounted) {
         return;
       }
@@ -103,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Versao 0.8.0+14';
+        _appVersionLabel = 'Versão 0.9.2+17';
       });
     }
   }
@@ -336,17 +332,15 @@ class _HomeScreenState extends State<HomeScreen> {
   String _formatDecimal(double value) =>
       _decimalFormat.format(double.parse(value.toStringAsFixed(1)));
 
-  String _formatDateTime(DateTime value) => _dateTimeFormat.format(value);
-
   String get _welcomeTitle {
     final displayName = widget.currentUser.displayName?.trim();
     if (_isAdmin) {
-      return 'Painel da administracao';
+      return 'Painel da administração';
     }
     if (displayName != null && displayName.isNotEmpty) {
-      return 'Ola, $displayName';
+      return 'Olá, $displayName';
     }
-    return 'Ola, ${widget.currentUser.label}';
+    return 'Olá, ${widget.currentUser.label}';
   }
 
   List<_HomeShortcutData> get _shortcutItems {
@@ -365,13 +359,13 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: _openSupplierAnalysis,
       ),
       _HomeShortcutData(
-        title: 'Devolucoes',
+        title: 'Devoluções',
         icon: Icons.assignment_return_outlined,
         accent: const Color(0xFFE45C5C),
         onTap: _openReturns,
       ),
       _HomeShortcutData(
-        title: 'Inadimplencia',
+        title: 'Inadimplência',
         icon: Icons.account_balance_wallet_outlined,
         accent: const Color(0xFFFF9800),
         onTap: _openDelinquency,
@@ -405,14 +399,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       if (_isAdmin)
         _HomeShortcutData(
-          title: 'Administracao',
+          title: 'Administração',
           icon: Icons.admin_panel_settings_outlined,
           accent: const Color(0xFF0B6E4F),
           onTap: _openAdministration,
         ),
       if (_isAdmin)
         _HomeShortcutData(
-          title: 'Relatorios',
+          title: 'Relatórios',
           icon: Icons.insights_outlined,
           accent: const Color(0xFF1E88E5),
           onTap: _openReports,
@@ -428,170 +422,161 @@ class _HomeScreenState extends State<HomeScreen> {
         : widget.currentUser.label;
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: const BoxDecoration(
-                color: Color(0xFFE7EBFF),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.person_outline,
-                color: primaryColor,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                _welcomeTitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0F3FF),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                roleLabel,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: primaryColor,
-                  fontWeight: FontWeight.w700,
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [primaryColor, Color(0xFF0B1689)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.22),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.person_outline,
+                  color: Colors.white,
+                  size: 26,
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _welcomeTitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        height: 1.12,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      widget.currentUser.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.78),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: Text(
+                  roleLabel,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildKpiOverviewSection() {
-    final compactMetrics = [
-      _HomeCompactMetricData(
-        label: 'Volume liquido',
+    final metrics = [
+      CompactMetricTile(
+        title: 'Venda',
+        value: _formatCurrency(_netAmount),
+        icon: Icons.trending_up_rounded,
+        accentColor: const Color(0xFF4864FF),
+        accentBackgroundColor: const Color(0xFFE8ECFF),
+      ),
+      CompactMetricTile(
+        title: 'Volume',
         value: _formatDecimal(_netVolume),
         icon: Icons.stacked_bar_chart_rounded,
-        accent: const Color(0xFF00838F),
+        accentColor: const Color(0xFF00838F),
+        accentBackgroundColor: const Color(0xFFE1F3F4),
       ),
-      _HomeCompactMetricData(
-        label: 'Positivacao liquida',
+      CompactMetricTile(
+        title: 'Positivação',
         value: '${_clampPositiveCount(_netPositivation)}',
         icon: Icons.people_alt_outlined,
-        accent: const Color(0xFF0B6E4F),
+        accentColor: const Color(0xFF0B6E4F),
+        accentBackgroundColor: const Color(0xFFE5F4ED),
+      ),
+      CompactMetricTile(
+        title: 'Produtos distintos',
+        value: '${_homeKpis.distinctProducts}',
+        icon: Icons.inventory_2_outlined,
+        accentColor: const Color(0xFF7C3AED),
+        accentBackgroundColor: const Color(0xFFF0E8FF),
       ),
     ];
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              _isNamedKpiProfile ? 'Seu resumo de hoje' : 'Resumo de hoje',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Indicadores liquidos de venda, ja considerando as devolucoes.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF4F7FF),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFFE3E9F5)),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Venda liquida',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.94),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.trending_up_rounded,
-                          color: Color(0xFF4864FF),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    height: 40,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        _formatCurrency(_netAmount),
-                        maxLines: 1,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: const Color(0xFF4864FF),
-                            ),
-                      ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _isNamedKpiProfile ? 'Resumo de hoje' : 'Resumo de hoje',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                ),
+                if (_homeKpis.lastSalesUpdatedAt != null)
                   Text(
-                    'Hoje • ${_clampPositiveCount(_netOrders)} pedidos liquidos',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF5E6A7C),
-                      fontWeight: FontWeight.w600,
+                    'Atualizado ${DateFormat('HH:mm', 'pt_BR').format(_homeKpis.lastSalesUpdatedAt!)}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF7A8597),
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final pillWidth = constraints.maxWidth >= 320
-                          ? (constraints.maxWidth - 10) / 2
-                          : constraints.maxWidth;
-
-                      return Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: compactMetrics
-                            .map(
-                              (item) => SizedBox(
-                                width: pillWidth,
-                                child: _HomeCompactMetricPill(data: item),
-                              ),
-                            )
-                            .toList(),
-                      );
-                    },
-                  ),
-                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                mainAxisExtent: 104,
               ),
+              itemCount: metrics.length,
+              itemBuilder: (context, index) => metrics[index],
             ),
           ],
         ),
@@ -609,7 +594,7 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Modulos',
+              'Módulos',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -626,9 +611,9 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
                 final crossAxisCount = width >= 620
-                    ? 4
+                    ? 5
                     : width >= 360
-                    ? 3
+                    ? 4
                     : 2;
 
                 return GridView.builder(
@@ -636,9 +621,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: crossAxisCount,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    mainAxisExtent: 104,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    mainAxisExtent: 86,
                   ),
                   itemCount: shortcuts.length,
                   itemBuilder: (context, index) {
@@ -653,80 +638,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildLastUpdatesCard() {
-    final items = <_HomeUpdateRowData>[
-      _HomeUpdateRowData(
-        label: 'Vendas',
-        value: _homeKpis.lastSalesUpdatedAt != null
-            ? _formatDateTime(_homeKpis.lastSalesUpdatedAt!)
-            : 'Aguardando sincronizacao',
-        icon: Icons.query_stats_outlined,
-        accent: const Color(0xFF4864FF),
-      ),
-    ];
-
-    if (_homeKpis.lastFinancialUpdatedAt != null) {
-      items.add(
-        _HomeUpdateRowData(
-          label: 'Financeiro',
-          value: _formatDateTime(_homeKpis.lastFinancialUpdatedAt!),
-          icon: Icons.account_balance_wallet_outlined,
-          accent: const Color(0xFF0B6E4F),
-        ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Atualizacoes',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Ultimas referencias de carga para os dados exibidos na home.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
-            ),
-            const SizedBox(height: 14),
-            ...items.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _HomeUpdateRow(data: item),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildBody() {
     return RefreshIndicator(
       color: primaryColor,
       onRefresh: _loadContent,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
         children: [
           _buildWelcomeCard(),
           if (_showsHomeKpis) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             _buildKpiOverviewSection(),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           _buildModuleSection(),
-          if (_showsHomeKpis || _homeKpis.lastSalesUpdatedAt != null) ...[
-            const SizedBox(height: 14),
-            _buildLastUpdatesCard(),
-          ],
         ],
       ),
     );
@@ -736,170 +662,219 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: Drawer(
+        backgroundColor: primaryColor,
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              Container(
+                height: 150,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [primaryColor, Color(0xFF0A1484)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Gestao de Vendas',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.trending_up_rounded,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Gestão de Vendas',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 8),
                     Text(
                       _appVersionLabel,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF7A8597),
+                        color: Colors.white.withValues(alpha: 0.72),
                         fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(
+                      widget.currentUser.label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      widget.currentUser.label,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF5E6A7C),
+                      widget.currentUser.profileName,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1),
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.home_outlined),
-                      title: const Text('Home'),
-                      selected: true,
-                      selectedTileColor: const Color(0xFFE7EBFF),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
                     ),
-                    if (_showsPerformanceModule)
+                  ),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(10, 18, 10, 12),
+                    children: [
                       ListTile(
-                        leading: const Icon(Icons.auto_graph_outlined),
-                        title: const Text('Performance'),
+                        leading: const Icon(Icons.home_outlined),
+                        title: const Text('Início'),
+                        selected: true,
+                        selectedTileColor: const Color(0xFFE7EBFF),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        onTap: _openPerformanceFromDrawer,
+                        onTap: () => Navigator.of(context).pop(),
                       ),
-                    ListTile(
-                      leading: const Icon(Icons.storefront_outlined),
-                      title: const Text('Analise por Fornecedor'),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      onTap: _openSupplierAnalysisFromDrawer,
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.assignment_return_outlined),
-                      title: const Text('Devolucoes'),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      onTap: _openReturnsFromDrawer,
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.warning_amber_rounded),
-                      title: const Text('Inadimplencia'),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      onTap: _openDelinquencyFromDrawer,
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.lock_clock_outlined),
-                      title: const Text('Pedidos Bloqueados'),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      onTap: _openBlockedOrdersFromDrawer,
-                    ),
-                    if (_showsCustomersWithoutPurchaseModule)
+                      if (_showsPerformanceModule)
+                        ListTile(
+                          leading: const Icon(Icons.auto_graph_outlined),
+                          title: const Text('Performance'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openPerformanceFromDrawer,
+                        ),
                       ListTile(
-                        leading: const Icon(Icons.person_search_outlined),
-                        title: const Text('Clientes sem compra'),
+                        leading: const Icon(Icons.storefront_outlined),
+                        title: const Text('Análise por Fornecedor'),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        onTap: _openCustomersWithoutPurchaseFromDrawer,
-                      ),
-                    if (_showsCustomerOpportunitiesModule)
-                      ListTile(
-                        leading: const Icon(Icons.map_outlined),
-                        title: const Text('Mapa de Oportunidades'),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        onTap: _openCustomerOpportunitiesFromDrawer,
-                      ),
-                    if (_showsRecoveredCustomersModule)
-                      ListTile(
-                        leading: const Icon(Icons.how_to_reg_outlined),
-                        title: const Text('Clientes Recuperados'),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        onTap: _openRecoveredCustomersFromDrawer,
-                      ),
-                    if (_isAdmin) ...[
-                      const SizedBox(height: 8),
-                      ListTile(
-                        leading: const Icon(Icons.settings_outlined),
-                        title: const Text('Administracao'),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        onTap: _openAdministrationFromDrawer,
+                        onTap: _openSupplierAnalysisFromDrawer,
                       ),
                       ListTile(
-                        leading: const Icon(Icons.analytics_outlined),
-                        title: const Text('Relatorios'),
+                        leading: const Icon(Icons.assignment_return_outlined),
+                        title: const Text('Devoluções'),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        onTap: _openReportsFromDrawer,
+                        onTap: _openReturnsFromDrawer,
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.warning_amber_rounded),
+                        title: const Text('Inadimplência'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        onTap: _openDelinquencyFromDrawer,
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.lock_clock_outlined),
+                        title: const Text('Pedidos Bloqueados'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        onTap: _openBlockedOrdersFromDrawer,
+                      ),
+                      if (_showsCustomersWithoutPurchaseModule)
+                        ListTile(
+                          leading: const Icon(Icons.person_search_outlined),
+                          title: const Text('Clientes sem compra'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openCustomersWithoutPurchaseFromDrawer,
+                        ),
+                      if (_showsCustomerOpportunitiesModule)
+                        ListTile(
+                          leading: const Icon(Icons.map_outlined),
+                          title: const Text('Mapa de Oportunidades'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openCustomerOpportunitiesFromDrawer,
+                        ),
+                      if (_showsRecoveredCustomersModule)
+                        ListTile(
+                          leading: const Icon(Icons.how_to_reg_outlined),
+                          title: const Text('Clientes Recuperados'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openRecoveredCustomersFromDrawer,
+                        ),
+                      if (_isAdmin) ...[
+                        const SizedBox(height: 8),
+                        ListTile(
+                          leading: const Icon(Icons.settings_outlined),
+                          title: const Text('Administração'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openAdministrationFromDrawer,
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.analytics_outlined),
+                          title: const Text('Relatórios'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openReportsFromDrawer,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              Container(color: Colors.white, child: const Divider(height: 1)),
+              Container(
+                color: Colors.white,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    10,
+                    10,
+                    10,
+                    MediaQuery.paddingOf(context).bottom + 6,
+                  ),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.lock_outline),
+                        title: const Text('Trocar senha'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        onTap: _openChangePasswordFromDrawer,
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.logout),
+                        title: const Text('Sair'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        onTap: () async {
+                          Navigator.of(context).pop();
+                          await widget.onLogout();
+                        },
                       ),
                     ],
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.lock_outline),
-                      title: const Text('Trocar Senha'),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      onTap: _openChangePasswordFromDrawer,
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.logout),
-                      title: const Text('Sair'),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      onTap: () async {
-                        Navigator.of(context).pop();
-                        await widget.onLogout();
-                      },
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -907,20 +882,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       appBar: AppBar(
-        title: Text(
-          _isAdmin ? 'Bem-vindo, Administracao' : 'Bem-vindo',
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: Text('Gestão de Vendas', overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
             onPressed: _loadContent,
             icon: const Icon(Icons.refresh),
             tooltip: 'Atualizar',
-          ),
-          IconButton(
-            onPressed: widget.onLogout,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sair',
           ),
         ],
       ),
@@ -970,20 +937,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _HomeCompactMetricData {
-  const _HomeCompactMetricData({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.accent,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color accent;
-}
-
 class _HomeShortcutData {
   const _HomeShortcutData({
     required this.title,
@@ -998,83 +951,6 @@ class _HomeShortcutData {
   final Future<void> Function() onTap;
 }
 
-class _HomeUpdateRowData {
-  const _HomeUpdateRowData({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.accent,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color accent;
-}
-
-class _HomeCompactMetricPill extends StatelessWidget {
-  const _HomeCompactMetricPill({required this.data});
-
-  final _HomeCompactMetricData data;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFDDE4F4)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: data.accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(data.icon, color: data.accent, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  data.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF6C7787),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                SizedBox(
-                  height: 24,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      data.value,
-                      maxLines: 1,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _HomeShortcutTile extends StatelessWidget {
   const _HomeShortcutTile({required this.data});
 
@@ -1084,29 +960,29 @@ class _HomeShortcutTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(8),
         onTap: data.onTap,
         child: Ink(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFE3E9F5)),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 34,
+                height: 34,
                 decoration: BoxDecoration(
                   color: data.accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(data.icon, color: data.accent, size: 20),
+                child: Icon(data.icon, color: data.accent, size: 19),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Expanded(
                 child: Center(
                   child: Text(
@@ -1114,8 +990,8 @@ class _HomeShortcutTile extends StatelessWidget {
                     maxLines: 2,
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
                       height: 1.1,
                     ),
                   ),
@@ -1124,59 +1000,6 @@ class _HomeShortcutTile extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _HomeUpdateRow extends StatelessWidget {
-  const _HomeUpdateRow({required this.data});
-
-  final _HomeUpdateRowData data;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE3E9F5)),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: data.accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(data.icon, color: data.accent),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  data.label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF6C7787),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  data.value,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

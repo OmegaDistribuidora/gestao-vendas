@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../components/compact_metric_tile.dart';
 import '../core/app_theme.dart';
 import '../models/return_analysis.dart';
 import '../services/app_repository.dart';
@@ -242,97 +243,58 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
     required Color accentColor,
     required Color accentBackgroundColor,
   }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFF5E6A7C),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 40,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        value,
-                        maxLines: 1,
-                        softWrap: false,
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          height: 1.05,
-                          color: accentColor,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: accentBackgroundColor,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Icon(icon, color: accentColor),
-            ),
-          ],
-        ),
-      ),
+    return CompactMetricTile(
+      title: title,
+      value: value,
+      icon: icon,
+      accentColor: accentColor,
+      accentBackgroundColor: accentBackgroundColor,
     );
   }
 
   Widget _buildMetricsSection() {
-    return Column(
-      children: [
-        _buildMetricCard(
-          title: 'Financeiro',
-          value: _formatMetricCurrency(_analysis.totalReturnAmount),
-          icon: Icons.attach_money_outlined,
-          accentColor: const Color(0xFFB42318),
-          accentBackgroundColor: const Color(0xFFFDECEC),
-        ),
-        const SizedBox(height: 12),
-        _buildMetricCard(
-          title: 'Clientes',
-          value: '${_analysis.totalClients}',
-          icon: Icons.people_outline,
-          accentColor: const Color(0xFF1D4ED8),
-          accentBackgroundColor: const Color(0xFFE8EEFF),
-        ),
-        const SizedBox(height: 12),
-        _buildMetricCard(
-          title: 'Volume',
-          value: _formatNumber(_analysis.totalVolume),
-          icon: Icons.widgets_outlined,
-          accentColor: const Color(0xFF7C3AED),
-          accentBackgroundColor: const Color(0xFFF2EAFE),
-        ),
-        const SizedBox(height: 12),
-        _buildMetricCard(
-          title: 'Pedidos',
-          value: '${_analysis.totalOrders}',
-          icon: Icons.assignment_return_outlined,
-          accentColor: const Color(0xFFFF7A00),
-          accentBackgroundColor: const Color(0xFFFFF0DD),
-        ),
-      ],
+    final metrics = [
+      _buildMetricCard(
+        title: 'Financeiro',
+        value: _formatMetricCurrency(_analysis.totalReturnAmount),
+        icon: Icons.attach_money_outlined,
+        accentColor: const Color(0xFFB42318),
+        accentBackgroundColor: const Color(0xFFFDECEC),
+      ),
+      _buildMetricCard(
+        title: 'Clientes',
+        value: '${_analysis.totalClients}',
+        icon: Icons.people_outline,
+        accentColor: const Color(0xFF1D4ED8),
+        accentBackgroundColor: const Color(0xFFE8EEFF),
+      ),
+      _buildMetricCard(
+        title: 'Volume',
+        value: _formatNumber(_analysis.totalVolume),
+        icon: Icons.widgets_outlined,
+        accentColor: const Color(0xFF7C3AED),
+        accentBackgroundColor: const Color(0xFFF2EAFE),
+      ),
+      _buildMetricCard(
+        title: 'Pedidos',
+        value: '${_analysis.totalOrders}',
+        icon: Icons.assignment_return_outlined,
+        accentColor: const Color(0xFFFF7A00),
+        accentBackgroundColor: const Color(0xFFFFF0DD),
+      ),
+    ];
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        mainAxisExtent: 104,
+      ),
+      itemCount: metrics.length,
+      itemBuilder: (context, index) => metrics[index],
     );
   }
 

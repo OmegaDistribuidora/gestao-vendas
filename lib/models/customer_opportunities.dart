@@ -164,10 +164,12 @@ class CustomerOpportunityActivity {
   final int opportunityCount;
 
   String get label {
-    if (code.isEmpty) {
-      return name;
-    }
-    return name.isEmpty || name == code ? code : '$code - $name';
+    final rawLabel = code.isEmpty
+        ? name
+        : name.isEmpty || name == code
+        ? code
+        : '$code - $name';
+    return _activityLabel(rawLabel);
   }
 
   factory CustomerOpportunityActivity.fromJson(Map<String, dynamic> json) {
@@ -242,10 +244,12 @@ class CustomerOpportunity {
   String get displayName => fantasyName.isNotEmpty ? fantasyName : clientName;
 
   String get activityLabel {
-    if (activityCode.isNotEmpty && activityName.isNotEmpty) {
-      return '$activityCode - $activityName';
-    }
-    return activityName.isNotEmpty ? activityName : activityCode;
+    final rawLabel = activityCode.isNotEmpty && activityName.isNotEmpty
+        ? '$activityCode - $activityName'
+        : activityName.isNotEmpty
+        ? activityName
+        : activityCode;
+    return _activityLabel(rawLabel);
   }
 
   String get cityLabel => uf.isEmpty ? city : '$city - $uf';
@@ -321,6 +325,14 @@ class CustomerOpportunity {
       suppliers: const <CustomerOpportunitySupplier>[],
     );
   }
+}
+
+String _activityLabel(String value) {
+  final normalized = value.trim();
+  if (normalized.isEmpty || RegExp(r'^\d+$').hasMatch(normalized)) {
+    return 'Sem ramo de atividade';
+  }
+  return normalized;
 }
 
 List<T> _parseList<T>(Object? value, T Function(Map<String, dynamic>) parse) {
