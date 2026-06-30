@@ -230,18 +230,32 @@ class _CustomerOpportunitiesMapScreenState
   }
 
   Future<void> _openRouteInExternalApp(CustomerOpportunity opportunity) async {
+    final selectedApp = await showModalBottomSheet<_ExternalNavigationApp>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => const _ExternalNavigationAppPicker(),
+    );
+    if (selectedApp == null || !mounted) {
+      return;
+    }
+
     final destination =
         '${opportunity.latitude.toStringAsFixed(7)},'
         '${opportunity.longitude.toStringAsFixed(7)}';
-    final directionsUri = Uri.https('www.google.com', '/maps/dir/', {
-      'api': '1',
-      'destination': destination,
-      'travelmode': 'driving',
-    });
-    final fallbackUri = Uri.parse(
-      'geo:${opportunity.latitude},${opportunity.longitude}'
-      '?q=${Uri.encodeComponent('$destination (${opportunity.displayName})')}',
-    );
+    final directionsUri = switch (selectedApp) {
+      _ExternalNavigationApp.googleMaps =>
+        Uri.https('www.google.com', '/maps/dir/', {
+          'api': '1',
+          'destination': destination,
+          'travelmode': 'driving',
+          'dir_action': 'navigate',
+        }),
+      _ExternalNavigationApp.waze => Uri.https('waze.com', '/ul', {
+        'll': destination,
+        'navigate': 'yes',
+        'utm_source': 'gestao_vendas',
+      }),
+    };
     final messenger = ScaffoldMessenger.of(context);
 
     final launchedDirections = await launchUrl(
@@ -249,14 +263,6 @@ class _CustomerOpportunitiesMapScreenState
       mode: LaunchMode.externalApplication,
     );
     if (launchedDirections) {
-      return;
-    }
-
-    final launchedFallback = await launchUrl(
-      fallbackUri,
-      mode: LaunchMode.externalApplication,
-    );
-    if (launchedFallback) {
       return;
     }
 
@@ -1568,6 +1574,50 @@ class _AddressRouteRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+enum _ExternalNavigationApp { googleMaps, waze }
+
+class _ExternalNavigationAppPicker extends StatelessWidget {
+  const _ExternalNavigationAppPicker();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Escolher aplicativo',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              leading: const Icon(Icons.map_outlined),
+              title: const Text('Google Maps'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () =>
+                  Navigator.of(context).pop(_ExternalNavigationApp.googleMaps),
+            ),
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              leading: const Icon(Icons.navigation_outlined),
+              title: const Text('Waze'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () =>
+                  Navigator.of(context).pop(_ExternalNavigationApp.waze),
+            ),
+          ],
+        ),
       ),
     );
   }

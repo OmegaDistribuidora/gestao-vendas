@@ -45,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Versão 0.9.2+17';
+  String _appVersionLabel = 'Versão 0.9.3+18';
   bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
 
@@ -99,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Versão 0.9.2+17';
+        _appVersionLabel = 'Versão 0.9.3+18';
       });
     }
   }

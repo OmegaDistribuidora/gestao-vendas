@@ -369,6 +369,21 @@ class CustomerRecentOrder {
 
   factory CustomerRecentOrder.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
+    final items = rawItems is List
+        ? rawItems
+              .whereType<Map>()
+              .map(
+                (row) => CustomerRecentOrderItem.fromJson(
+                  row.map((key, value) => MapEntry('$key', value)),
+                ),
+              )
+              .toList()
+        : const <CustomerRecentOrderItem>[];
+    final distinctProductCodes = items
+        .map((item) => item.codprod)
+        .where((code) => code.isNotEmpty)
+        .toSet();
+
     return CustomerRecentOrder(
       numped: '${json['numped'] ?? ''}'.trim(),
       salesDate: CustomersWithoutPurchaseOverview._parseDate(
@@ -380,17 +395,10 @@ class CustomerRecentOrder {
       totalVolume: CustomersWithoutPurchaseOverview._toDouble(
         json['total_volume'],
       ),
-      itemCount: CustomersWithoutPurchaseOverview._toInt(json['item_count']),
-      items: rawItems is List
-          ? rawItems
-                .whereType<Map>()
-                .map(
-                  (row) => CustomerRecentOrderItem.fromJson(
-                    row.map((key, value) => MapEntry('$key', value)),
-                  ),
-                )
-                .toList()
-          : const <CustomerRecentOrderItem>[],
+      itemCount: distinctProductCodes.isNotEmpty
+          ? distinctProductCodes.length
+          : CustomersWithoutPurchaseOverview._toInt(json['item_count']),
+      items: items,
     );
   }
 }
