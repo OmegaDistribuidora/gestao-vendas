@@ -2,7 +2,7 @@ DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
 Ultima atualizacao desta documentacao: 30/06/2026
-Versao atual do projeto: 0.9.3+18
+Versao atual do projeto: 0.9.4+19
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -502,9 +502,9 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao atual:
 
-- versionName: 0.9.3
-- versionCode: 18
-- Declaracao Flutter: version: 0.9.3+18
+- versionName: 0.9.4
+- versionCode: 19
+- Declaracao Flutter: version: 0.9.4+19
 
 Regras para Google Play:
 
