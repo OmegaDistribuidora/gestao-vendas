@@ -53,6 +53,10 @@ class _CustomerOpportunitiesMapScreenState
   CustomerRoute? _activeRoute;
   CustomerOpportunity? _routeOpportunity;
   LatLng? _routeOrigin;
+  LatLng? _currentLocation;
+  StreamSubscription<Position>? _mapLocationSubscription;
+  bool _mapLocationStarting = false;
+  int _mapLocationGeneration = 0;
   Timer? _locationRefreshTimer;
   bool _locationRefreshInProgress = false;
   int _routeTrackingGeneration = 0;
@@ -72,6 +76,7 @@ class _CustomerOpportunitiesMapScreenState
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopLocationTracking();
+    _stopMapLocationTracking();
     _directionsService.close();
     _mapController.dispose();
     super.dispose();
@@ -79,9 +84,13 @@ class _CustomerOpportunitiesMapScreenState
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) {
-      _stopLocationTracking();
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_startMapLocationTracking(requestPermission: false));
+      return;
     }
+
+    _stopLocationTracking();
+    _stopMapLocationTracking();
   }
 
   Future<void> _loadData() async {
@@ -113,6 +122,7 @@ class _CustomerOpportunitiesMapScreenState
             : overview.selectedActivityKey;
         _loading = false;
       });
+      unawaited(_startMapLocationTracking(requestPermission: true));
       WidgetsBinding.instance.addPostFrameCallback((_) => _focusSelection());
     } catch (error) {
       if (!mounted) {
@@ -318,7 +328,95 @@ class _CustomerOpportunitiesMapScreenState
         timeLimit: Duration(seconds: 18),
       ),
     );
-    return LatLng(position.latitude, position.longitude);
+    final location = LatLng(position.latitude, position.longitude);
+    if (mounted) {
+      setState(() {
+        _currentLocation = location;
+      });
+    }
+    return location;
+  }
+
+  Future<void> _startMapLocationTracking({
+    required bool requestPermission,
+  }) async {
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    if (!mounted ||
+        (lifecycleState != null &&
+            lifecycleState != AppLifecycleState.resumed) ||
+        _loading ||
+        _overview.accessDenied ||
+        _mapLocationStarting ||
+        _mapLocationSubscription != null) {
+      return;
+    }
+
+    _mapLocationStarting = true;
+    final generation = ++_mapLocationGeneration;
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled || !mounted || generation != _mapLocationGeneration) {
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied && requestPermission) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever ||
+          !mounted ||
+          generation != _mapLocationGeneration) {
+        return;
+      }
+
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 18),
+          ),
+        );
+        _updateCurrentLocation(position, generation);
+      } catch (_) {
+        // O stream abaixo ainda pode fornecer a primeira posicao.
+      }
+
+      if (!mounted || generation != _mapLocationGeneration) {
+        return;
+      }
+      _mapLocationSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: AndroidSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 3,
+              intervalDuration: Duration(seconds: 5),
+            ),
+          ).listen(
+            (position) => _updateCurrentLocation(position, generation),
+            onError: (_) {},
+          );
+    } finally {
+      if (generation == _mapLocationGeneration) {
+        _mapLocationStarting = false;
+      }
+    }
+  }
+
+  void _updateCurrentLocation(Position position, int generation) {
+    if (!mounted || generation != _mapLocationGeneration) {
+      return;
+    }
+    setState(() {
+      _currentLocation = LatLng(position.latitude, position.longitude);
+    });
+  }
+
+  void _stopMapLocationTracking() {
+    _mapLocationGeneration++;
+    _mapLocationStarting = false;
+    unawaited(_mapLocationSubscription?.cancel());
+    _mapLocationSubscription = null;
   }
 
   Future<void> _calculateRoute(CustomerOpportunity opportunity) async {
@@ -347,6 +445,7 @@ class _CustomerOpportunitiesMapScreenState
         return;
       }
       setState(() {
+        _currentLocation = origin;
         _routeOrigin = origin;
         _activeRoute = route;
         _lastRouteInteractionAt = DateTime.now();
@@ -457,6 +556,7 @@ class _CustomerOpportunitiesMapScreenState
       }
 
       setState(() {
+        _currentLocation = origin;
         _routeOrigin = origin;
         _activeRoute = route;
       });
@@ -589,11 +689,11 @@ class _CustomerOpportunitiesMapScreenState
                   ),
                 ),
               ),
-              if (_routeOrigin != null)
+              if (_currentLocation != null || _routeOrigin != null)
                 MarkerLayer(
                   markers: [
                     Marker(
-                      point: _routeOrigin!,
+                      point: _currentLocation ?? _routeOrigin!,
                       width: 36,
                       height: 36,
                       child: const Tooltip(
