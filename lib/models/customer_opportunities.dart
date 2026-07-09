@@ -163,14 +163,7 @@ class CustomerOpportunityActivity {
   final String name;
   final int opportunityCount;
 
-  String get label {
-    final rawLabel = code.isEmpty
-        ? name
-        : name.isEmpty || name == code
-        ? code
-        : '$code - $name';
-    return _activityLabel(rawLabel);
-  }
+  String get label => _activityLabel(name.isNotEmpty ? name : code);
 
   factory CustomerOpportunityActivity.fromJson(Map<String, dynamic> json) {
     return CustomerOpportunityActivity(
@@ -243,14 +236,8 @@ class CustomerOpportunity {
 
   String get displayName => fantasyName.isNotEmpty ? fantasyName : clientName;
 
-  String get activityLabel {
-    final rawLabel = activityCode.isNotEmpty && activityName.isNotEmpty
-        ? '$activityCode - $activityName'
-        : activityName.isNotEmpty
-        ? activityName
-        : activityCode;
-    return _activityLabel(rawLabel);
-  }
+  String get activityLabel =>
+      _activityLabel(activityName.isNotEmpty ? activityName : activityCode);
 
   String get cityLabel => uf.isEmpty ? city : '$city - $uf';
 

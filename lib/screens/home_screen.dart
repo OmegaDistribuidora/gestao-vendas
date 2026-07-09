@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../components/compact_metric_tile.dart';
 import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
 import '../models/kpi_metric_source.dart';
+import '../models/performance_overview.dart';
 import '../models/seller_home_kpis.dart';
 import '../services/app_repository.dart';
+import '../utils/business_day_projection.dart';
 import 'admin_screen.dart';
 import 'blocked_orders_screen.dart';
 import 'change_password_screen.dart';
@@ -42,12 +43,14 @@ class _HomeScreenState extends State<HomeScreen> {
     symbol: 'R\$',
   );
   final NumberFormat _decimalFormat = NumberFormat.decimalPattern('pt_BR');
+  final NumberFormat _percentFormat = NumberFormat.decimalPattern('pt_BR');
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Versão 0.9.5+20';
+  String _appVersionLabel = 'Vers\u00E3o 0.9.7+22';
   bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
+  PerformanceOverview _performanceOverview = PerformanceOverview.empty();
 
   bool get _isAdmin => widget.currentUser.isAdmin;
   bool get _isSeller => widget.currentUser.profileSlug == AppProfile.sellerSlug;
@@ -76,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _recordModuleAccess('home', 'In\u00EDcio');
     _loadAppVersion();
     _loadContent();
   }
@@ -86,8 +90,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final version = packageInfo.version.trim();
       final buildNumber = packageInfo.buildNumber.trim();
       final versionLabel = buildNumber.isEmpty
-          ? 'Versão $version'
-          : 'Versão $version+$buildNumber';
+          ? 'Vers\u00E3o $version'
+          : 'Vers\u00E3o $version+$buildNumber';
       if (!mounted) {
         return;
       }
@@ -99,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Versão 0.9.5+20';
+        _appVersionLabel = 'Vers\u00E3o 0.9.7+22';
       });
     }
   }
@@ -120,6 +124,14 @@ class _HomeScreenState extends State<HomeScreen> {
         end: end,
         metricSource: KpiMetricSource.venda,
       );
+      var performanceOverview = PerformanceOverview.empty();
+      if (_isNamedKpiProfile) {
+        try {
+          performanceOverview = await _repository.getPerformanceOverview();
+        } catch (_) {
+          performanceOverview = PerformanceOverview.empty();
+        }
+      }
       var customerOpportunitiesEnabled = _isSupervisor || _isCoordinator;
       if (_isSeller) {
         try {
@@ -136,6 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _homeKpis = homeKpis;
+        _performanceOverview = performanceOverview;
         _customerOpportunitiesEnabled = customerOpportunitiesEnabled;
         _loading = false;
       });
@@ -152,6 +165,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openAdministration() async {
+    await _recordModuleAccess('administracao', 'Administra\u00E7\u00E3o');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => AdminScreen(currentUser: widget.currentUser),
@@ -161,6 +178,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openReports() async {
+    await _recordModuleAccess('relatorios', 'Relat\u00F3rios');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ReportsScreen(currentUser: widget.currentUser),
@@ -169,36 +190,60 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openSupplierAnalysis() async {
+    await _recordModuleAccess('fornecedor', 'An\u00E1lise por Fornecedor');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const SupplierAnalysisScreen()),
     );
   }
 
   Future<void> _openPerformance() async {
+    await _recordModuleAccess('performance', 'Performance');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const PerformanceScreen()));
   }
 
   Future<void> _openReturns() async {
+    await _recordModuleAccess('devolucoes', 'Devolu\u00E7\u00F5es');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const ReturnsScreen()));
   }
 
   Future<void> _openDelinquency() async {
+    await _recordModuleAccess('inadimplencia', 'Inadimpl\u00EAncia');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const DelinquencyScreen()));
   }
 
   Future<void> _openBlockedOrders() async {
+    await _recordModuleAccess('pedidos_bloqueados', 'Pedidos Bloqueados');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const BlockedOrdersScreen()),
     );
   }
 
   Future<void> _openCustomersWithoutPurchase() async {
+    await _recordModuleAccess('clientes_sem_compra', 'Clientes sem compra');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const CustomersWithoutPurchaseScreen(),
@@ -207,6 +252,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openCustomerOpportunities() async {
+    await _recordModuleAccess('mapa_oportunidades', 'Mapa de Oportunidades');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const CustomerOpportunitiesMapScreen(),
@@ -215,12 +264,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openRecoveredCustomers() async {
+    await _recordModuleAccess('clientes_recuperados', 'Clientes Recuperados');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const RecoveredCustomersScreen()),
     );
   }
 
   Future<void> _openChangePassword() async {
+    await _recordModuleAccess('trocar_senha', 'Trocar senha');
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ChangePasswordScreen(currentUser: widget.currentUser),
@@ -332,15 +389,72 @@ class _HomeScreenState extends State<HomeScreen> {
   String _formatDecimal(double value) =>
       _decimalFormat.format(double.parse(value.toStringAsFixed(1)));
 
+  String _formatPercent(double? value) {
+    if (value == null) {
+      return 'Sem meta';
+    }
+    final fixed = double.parse(value.toStringAsFixed(1));
+    return '${_percentFormat.format(fixed)}%';
+  }
+
+  Future<void> _recordModuleAccess(String moduleKey, String moduleName) {
+    return _repository.recordModuleAccessSafely(
+      moduleKey: moduleKey,
+      moduleName: moduleName,
+    );
+  }
+
+  DateTime get _projectionMonthStart {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, 1);
+  }
+
+  PerformanceOverviewItem? get _overallPerformanceItem =>
+      _performanceOverview.overallItem;
+
+  String _formatRequiredCurrency(BusinessDayProjectionSummary summary) {
+    final targetValue = summary.targetValue;
+    if (targetValue == null || targetValue <= 0) {
+      return 'Sem meta';
+    }
+    final requiredValue = summary.requiredPerBusinessDay;
+    if (requiredValue == null) {
+      return 'Sem dias \u00FAteis';
+    }
+    return _formatCurrency(requiredValue);
+  }
+
+  String _formatRequiredInteger(BusinessDayProjectionSummary summary) {
+    final targetValue = summary.targetValue;
+    if (targetValue == null || targetValue <= 0) {
+      return 'Sem meta';
+    }
+    final requiredValue = summary.requiredPerBusinessDay;
+    if (requiredValue == null) {
+      return 'Sem dias \u00FAteis';
+    }
+    return _decimalFormat.format(requiredValue.ceil());
+  }
+
+  double? _dailyProgressPct({
+    required double actualToday,
+    required double? dailyTarget,
+  }) {
+    if (dailyTarget == null || dailyTarget <= 0) {
+      return null;
+    }
+    return (actualToday / dailyTarget) * 100;
+  }
+
   String get _welcomeTitle {
     final displayName = widget.currentUser.displayName?.trim();
     if (_isAdmin) {
-      return 'Painel da administração';
+      return 'Painel da administra\u00E7\u00E3o';
     }
     if (displayName != null && displayName.isNotEmpty) {
-      return 'Olá, $displayName';
+      return 'Ol\u00E1, $displayName';
     }
-    return 'Olá, ${widget.currentUser.label}';
+    return 'Ol\u00E1, ${widget.currentUser.label}';
   }
 
   List<_HomeShortcutData> get _shortcutItems {
@@ -359,13 +473,13 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: _openSupplierAnalysis,
       ),
       _HomeShortcutData(
-        title: 'Devoluções',
+        title: 'Devolu\u00E7\u00F5es',
         icon: Icons.assignment_return_outlined,
         accent: const Color(0xFFE45C5C),
         onTap: _openReturns,
       ),
       _HomeShortcutData(
-        title: 'Inadimplência',
+        title: 'Inadimpl\u00EAncia',
         icon: Icons.account_balance_wallet_outlined,
         accent: const Color(0xFFFF9800),
         onTap: _openDelinquency,
@@ -399,14 +513,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       if (_isAdmin)
         _HomeShortcutData(
-          title: 'Administração',
+          title: 'Administra\u00E7\u00E3o',
           icon: Icons.admin_panel_settings_outlined,
           accent: const Color(0xFF0B6E4F),
           onTap: _openAdministration,
         ),
       if (_isAdmin)
         _HomeShortcutData(
-          title: 'Relatórios',
+          title: 'Relat\u00F3rios',
           icon: Icons.insights_outlined,
           accent: const Color(0xFF1E88E5),
           onTap: _openReports,
@@ -508,36 +622,113 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildKpiOverviewSection() {
-    final metrics = [
-      CompactMetricTile(
-        title: 'Venda',
-        value: _formatCurrency(_netAmount),
-        icon: Icons.trending_up_rounded,
-        accentColor: const Color(0xFF4864FF),
-        accentBackgroundColor: const Color(0xFFE8ECFF),
-      ),
-      CompactMetricTile(
-        title: 'Volume',
-        value: _formatDecimal(_netVolume),
-        icon: Icons.stacked_bar_chart_rounded,
-        accentColor: const Color(0xFF00838F),
-        accentBackgroundColor: const Color(0xFFE1F3F4),
-      ),
-      CompactMetricTile(
-        title: 'Positivação',
-        value: '${_clampPositiveCount(_netPositivation)}',
-        icon: Icons.people_alt_outlined,
-        accentColor: const Color(0xFF0B6E4F),
-        accentBackgroundColor: const Color(0xFFE5F4ED),
-      ),
-      CompactMetricTile(
-        title: 'Produtos distintos',
-        value: '${_homeKpis.distinctProducts}',
-        icon: Icons.inventory_2_outlined,
-        accentColor: const Color(0xFF7C3AED),
-        accentBackgroundColor: const Color(0xFFF0E8FF),
-      ),
-    ];
+    final overallItem = _overallPerformanceItem;
+    final financialSummary = overallItem == null
+        ? null
+        : BusinessDayProjection.summarize(
+            actualValue: overallItem.actualFin,
+            targetValue: overallItem.targetFin,
+            monthStart: _projectionMonthStart,
+          );
+    final secondarySummary = overallItem == null
+        ? null
+        : BusinessDayProjection.summarize(
+            actualValue: overallItem.secondaryActual.toDouble(),
+            targetValue: overallItem.secondaryTarget?.toDouble(),
+            monthStart: _projectionMonthStart,
+          );
+    final usesSkuMetric = overallItem?.usesSkuMetric == true;
+    final secondaryActualToday = usesSkuMetric
+        ? _homeKpis.distinctProducts.toDouble()
+        : _clampPositiveCount(_netPositivation).toDouble();
+    final secondaryMetricTitle = usesSkuMetric
+        ? 'SKU'
+        : 'Positiva\u00E7\u00E3o';
+    final secondaryMetricValue = usesSkuMetric
+        ? '${_homeKpis.distinctProducts}'
+        : '${_clampPositiveCount(_netPositivation)}';
+    final secondaryMetricIcon = usesSkuMetric
+        ? Icons.inventory_2_outlined
+        : Icons.people_alt_outlined;
+    final secondaryMetricAccent = usesSkuMetric
+        ? const Color(0xFF7C3AED)
+        : const Color(0xFF0B6E4F);
+    final secondaryMetricBackground = usesSkuMetric
+        ? const Color(0xFFF0E8FF)
+        : const Color(0xFFE5F4ED);
+    final otherMetricTitle = usesSkuMetric
+        ? 'Positiva\u00E7\u00E3o'
+        : 'Produtos distintos';
+    final otherMetricValue = usesSkuMetric
+        ? '${_clampPositiveCount(_netPositivation)}'
+        : '${_homeKpis.distinctProducts}';
+    final otherMetricIcon = usesSkuMetric
+        ? Icons.people_alt_outlined
+        : Icons.inventory_2_outlined;
+    final otherMetricAccent = usesSkuMetric
+        ? const Color(0xFF0B6E4F)
+        : const Color(0xFF7C3AED);
+    final otherMetricBackground = usesSkuMetric
+        ? const Color(0xFFE5F4ED)
+        : const Color(0xFFF0E8FF);
+
+    final financialProgress = _dailyProgressPct(
+      actualToday: _netAmount,
+      dailyTarget: financialSummary?.requiredPerBusinessDay,
+    );
+    final secondaryProgress = _dailyProgressPct(
+      actualToday: secondaryActualToday,
+      dailyTarget: secondarySummary?.requiredPerBusinessDay,
+    );
+
+    final financialActual = _TodayMetricData(
+      title: 'Venda',
+      value: _formatCurrency(_netAmount),
+      icon: Icons.trending_up_rounded,
+      accentColor: const Color(0xFF4864FF),
+      accentBackgroundColor: const Color(0xFFE8ECFF),
+    );
+    final financialTarget = _TodayMetricData(
+      title: 'Meta Financeira de hoje',
+      value: financialSummary == null
+          ? 'Sem meta'
+          : _formatRequiredCurrency(financialSummary),
+      icon: Icons.flag_outlined,
+      accentColor: const Color(0xFF4864FF),
+      accentBackgroundColor: const Color(0xFFE8ECFF),
+    );
+    final secondaryActual = _TodayMetricData(
+      title: secondaryMetricTitle,
+      value: secondaryMetricValue,
+      icon: secondaryMetricIcon,
+      accentColor: secondaryMetricAccent,
+      accentBackgroundColor: secondaryMetricBackground,
+    );
+    final secondaryTarget = _TodayMetricData(
+      title: usesSkuMetric
+          ? 'Meta SKU de hoje'
+          : 'Meta Positiva\u00E7\u00E3o de hoje',
+      value: secondarySummary == null
+          ? 'Sem meta'
+          : _formatRequiredInteger(secondarySummary),
+      icon: usesSkuMetric ? Icons.inventory_2_outlined : Icons.groups_outlined,
+      accentColor: secondaryMetricAccent,
+      accentBackgroundColor: secondaryMetricBackground,
+    );
+    final volumeMetric = _TodayMetricData(
+      title: 'Volume',
+      value: _formatDecimal(_netVolume),
+      icon: Icons.stacked_bar_chart_rounded,
+      accentColor: const Color(0xFF00838F),
+      accentBackgroundColor: const Color(0xFFE1F3F4),
+    );
+    final otherMetric = _TodayMetricData(
+      title: otherMetricTitle,
+      value: otherMetricValue,
+      icon: otherMetricIcon,
+      accentColor: otherMetricAccent,
+      accentBackgroundColor: otherMetricBackground,
+    );
 
     return Card(
       child: Padding(
@@ -556,27 +747,49 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 if (_homeKpis.lastSalesUpdatedAt != null)
-                  Text(
-                    'Atualizado ${DateFormat('HH:mm', 'pt_BR').format(_homeKpis.lastSalesUpdatedAt!)}',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: const Color(0xFF7A8597),
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.schedule_rounded,
+                        size: 14,
+                        color: Color(0xFF6B7DB6),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Atualizado ${DateFormat('HH:mm', 'pt_BR').format(_homeKpis.lastSalesUpdatedAt!)}',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: const Color(0xFF7A8597),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),
             const SizedBox(height: 12),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                mainAxisExtent: 104,
-              ),
-              itemCount: metrics.length,
-              itemBuilder: (context, index) => metrics[index],
+            _GroupedTodayKpiCard(
+              left: financialActual,
+              right: financialTarget,
+              progressPercent: financialProgress,
+              progressColor: const Color(0xFF4864FF),
+              progressBackgroundColor: const Color(0xFFE1E5F5),
+              percentFormatter: _formatPercent,
+            ),
+            const SizedBox(height: 10),
+            _GroupedTodayKpiCard(
+              left: secondaryActual,
+              right: secondaryTarget,
+              progressPercent: secondaryProgress,
+              progressColor: secondaryMetricAccent,
+              progressBackgroundColor: secondaryMetricBackground,
+              percentFormatter: _formatPercent,
+            ),
+            const SizedBox(height: 10),
+            _GroupedTodayKpiCard(
+              left: volumeMetric,
+              right: otherMetric,
+              showProgress: false,
             ),
           ],
         ),
@@ -594,7 +807,7 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Módulos',
+              'M\u00F3dulos',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -690,7 +903,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Gestão de Vendas',
+                            'Gest\u00E3o de Vendas',
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(
                                   color: Colors.white,
@@ -743,7 +956,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       ListTile(
                         leading: const Icon(Icons.home_outlined),
-                        title: const Text('Início'),
+                        title: const Text('In\u00EDcio'),
                         selected: true,
                         selectedTileColor: const Color(0xFFE7EBFF),
                         shape: RoundedRectangleBorder(
@@ -762,7 +975,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ListTile(
                         leading: const Icon(Icons.storefront_outlined),
-                        title: const Text('Análise por Fornecedor'),
+                        title: const Text('An\u00E1lise por Fornecedor'),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -770,7 +983,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       ListTile(
                         leading: const Icon(Icons.assignment_return_outlined),
-                        title: const Text('Devoluções'),
+                        title: const Text('Devolu\u00E7\u00F5es'),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -778,7 +991,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       ListTile(
                         leading: const Icon(Icons.warning_amber_rounded),
-                        title: const Text('Inadimplência'),
+                        title: const Text('Inadimpl\u00EAncia'),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -823,7 +1036,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 8),
                         ListTile(
                           leading: const Icon(Icons.settings_outlined),
-                          title: const Text('Administração'),
+                          title: const Text('Administra\u00E7\u00E3o'),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -831,7 +1044,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         ListTile(
                           leading: const Icon(Icons.analytics_outlined),
-                          title: const Text('Relatórios'),
+                          title: const Text('Relat\u00F3rios'),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -882,7 +1095,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       appBar: AppBar(
-        title: Text('Gestão de Vendas', overflow: TextOverflow.ellipsis),
+        title: Text('Gest\u00E3o de Vendas', overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
             onPressed: _loadContent,
@@ -933,6 +1146,214 @@ class _HomeScreenState extends State<HomeScreen> {
               )
             : _buildBody(),
       ),
+    );
+  }
+}
+
+class _TodayMetricData {
+  const _TodayMetricData({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.accentColor,
+    required this.accentBackgroundColor,
+  });
+
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color accentColor;
+  final Color accentBackgroundColor;
+}
+
+class _GroupedTodayKpiCard extends StatelessWidget {
+  const _GroupedTodayKpiCard({
+    required this.left,
+    required this.right,
+    this.showProgress = true,
+    this.progressPercent,
+    this.progressColor,
+    this.progressBackgroundColor,
+    this.percentFormatter,
+  });
+
+  final _TodayMetricData left;
+  final _TodayMetricData right;
+  final bool showProgress;
+  final double? progressPercent;
+  final Color? progressColor;
+  final Color? progressBackgroundColor;
+  final String Function(double? value)? percentFormatter;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = progressPercent;
+    final progressValue = progress == null
+        ? 0.0
+        : (progress / 100).clamp(0.0, 1.0).toDouble();
+    final formattedProgress = progress == null
+        ? null
+        : percentFormatter?.call(progress) ?? '${progress.toStringAsFixed(0)}%';
+    final progressPill = progress == null ? '--' : formattedProgress!;
+    final effectiveProgressColor = progressColor ?? right.accentColor;
+    final effectiveProgressBackground =
+        progressBackgroundColor ?? const Color(0xFFE5EAF5);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDDE4F0)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF22345A).withValues(alpha: 0.035),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final useHorizontalLayout = constraints.maxWidth >= 300;
+              if (!useHorizontalLayout) {
+                return Column(
+                  children: [
+                    _TodayMetricPane(data: left),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      child: Divider(height: 1, color: const Color(0xFFE3E8F4)),
+                    ),
+                    _TodayMetricPane(data: right),
+                  ],
+                );
+              }
+
+              return IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: _TodayMetricPane(data: left)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color: const Color(0xFFE3E8F4),
+                      ),
+                    ),
+                    Expanded(child: _TodayMetricPane(data: right)),
+                  ],
+                ),
+              );
+            },
+          ),
+          if (showProgress) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(99),
+                    child: LinearProgressIndicator(
+                      value: progressValue,
+                      minHeight: 7,
+                      backgroundColor: effectiveProgressBackground,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        effectiveProgressColor,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: right.accentBackgroundColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    progressPill,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: right.accentColor,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TodayMetricPane extends StatelessWidget {
+  const _TodayMetricPane({required this.data});
+
+  final _TodayMetricData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final isStatusValue = data.value.startsWith('Sem ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: data.accentBackgroundColor,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(data.icon, color: data.accentColor, size: 23),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                data.title,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: const Color(0xFF23376D),
+                  fontWeight: FontWeight.w800,
+                  height: 1.12,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 35,
+          width: double.infinity,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              data.value,
+              maxLines: 1,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: data.accentColor,
+                fontWeight: FontWeight.w900,
+                height: 1,
+                fontSize: isStatusValue ? 19 : null,
+                letterSpacing: isStatusValue ? -0.2 : -0.6,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

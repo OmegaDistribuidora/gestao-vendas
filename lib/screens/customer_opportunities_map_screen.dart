@@ -27,6 +27,9 @@ class _CustomerOpportunitiesMapScreenState
     extends State<CustomerOpportunitiesMapScreen>
     with WidgetsBindingObserver {
   static const LatLng _brazilCenter = LatLng(-14.235, -51.9253);
+  static const String _nearMeNeighborhoodKey = '__near_me__';
+  static const double _nearbyRadiusMeters = 5000;
+  static const Distance _distance = Distance();
   static const Duration _routeRefreshInterval = Duration(seconds: 5);
   static const Duration _routeIdleTimeout = Duration(minutes: 1);
 
@@ -48,8 +51,12 @@ class _CustomerOpportunitiesMapScreenState
   String? _errorMessage;
   String? _selectedSupervisorCode;
   String? _selectedSellerCode;
-  String? _selectedNeighborhoodKey;
+  String? _selectedNeighborhoodKey = _nearMeNeighborhoodKey;
   String? _selectedActivityKey;
+  List<CustomerOpportunity>? _nearbyOpportunities;
+  bool _nearbyLoading = false;
+  int _nearbyGeneration = 0;
+  LatLng? _nearbyOrigin;
   CustomerRoute? _activeRoute;
   CustomerOpportunity? _routeOpportunity;
   LatLng? _routeOrigin;
@@ -94,6 +101,7 @@ class _CustomerOpportunitiesMapScreenState
   }
 
   Future<void> _loadData() async {
+    final requestedNearMe = _isNearMeSelected;
     setState(() {
       _loading = true;
       _errorMessage = null;
@@ -103,8 +111,10 @@ class _CustomerOpportunitiesMapScreenState
       final overview = await _repository.getCustomerOpportunities(
         targetSupervisorCode: _selectedSupervisorCode,
         targetSellerCode: _selectedSellerCode,
-        targetNeighborhoodKey: _selectedNeighborhoodKey,
-        targetActivityKey: _selectedActivityKey,
+        targetNeighborhoodKey: requestedNearMe
+            ? null
+            : _selectedNeighborhoodKey,
+        targetActivityKey: requestedNearMe ? null : _selectedActivityKey,
       );
       if (!mounted) {
         return;
@@ -114,15 +124,29 @@ class _CustomerOpportunitiesMapScreenState
         _overview = overview;
         _selectedSupervisorCode = overview.selectedSupervisorCode;
         _selectedSellerCode = overview.selectedSellerCode;
-        _selectedNeighborhoodKey = overview.selectedNeighborhoodKey.isEmpty
+        _selectedNeighborhoodKey = requestedNearMe
+            ? _nearMeNeighborhoodKey
+            : overview.selectedNeighborhoodKey.isEmpty
             ? null
             : overview.selectedNeighborhoodKey;
-        _selectedActivityKey = overview.selectedActivityKey.isEmpty
+        _selectedActivityKey = requestedNearMe
+            ? null
+            : overview.selectedActivityKey.isEmpty
             ? null
             : overview.selectedActivityKey;
+        if (!requestedNearMe) {
+          _nearbyOpportunities = null;
+          _nearbyLoading = false;
+          _nearbyOrigin = null;
+        }
         _loading = false;
       });
       unawaited(_startMapLocationTracking(requestPermission: true));
+      if (requestedNearMe) {
+        unawaited(
+          _refreshNearbyOpportunities(force: true, focusAfterRefresh: true),
+        );
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) => _focusSelection());
     } catch (error) {
       if (!mounted) {
@@ -139,8 +163,9 @@ class _CustomerOpportunitiesMapScreenState
     if (!mounted) {
       return;
     }
-    if (_overview.opportunities.isNotEmpty) {
-      final points = _overview.opportunities
+    final visibleOpportunities = _visibleOpportunities;
+    if (visibleOpportunities.isNotEmpty) {
+      final points = visibleOpportunities
           .map((item) => LatLng(item.latitude, item.longitude))
           .toList(growable: false);
       _mapController.fitCamera(
@@ -150,6 +175,11 @@ class _CustomerOpportunitiesMapScreenState
           maxZoom: 15,
         ),
       );
+      return;
+    }
+
+    if (_isNearMeSelected && _currentLocation != null) {
+      _mapController.move(_currentLocation!, 15);
       return;
     }
 
@@ -164,6 +194,118 @@ class _CustomerOpportunitiesMapScreenState
     }
   }
 
+  bool get _isNearMeSelected =>
+      _selectedNeighborhoodKey == _nearMeNeighborhoodKey;
+
+  List<CustomerOpportunity> get _visibleOpportunities {
+    if (_isNearMeSelected) {
+      return _nearbyOpportunities ?? const <CustomerOpportunity>[];
+    }
+    return _overview.opportunities;
+  }
+
+  void _clearNearbyState() {
+    _nearbyGeneration++;
+    _nearbyOpportunities = null;
+    _nearbyLoading = false;
+    _nearbyOrigin = null;
+  }
+
+  bool _shouldRefreshNearby(LatLng location, {required bool force}) {
+    if (!_isNearMeSelected || _overview.selectionRequired.isNotEmpty) {
+      return false;
+    }
+    if (force || _nearbyOpportunities == null || _nearbyOrigin == null) {
+      return true;
+    }
+    return _distance(_nearbyOrigin!, location) >= 250;
+  }
+
+  Future<void> _refreshNearbyOpportunities({
+    bool force = false,
+    bool focusAfterRefresh = false,
+  }) async {
+    final origin = _currentLocation;
+    if (origin == null ||
+        _nearbyLoading ||
+        !_shouldRefreshNearby(origin, force: force)) {
+      return;
+    }
+
+    final generation = ++_nearbyGeneration;
+    setState(() {
+      _nearbyLoading = true;
+    });
+
+    try {
+      final neighborhoods = _overview.servedNeighborhoods;
+      final candidateNeighborhoods = neighborhoods
+          .where((neighborhood) {
+            final center = LatLng(
+              neighborhood.centerLatitude,
+              neighborhood.centerLongitude,
+            );
+            return _distance(origin, center) <= _nearbyRadiusMeters + 7000;
+          })
+          .toList(growable: false);
+      final neighborhoodsToLoad = candidateNeighborhoods.isEmpty
+          ? neighborhoods
+          : candidateNeighborhoods;
+      final nearbyByTaxId = <String, CustomerOpportunity>{};
+
+      for (final neighborhood in neighborhoodsToLoad) {
+        if (!mounted || generation != _nearbyGeneration) {
+          return;
+        }
+        final overview = await _repository.getCustomerOpportunities(
+          targetSupervisorCode: _selectedSupervisorCode,
+          targetSellerCode: _selectedSellerCode,
+          targetNeighborhoodKey: neighborhood.key,
+        );
+        for (final opportunity in overview.opportunities) {
+          final point = LatLng(opportunity.latitude, opportunity.longitude);
+          if (_distance(origin, point) <= _nearbyRadiusMeters) {
+            nearbyByTaxId[opportunity.taxId] = opportunity;
+          }
+        }
+      }
+
+      final nearby = nearbyByTaxId.values.toList()
+        ..sort((left, right) {
+          final leftDistance = _distance(
+            origin,
+            LatLng(left.latitude, left.longitude),
+          );
+          final rightDistance = _distance(
+            origin,
+            LatLng(right.latitude, right.longitude),
+          );
+          return leftDistance.compareTo(rightDistance);
+        });
+
+      if (!mounted || generation != _nearbyGeneration) {
+        return;
+      }
+      setState(() {
+        _nearbyOpportunities = nearby;
+        _nearbyOrigin = origin;
+        _nearbyLoading = false;
+      });
+      if (focusAfterRefresh) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _focusSelection());
+      }
+    } catch (_) {
+      if (!mounted || generation != _nearbyGeneration) {
+        return;
+      }
+      setState(() {
+        _nearbyOpportunities = const <CustomerOpportunity>[];
+        _nearbyOrigin = origin;
+        _nearbyLoading = false;
+      });
+    }
+  }
+
   Future<void> _handleSupervisorChanged(String? value) async {
     if (value == _selectedSupervisorCode) {
       return;
@@ -171,8 +313,9 @@ class _CustomerOpportunitiesMapScreenState
     setState(() {
       _selectedSupervisorCode = value;
       _selectedSellerCode = null;
-      _selectedNeighborhoodKey = null;
+      _selectedNeighborhoodKey = _nearMeNeighborhoodKey;
       _selectedActivityKey = null;
+      _clearNearbyState();
       _clearRouteState();
     });
     await _loadData();
@@ -184,8 +327,9 @@ class _CustomerOpportunitiesMapScreenState
     }
     setState(() {
       _selectedSellerCode = value;
-      _selectedNeighborhoodKey = null;
+      _selectedNeighborhoodKey = _nearMeNeighborhoodKey;
       _selectedActivityKey = null;
+      _clearNearbyState();
       _clearRouteState();
     });
     await _loadData();
@@ -198,6 +342,7 @@ class _CustomerOpportunitiesMapScreenState
     setState(() {
       _selectedNeighborhoodKey = value;
       _selectedActivityKey = null;
+      _clearNearbyState();
       _clearRouteState();
     });
     await _loadData();
@@ -410,6 +555,9 @@ class _CustomerOpportunitiesMapScreenState
     setState(() {
       _currentLocation = LatLng(position.latitude, position.longitude);
     });
+    if (_isNearMeSelected) {
+      unawaited(_refreshNearbyOpportunities());
+    }
   }
 
   void _stopMapLocationTracking() {
@@ -582,6 +730,32 @@ class _CustomerOpportunitiesMapScreenState
     );
   }
 
+  Future<void> _centerOnCurrentLocation() async {
+    try {
+      final location = _currentLocation ?? await _getCurrentLocation();
+      if (!mounted) {
+        return;
+      }
+      _mapController.move(location, 16);
+      if (_isNearMeSelected) {
+        unawaited(_refreshNearbyOpportunities(force: true));
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is CustomerRouteException
+                ? error.message
+                : 'Nao foi possivel obter sua localizacao.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -615,6 +789,7 @@ class _CustomerOpportunitiesMapScreenState
     }
 
     final routeModeActive = _routeModeActive;
+    final visibleOpportunities = _visibleOpportunities;
 
     final content = Stack(
       children: [
@@ -648,6 +823,7 @@ class _CustomerOpportunitiesMapScreenState
                   '${_selectedSellerCode ?? ''}|'
                   '${_selectedNeighborhoodKey ?? ''}|'
                   '${_selectedActivityKey ?? ''}|'
+                  '${_nearbyOpportunities?.length ?? -1}|'
                   '${_routeOpportunity?.taxId ?? ''}',
                 ),
                 options: MarkerClusterLayerOptions(
@@ -698,17 +874,17 @@ class _CustomerOpportunitiesMapScreenState
                       height: 36,
                       child: const Tooltip(
                         message: 'Sua localizacao',
-                        child: Icon(
-                          Icons.my_location_rounded,
-                          color: Color(0xFF1E88E5),
-                          size: 30,
-                          shadows: [
-                            Shadow(
-                              color: Color(0x66000000),
-                              blurRadius: 4,
-                              offset: Offset(0, 1),
+                        child: Center(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Color(0xFF1E88E5),
+                              shape: BoxShape.circle,
+                              border: Border.fromBorderSide(
+                                BorderSide(color: Colors.white, width: 3),
+                              ),
                             ),
-                          ],
+                            child: SizedBox(width: 22, height: 22),
+                          ),
                         ),
                       ),
                     ),
@@ -720,7 +896,7 @@ class _CustomerOpportunitiesMapScreenState
             ],
           ),
         ),
-        if (_overview.opportunities.isEmpty && !routeModeActive)
+        if (visibleOpportunities.isEmpty && !routeModeActive && !_nearbyLoading)
           Positioned.fill(
             child: IgnorePointer(
               child: Center(
@@ -761,6 +937,9 @@ class _CustomerOpportunitiesMapScreenState
               selectedSellerCode: _selectedSellerCode,
               selectedNeighborhoodKey: _selectedNeighborhoodKey,
               selectedActivityKey: _selectedActivityKey,
+              nearMeNeighborhoodKey: _nearMeNeighborhoodKey,
+              visibleOpportunityCount: visibleOpportunities.length,
+              nearbyLoading: _nearbyLoading,
               onSupervisorSelected: _handleSupervisorChanged,
               onSellerSelected: _handleSellerChanged,
               onNeighborhoodSelected: _handleNeighborhoodChanged,
@@ -772,17 +951,31 @@ class _CustomerOpportunitiesMapScreenState
           bottom: _hasRoutePanel
               ? MediaQuery.sizeOf(context).height * 0.5 + 12
               : 32,
-          child: FloatingActionButton.small(
-            heroTag: 'fit-customer-opportunities',
-            tooltip: _activeRoute == null
-                ? 'Mostrar todos os pontos'
-                : 'Ver rota',
-            onPressed: _activeRoute == null
-                ? (_overview.opportunities.isEmpty ? null : _focusSelection)
-                : _focusRoute,
-            backgroundColor: Colors.white,
-            foregroundColor: primaryColor,
-            child: const Icon(Icons.center_focus_strong_rounded),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FloatingActionButton.small(
+                heroTag: 'center-user-location',
+                tooltip: 'Centralizar na minha localizacao',
+                onPressed: _centerOnCurrentLocation,
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF1E88E5),
+                child: const Icon(Icons.my_location_rounded),
+              ),
+              const SizedBox(height: 10),
+              FloatingActionButton.small(
+                heroTag: 'fit-customer-opportunities',
+                tooltip: _activeRoute == null
+                    ? 'Mostrar todos os pontos'
+                    : 'Ver rota',
+                onPressed: _activeRoute == null
+                    ? (visibleOpportunities.isEmpty ? null : _focusSelection)
+                    : _focusRoute,
+                backgroundColor: Colors.white,
+                foregroundColor: primaryColor,
+                child: const Icon(Icons.center_focus_strong_rounded),
+              ),
+            ],
           ),
         ),
         if (_hasRoutePanel)
@@ -857,13 +1050,19 @@ class _CustomerOpportunitiesMapScreenState
     if (_overview.servedNeighborhoods.isEmpty) {
       return 'Nao ha oportunidades nos bairros atendidos por este vendedor.';
     }
+    if (_isNearMeSelected) {
+      if (_currentLocation == null) {
+        return 'Obtendo sua localizacao para mostrar oportunidades perto de voce.';
+      }
+      return 'Nao ha oportunidades em ate 5 km da sua localizacao atual.';
+    }
     return 'Nao ha oportunidades para os filtros selecionados.';
   }
 
   List<Marker> _buildMarkers() {
     final routeOpportunity = _routeOpportunity;
     final opportunities = routeOpportunity == null
-        ? _overview.opportunities
+        ? _visibleOpportunities
         : [routeOpportunity];
 
     return opportunities
@@ -903,6 +1102,9 @@ class _MapSummary extends StatelessWidget {
     required this.selectedSellerCode,
     required this.selectedNeighborhoodKey,
     required this.selectedActivityKey,
+    required this.nearMeNeighborhoodKey,
+    required this.visibleOpportunityCount,
+    required this.nearbyLoading,
     required this.onSupervisorSelected,
     required this.onSellerSelected,
     required this.onNeighborhoodSelected,
@@ -915,6 +1117,9 @@ class _MapSummary extends StatelessWidget {
   final String? selectedSellerCode;
   final String? selectedNeighborhoodKey;
   final String? selectedActivityKey;
+  final String nearMeNeighborhoodKey;
+  final int visibleOpportunityCount;
+  final bool nearbyLoading;
   final ValueChanged<String?> onSupervisorSelected;
   final ValueChanged<String?> onSellerSelected;
   final ValueChanged<String?> onNeighborhoodSelected;
@@ -924,6 +1129,8 @@ class _MapSummary extends StatelessWidget {
       overview.viewerProfileSlug == AppProfile.coordinatorSlug;
   bool get _selectsSeller =>
       overview.viewerProfileSlug == AppProfile.supervisorSlug || _isCoordinator;
+  bool get _isNearMeSelected =>
+      selectedNeighborhoodKey == nearMeNeighborhoodKey;
   int get _sellerTotalOpportunities {
     final totalFromNeighborhoods = overview.servedNeighborhoods.fold<int>(
       0,
@@ -956,7 +1163,7 @@ class _MapSummary extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '${overview.totalOpportunities} oportunidades / '
+                    '${_isNearMeSelected ? visibleOpportunityCount : overview.totalOpportunities} oportunidades / '
                     '$_sellerTotalOpportunities Total de oportunidades',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
@@ -1017,21 +1224,37 @@ class _MapSummary extends StatelessWidget {
                 icon: Icons.holiday_village_outlined,
                 hint: 'Cidade - Bairro',
                 value: selectedNeighborhoodKey,
-                items: overview.servedNeighborhoods
-                    .map(
-                      (neighborhood) => DropdownMenuItem<String>(
-                        value: neighborhood.key,
-                        child: Text(
-                          neighborhood.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                items: <DropdownMenuItem<String>>[
+                  DropdownMenuItem<String>(
+                    value: nearMeNeighborhoodKey,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.my_location_rounded, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            nearbyLoading ? 'Perto de mim...' : 'Perto de mim',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                      ],
+                    ),
+                  ),
+                  ...overview.servedNeighborhoods.map(
+                    (neighborhood) => DropdownMenuItem<String>(
+                      value: neighborhood.key,
+                      child: Text(
+                        neighborhood.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    )
-                    .toList(growable: false),
+                    ),
+                  ),
+                ],
                 onChanged: onNeighborhoodSelected,
               ),
-            if (overview.availableActivities.isNotEmpty)
+            if (!_isNearMeSelected && overview.availableActivities.isNotEmpty)
               _FilterDropdown(
                 icon: Icons.category_outlined,
                 hint: 'Ramo de atividade',

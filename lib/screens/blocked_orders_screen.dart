@@ -32,6 +32,8 @@ class _BlockedOrdersScreenState extends State<BlockedOrdersScreen> {
   String _searchTerm = '';
   BlockedOrdersOverview _overview = BlockedOrdersOverview.empty();
 
+  bool get _isSellerView => _overview.profileSlug == AppProfile.sellerSlug;
+
   @override
   void initState() {
     super.initState();
@@ -381,27 +383,29 @@ class _BlockedOrdersScreenState extends State<BlockedOrdersScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  order.sellerName.trim().isNotEmpty
-                      ? 'Vendedor: ${order.codusur} - ${order.sellerName}'
-                      : 'Vendedor: ${order.codusur}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF5E6A7C),
-                  ),
-                ),
-                if (order.codsupervisor.isNotEmpty ||
-                    order.supervisorName.isNotEmpty) ...[
+                if (!_isSellerView) ...[
                   const SizedBox(height: 4),
                   Text(
-                    order.supervisorName.isEmpty ||
-                            order.supervisorName == order.codsupervisor
-                        ? 'Supervisor: ${order.codsupervisor}'
-                        : 'Supervisor: ${order.codsupervisor} - ${order.supervisorName}',
+                    order.sellerName.trim().isNotEmpty
+                        ? 'Vendedor: ${order.codusur} - ${order.sellerName}'
+                        : 'Vendedor: ${order.codusur}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF5E6A7C),
                     ),
                   ),
+                  if (order.codsupervisor.isNotEmpty ||
+                      order.supervisorName.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      order.supervisorName.isEmpty ||
+                              order.supervisorName == order.codsupervisor
+                          ? 'Supervisor: ${order.codsupervisor}'
+                          : 'Supervisor: ${order.codsupervisor} - ${order.supervisorName}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF5E6A7C),
+                      ),
+                    ),
+                  ],
                 ],
                 const SizedBox(height: 4),
                 Text(

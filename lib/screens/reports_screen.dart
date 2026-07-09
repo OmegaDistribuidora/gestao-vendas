@@ -8,7 +8,7 @@ import '../models/app_user.dart';
 import '../models/usage_report.dart';
 import '../services/app_repository.dart';
 
-enum _ReportsSection { overview, users, hours, weekdays }
+enum _ReportsSection { overview, users, modules, hours, weekdays }
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key, required this.currentUser});
@@ -188,6 +188,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
         return 'Visao geral';
       case _ReportsSection.users:
         return 'Usuarios';
+      case _ReportsSection.modules:
+        return 'Modulos';
       case _ReportsSection.hours:
         return 'Horarios';
       case _ReportsSection.weekdays:
@@ -201,6 +203,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
         return Icons.dashboard_customize_outlined;
       case _ReportsSection.users:
         return Icons.groups_2_outlined;
+      case _ReportsSection.modules:
+        return Icons.apps_outlined;
       case _ReportsSection.hours:
         return Icons.schedule_outlined;
       case _ReportsSection.weekdays:
@@ -1004,6 +1008,162 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
+  Widget _buildModulesSection() {
+    final modules = _report.moduleOpensByModule.toList()
+      ..sort((left, right) => right.value.compareTo(left.value));
+    final groups = _report.moduleUsersByModule.toList()
+      ..sort((left, right) => left.label.compareTo(right.label));
+    final topModule = modules.isEmpty ? null : modules.first;
+
+    return Column(
+      children: [
+        _SummaryMetricCard(
+          title: 'Acessos por modulo',
+          value: _formatCount(
+            modules.fold<double>(0, (total, item) => total + item.value),
+          ),
+          subtitle: topModule == null
+              ? 'Sem acessos de modulo no periodo.'
+              : 'Modulo mais acessado: ${topModule.label}.',
+          icon: Icons.apps_outlined,
+          accentColor: const Color(0xFF1E88E5),
+          accentBackgroundColor: const Color(0xFFE8F1FF),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Ranking de modulos',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Quantidade de aberturas registradas por modulo.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF5E6A7C),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                if (modules.isEmpty)
+                  const _EmptySectionCard(
+                    message: 'Sem acessos de modulo neste periodo.',
+                  )
+                else
+                  ...modules.asMap().entries.map((entry) {
+                    final item = entry.value;
+                    final maxValue = modules.first.value <= 0
+                        ? 1.0
+                        : modules.first.value;
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        bottom: entry.key == modules.length - 1 ? 0 : 12,
+                      ),
+                      child: _UserRankRow(
+                        rank: entry.key + 1,
+                        label: item.label,
+                        value: _formatCount(item.value),
+                        ratio: (item.value / maxValue).clamp(0.0, 1.0),
+                        color: const Color(0xFF1E88E5),
+                        backgroundColor: const Color(0xFFE8F1FF),
+                        initials: _initials(item.label),
+                      ),
+                    );
+                  }),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (groups.isEmpty)
+          const _EmptySectionCard(
+            message: 'Nenhum usuario por modulo nos filtros atuais.',
+          )
+        else
+          ...groups.map((group) {
+            final items = group.items.toList()
+              ..sort((left, right) => right.value.compareTo(left.value));
+            final maxValue = items.isEmpty || items.first.value <= 0
+                ? 1.0
+                : items.first.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F1FF),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(
+                              Icons.apps_outlined,
+                              color: Color(0xFF1E88E5),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  group.label,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${items.length} usuario(s)',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFF64748B),
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      ...items.asMap().entries.map((entry) {
+                        final item = entry.value;
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom: entry.key == items.length - 1 ? 0 : 12,
+                          ),
+                          child: _UserRankRow(
+                            rank: entry.key + 1,
+                            label: item.label,
+                            value: _formatCount(item.value),
+                            ratio: (item.value / maxValue).clamp(0.0, 1.0),
+                            color: const Color(0xFF1E88E5),
+                            backgroundColor: const Color(0xFFE8F1FF),
+                            initials: _initials(item.label),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
   Widget _buildHoursSection() {
     final hours = _aggregatedHours;
     return Column(
@@ -1147,6 +1307,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
         return _buildOverviewSection();
       case _ReportsSection.users:
         return _buildUsersSection();
+      case _ReportsSection.modules:
+        return _buildModulesSection();
       case _ReportsSection.hours:
         return _buildHoursSection();
       case _ReportsSection.weekdays:

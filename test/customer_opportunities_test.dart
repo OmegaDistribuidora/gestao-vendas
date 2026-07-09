@@ -58,7 +58,7 @@ void main() {
     expect(overview.availableSellers.single.code, '2144');
     expect(overview.servedNeighborhoods.single.label, 'Fortaleza - Centro');
     expect(overview.servedNeighborhoods.single.opportunityCount, 120);
-    expect(overview.availableActivities.single.label, '1 - Mercadinho');
+    expect(overview.availableActivities.single.label, 'Mercadinho');
     expect(overview.totalOpportunities, 1);
     expect(overview.opportunities.single.taxId, '12345678000190');
   });
@@ -89,7 +89,7 @@ void main() {
     });
 
     expect(opportunity.displayName, 'Mercadinho Teste');
-    expect(opportunity.activityLabel, '1 - Mercadinho');
+    expect(opportunity.activityLabel, 'Mercadinho');
     expect(opportunity.cityLabel, 'Fortaleza - CE');
     expect(opportunity.creditLimit, 2500.75);
     expect(opportunity.marketPotential, 1320.50);

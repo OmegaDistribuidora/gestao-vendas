@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 30/06/2026
-Versao atual do projeto: 0.9.4+19
+Ultima atualizacao desta documentacao: 09/07/2026
+Versao atual do projeto: 0.9.7+22
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -38,7 +38,12 @@ Dependencias Flutter relevantes:
 - package_info_plus
 - webview_flutter
 - flutter_map
+- flutter_map_marker_cluster
 - latlong2
+- geolocator
+- url_launcher
+- http
+- in_app_update
 
 
 3. ESTRUTURA DO REPOSITORIO
@@ -117,6 +122,9 @@ na interface nao substitui a autorizacao no backend.
 - O AppRepository autentica a sessao e carrega o AppUser correspondente.
 - A opcao de lembrar login armazena somente o minimo necessario usando
   armazenamento seguro local.
+- Restauracoes de sessao lembrada tambem registram evento em
+  app_login_events, para que os relatorios contem usuarios que entram sem
+  digitar senha novamente.
 - Ao sair, o app limpa a preferencia local e encerra a sessao no Supabase.
 - Usuarios inativos ou sem acesso valido devem ser bloqueados pelo backend.
 
@@ -131,6 +139,20 @@ na interface nao substitui a autorizacao no backend.
 - Apresenta indicadores comerciais conforme perfil e periodo.
 - Os valores financeiros usam as regras de venda, faturamento e devolucao
   definidas nas RPCs do Supabase.
+- No Resumo de hoje, vendedor, supervisor e coordenador tambem veem a
+  Meta Financeira de hoje e a Meta Positivacao de hoje. Quando a meta
+  secundaria do Performance for SKU, o texto muda para Meta SKU de hoje.
+- As metas diarias usam a mesma regra de necessidade diaria do modulo
+  Performance, baseada em dias uteis restantes, metas mensais e no mes atual
+  da Home.
+- O Resumo de hoje usa cards agrupados: Venda + Meta Financeira, metrica
+  principal + Meta diaria e Volume + metrica secundaria.
+- O card da meta diaria mostra o percentual do dia em uma barra de progresso,
+  com o percentual exibido apenas no selo do lado direito.
+- Produtos distintos sao calculados a partir dos itens dos pedidos que
+  tambem entram no resumo de venda do periodo, evitando divergencia entre
+  Venda/Volume/Positivacao e o total de produtos. Se o detalhe de itens ainda
+  nao estiver carregado, a RPC pode usar o mix de faturamento como fallback.
 
 6.2 Performance
 
@@ -257,6 +279,10 @@ Busca local:
 
 - Restritos a administradores.
 - Incluem relatorios de uso e eventos registrados pelo aplicativo.
+- Contabilizam logins feitos por senha e tambem restauracoes de sessao salva.
+- Registram abertura de modulos pela RPC record_module_access.
+- A aba Modulos mostra ranking de acessos por modulo e quais usuarios
+  usaram cada modulo dentro do periodo filtrado.
 
 6.10 Mapa de Oportunidades
 
@@ -299,12 +325,27 @@ Escopo do vendedor:
 Tela:
 
 - Exibe as oportunidades como marcadores sobre o OpenStreetMap.
+- Agrupa marcadores proximos para manter a leitura do mapa em regioes densas.
 - O botao de centralizacao enquadra todos os pontos visiveis.
 - Ao tocar no marcador, abre nome, fantasia, CPF/CNPJ, atividade, cidade,
   bairro, endereco completo, sugestao de limite de credito, potencial de
   mercado e fornecedores conhecidos.
+- Com permissao de localizacao, calcula a rota de carro ate a oportunidade
+  pela API Directions do Mapbox, exibe distancia, duracao e instrucoes e
+  acompanha a posicao do aparelho enquanto o modo de rota estiver ativo.
+- Tambem permite abrir a navegacao em um aplicativo externo compativel.
 - O resumo informa quantidade de oportunidades, bairros atendidos e horario
   da ultima carga.
+
+6.11 Clientes Recuperados
+
+- Disponivel para perfis diferentes de vendedor, supervisor e coordenador,
+  respeitando a autorizacao definida no backend.
+- Arquiva oportunidades que deixaram a base porque o CPF/CNPJ passou a existir
+  no cadastro de clientes do WinThor.
+- Exibe quantidade recuperada, dados cadastrais, origem, localidade, potencial
+  de mercado e data da recuperacao.
+- Permite busca textual nos clientes recuperados.
 
 
 7. FLUXO DE DADOS
@@ -330,6 +371,7 @@ As cargas reconciliadas usam public.etl_sync_runs para registrar:
 - linhas staged, inseridas, atualizadas e removidas
 - horario de conclusao
 - erro resumido, quando houver
+- limpeza das linhas de staging pertencentes a uma execucao que falhou
 
 As telas usam os horarios dos ETLs concluidos para informar a ultima
 atualizacao dos dados.
@@ -346,6 +388,7 @@ Administracao e seguranca:
 - app_user_module_accesses
 - app_login_events
 - app_module_usage_events
+- app_module_access_events
 
 Dados comerciais:
 
@@ -361,6 +404,8 @@ Dados comerciais:
 - app_customer_seller_bases
 - app_sales_order_items
 - app_customer_opportunities
+- app_customer_opportunity_supplier_map
+- app_customer_recovered_opportunities
 
 Controle de ETL:
 
@@ -385,7 +430,11 @@ security definer com validacao explicita do usuario e do escopo.
 - get_blocked_orders_overview
 - get_customers_without_purchase
 - get_customer_opportunities
+- get_customer_opportunity_details
+- can_access_customer_opportunities
+- get_recovered_customer_opportunities
 - get_usage_report
+- record_module_access
 
 Os nomes e assinaturas definitivos devem ser confirmados na migration mais
 recente, pois funcoes podem ser substituidas por migrations posteriores.
@@ -393,6 +442,16 @@ recente, pois funcoes podem ser substituidas por migrations posteriores.
 
 10. SCRIPTS DE SINCRONIZACAO
 ----------------------------
+
+Locais dos scripts:
+
+- Fonte versionada no repositorio local:
+  C:\Repos\gestao-vendas\tool
+- Copia operacional utilizada pelas DAGs legadas do Airflow:
+  C:\Users\POWERBI\OneDrive - omegadistribuidora.com.br\Projetos\William\app
+- As copias operacionais do OneDrive podem conter ajustes ainda nao
+  incorporados ao Git. Antes de alterar ou implantar um script, comparar os
+  dois locais e definir qual versao deve prevalecer.
 
 Scripts principais em tool/:
 
@@ -456,6 +515,20 @@ Scripts principais em tool/:
 11. DAGS DO AIRFLOW
 --------------------
 
+Locais das DAGs:
+
+- DAGs versionadas junto ao aplicativo:
+  C:\Repos\gestao-vendas\airflow
+- DAGs operacionais carregadas pelo Airflow no WSL:
+  /home/powerbi/airflow/dags
+- Arquivo operacional que agenda as sincronizacoes Oracle, inclusive
+  oracle_sellers_sync.py:
+  /home/powerbi/airflow/dags/william_oracle_sync_dags.py
+- A DAG operacional APP_oracle_sellers_sync executa o script localizado em:
+  C:\Users\POWERBI\OneDrive - omegadistribuidora.com.br\Projetos\William\app\oracle_sellers_sync.py
+- As DAGs operacionais externas ao repositorio devem ser comparadas com as
+  versoes em C:\Repos\gestao-vendas\airflow antes de qualquer manutencao.
+
 omega_performance_sync
 
 - Agenda padrao: diariamente as 07:20.
@@ -466,10 +539,29 @@ omega_customer_base_sync
 
 - Agenda padrao: 07:30, 09:30, 11:30, 13:30, 15:30 e 17:30.
 - Nao executa depois das 18:00 na configuracao padrao.
-- Atualiza clientes/base de vendedores e depois itens de pedidos.
+- Atualiza clientes/base de vendedores para o modulo Clientes sem compra.
 - A DAG implantada no Airflow executa os scripts versionados em tool/ e
   carrega as credenciais somente do arquivo de ambiente operacional externo.
 - O horario pode ser sobrescrito por variavel de ambiente.
+
+APP_oracle_sales_sync
+
+- Agenda operacional definida em /home/powerbi/airflow/dags/william_oracle_sync_dags.py.
+- Executa oracle_sales_sync.py no escopo fast e, em seguida,
+  oracle_sales_order_items_sync.py com a mesma janela de venda.
+- Essa sequencia mantem Venda, Volume, Positivacao e Produtos distintos da Home
+  atualizados no mesmo ciclo.
+- O script oracle_sales_order_items_sync.py tambem deve existir na copia
+  operacional do OneDrive usada pelas DAGs legadas:
+  C:\Users\POWERBI\OneDrive - omegadistribuidora.com.br\Projetos\William\app
+
+APP_oracle_sales_reconcile_sync
+
+- Agenda operacional definida em /home/powerbi/airflow/dags/william_oracle_sync_dags.py.
+- Executa oracle_sales_sync.py no escopo reconcile e, em seguida,
+  oracle_sales_order_items_sync.py com a mesma janela de reconciliacao.
+- Corrige eventuais divergencias historicas entre o resumo de venda e os itens
+  usados para Produtos distintos/SKU.
 
 omega_customer_opportunities_prune
 
@@ -495,6 +587,9 @@ volume de staging e timeout das funcoes do Supabase.
   statement_timeout.
 - Depois de aplicar, testar a RPC com um usuario de cada perfil afetado.
 - Segredos, senhas e tokens nunca devem ser gravados em migrations ou commits.
+- A migration 20260709100000_home_daily_targets_and_module_usage.sql adiciona
+  logs de acesso por modulo, atualiza get_usage_report e revisa get_home_kpis
+  para metas diarias na Home e produtos distintos.
 
 
 13. VERSAO E DISTRIBUICAO ANDROID
@@ -502,9 +597,25 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao atual:
 
-- versionName: 0.9.4
-- versionCode: 19
-- Declaracao Flutter: version: 0.9.4+19
+- versionName: 0.9.7
+- versionCode: 22
+- Declaracao Flutter: version: 0.9.7+22
+
+Release 0.9.7+22:
+
+- Home com Resumo de hoje em cards agrupados e metas diarias no mesmo bloco do
+  realizado.
+- Meta financeira diaria exibida em valor completo, sem abreviacao em "mil".
+- Percentual da meta diaria exibido somente no selo a direita da barra.
+- Produtos distintos alinhados aos itens dos pedidos da venda e DAG de itens
+  desacoplada da base de clientes, passando a acompanhar a DAG de vendas.
+- Mapa de oportunidades abre por padrao em "Perto de mim", tem botao para
+  centralizar no usuario e nao altera zoom em atualizacoes de localizacao.
+- Indicador de localizacao atual do mapa sem sombra e com circulo preenchido.
+- Logs de acesso por modulo e relatorios de uso revisados.
+- Detalhes de pedidos bloqueados ocultam vendedor/supervisor para perfil de
+  vendedor.
+- Ramo de atividade no mapa de oportunidades sem codigo numerico.
 
 Regras para Google Play:
 

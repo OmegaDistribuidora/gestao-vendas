@@ -114,11 +114,3 @@ with DAG(
         python_callable=_run_script,
         op_kwargs={"script_name": "oracle_customer_base_sync.py"},
     )
-
-    sync_sales_order_items = PythonOperator(
-        task_id="sync_sales_order_items",
-        python_callable=_run_script,
-        op_kwargs={"script_name": "oracle_sales_order_items_sync.py"},
-    )
-
-    sync_customer_base >> sync_sales_order_items

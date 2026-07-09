@@ -10,6 +10,8 @@ class UsageReport {
     required this.loginsByUserByProfile,
     required this.loginsByHourByProfile,
     required this.loginsByWeekdayByProfile,
+    required this.moduleOpensByModule,
+    required this.moduleUsersByModule,
   });
 
   final int activeUsers;
@@ -20,6 +22,8 @@ class UsageReport {
   final List<UsageGroup> loginsByUserByProfile;
   final List<UsageGroup> loginsByHourByProfile;
   final List<UsageGroup> loginsByWeekdayByProfile;
+  final List<UsageBucket> moduleOpensByModule;
+  final List<UsageGroup> moduleUsersByModule;
 
   factory UsageReport.empty() {
     return const UsageReport(
@@ -31,6 +35,8 @@ class UsageReport {
       loginsByUserByProfile: <UsageGroup>[],
       loginsByHourByProfile: <UsageGroup>[],
       loginsByWeekdayByProfile: <UsageGroup>[],
+      moduleOpensByModule: <UsageBucket>[],
+      moduleUsersByModule: <UsageGroup>[],
     );
   }
 
@@ -76,6 +82,8 @@ class UsageReport {
       loginsByWeekdayByProfile: parseGroups(
         json['logins_by_weekday_by_profile'],
       ),
+      moduleOpensByModule: parseBuckets(json['module_opens_by_module']),
+      moduleUsersByModule: parseGroups(json['module_users_by_module']),
     );
   }
 }

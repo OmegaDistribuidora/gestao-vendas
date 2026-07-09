@@ -5,6 +5,7 @@ class CompactMetricTile extends StatelessWidget {
     super.key,
     required this.title,
     required this.value,
+    this.subtitle,
     required this.icon,
     required this.accentColor,
     required this.accentBackgroundColor,
@@ -12,6 +13,7 @@ class CompactMetricTile extends StatelessWidget {
 
   final String title;
   final String value;
+  final String? subtitle;
   final IconData icon;
   final Color accentColor;
   final Color accentBackgroundColor;
@@ -56,9 +58,9 @@ class CompactMetricTile extends StatelessWidget {
               ),
             ],
           ),
-          const Spacer(),
+          SizedBox(height: subtitle == null ? 8 : 6),
           SizedBox(
-            height: 28,
+            height: subtitle == null ? 28 : 24,
             width: double.infinity,
             child: FittedBox(
               fit: BoxFit.scaleDown,
@@ -74,6 +76,18 @@ class CompactMetricTile extends StatelessWidget {
               ),
             ),
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ],
       ),
     );

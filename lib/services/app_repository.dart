@@ -71,7 +71,9 @@ class AppRepository {
     }
 
     try {
-      return await _loadCurrentUser(enforceActive: true);
+      final user = await _loadCurrentUser(enforceActive: true);
+      await _recordLoginEventSafely(user);
+      return user;
     } on RepositoryException {
       await _supabase.auth.signOut();
       return null;
@@ -393,6 +395,33 @@ class AppRepository {
     }
 
     return UsageReport.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<void> recordModuleAccess({
+    required String moduleKey,
+    required String moduleName,
+  }) async {
+    await _ensureCurrentUserAccess();
+    await _supabase.rpc(
+      'record_module_access',
+      params: <String, dynamic>{
+        'target_module_key': moduleKey.trim(),
+        'target_module_name': moduleName.trim(),
+      },
+    );
+  }
+
+  Future<void> recordModuleAccessSafely({
+    required String moduleKey,
+    required String moduleName,
+  }) async {
+    try {
+      await _runWithTransientRetry<void>(
+        () => recordModuleAccess(moduleKey: moduleKey, moduleName: moduleName),
+      );
+    } catch (_) {
+      // A telemetria de uso nao deve impedir a navegacao do usuario.
+    }
   }
 
   Future<SellerHomeKpis> getHomeKpis({
