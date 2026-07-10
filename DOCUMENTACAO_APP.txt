@@ -2,7 +2,7 @@ DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
 Ultima atualizacao desta documentacao: 10/07/2026
-Versao atual do projeto: 0.9.8+23
+Versao atual do projeto: 0.9.9+24
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -288,8 +288,26 @@ Busca local:
 - Incluem relatorios de uso e eventos registrados pelo aplicativo.
 - Contabilizam logins feitos por senha e tambem restauracoes de sessao salva.
 - Registram abertura de modulos pela RPC record_module_access.
-- A aba Modulos mostra ranking de acessos por modulo e quais usuarios
-  usaram cada modulo dentro do periodo filtrado.
+- O usuario admin e removido das estatisticas dos relatorios de uso.
+- A tela abre sem filtros e permite filtrar todas as visoes por periodo,
+  coordenador, perfil e usuario.
+- Periodos rapidos disponiveis: Hoje, Ontem, 7 dias e Mes atual.
+- O filtro de coordenador restringe os dados ao proprio coordenador,
+  supervisores e vendedores vinculados. Quando um coordenador esta selecionado,
+  os perfis disponiveis ficam limitados a Coordenador, Supervisor e Vendedor.
+- Ao selecionar perfis que nao possuem coordenador vinculado, como Diretoria,
+  Outros ou Sem perfil, o filtro de coordenador e desabilitado.
+- O filtro de usuario usa busca por nome, codigo, alias de login ou perfil.
+- A visao geral lista todos os usuarios em destaque, com pontuacao calculada
+  por 1 ponto por abertura do app e 1 ponto por modulo aberto. Para evitar
+  spam, a pontuacao usa janelas de 5 minutos por login/modulo.
+- A Home/Inicio fica oculta dos rankings de modulos, pois e a pagina inicial
+  e distorce a leitura dos modulos realmente usados.
+- A aba Modulos mostra ranking de acessos por modulo e, abaixo, lista cada
+  usuario com a quantidade de modulos acessados. Ao tocar no usuario, a lista
+  expande os modulos abertos e a quantidade de acessos.
+- Nas visoes de horarios e dias, tocar na barra/dia mostra os usuarios que
+  acessaram naquele recorte e quantas vezes.
 
 6.10 Mapa de Oportunidades
 
@@ -597,6 +615,10 @@ volume de staging e timeout das funcoes do Supabase.
 - A migration 20260709100000_home_daily_targets_and_module_usage.sql adiciona
   logs de acesso por modulo, atualiza get_usage_report e revisa get_home_kpis
   para metas diarias na Home e produtos distintos.
+- A migration 20260710183000_admin_reports_filters_and_usage_points.sql revisa
+  get_usage_report para filtros globais de relatorios, exclusao de admin,
+  ranking de usuarios por pontuacao anti-spam, detalhamento por usuario nos
+  modulos e drill-down de usuarios por hora/dia.
 
 
 13. VERSAO E DISTRIBUICAO ANDROID
@@ -604,9 +626,28 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao atual:
 
-- versionName: 0.9.8
-- versionCode: 23
-- Declaracao Flutter: version: 0.9.8+23
+- versionName: 0.9.9
+- versionCode: 24
+- Declaracao Flutter: version: 0.9.9+24
+
+Release 0.9.9+24:
+
+- Relatorios de uso administrativos reformulados.
+- Card azul superior substituido por filtros globais profissionais.
+- Filtros globais por coordenador, perfil, usuario buscavel e periodo.
+- Periodos rapidos alterados para Hoje, Ontem, 7 dias e Mes atual.
+- Admin removido de todas as estatisticas de uso.
+- Logins automaticos/restaurados continuam contabilizados nos relatorios.
+- Usuarios em destaque agora exibem todos os usuarios com pontuacao por
+  abertura do app e modulo aberto, com janela anti-spam de 5 minutos.
+- Home/Inicio oculto do ranking de modulos.
+- Visao de modulos passa a mostrar usuarios, quantidade de modulos acessados
+  e expansao com modulos/contagens por usuario.
+- Visao de horarios permite tocar na barra para listar usuarios daquele
+  horario.
+- Visao de dias permite tocar no dia para listar usuarios e contagens.
+- Nova migration Supabase:
+  20260710183000_admin_reports_filters_and_usage_points.sql.
 
 Release 0.9.8+23:
 
@@ -678,9 +719,19 @@ Firebase Cloud Messaging:
   android/app/google-services.json
 - O Gradle aplica o plugin com.google.gms.google-services somente quando esse
   arquivo existe, evitando quebrar builds locais antes da configuracao final.
-- O arquivo google-services.json e configuracao do app Firebase, nao e chave de
-  conta de servico. Mesmo assim, conferir antes de commit/release e nunca
-  adicionar chaves privadas, service accounts ou server keys ao repositorio.
+- O arquivo google-services.json e configuracao publica do app Firebase, nao e
+  chave de conta de servico. O alerta do GitHub para "Google API Key" nesse
+  arquivo e comum porque ele contem a Web/API key do projeto Firebase.
+- Pela documentacao oficial do Firebase, API keys restritas a servicos Firebase
+  nao precisam ser tratadas como segredo e podem existir em codigo/configuracao
+  do app cliente. A autorizacao real deve vir de IAM, regras de seguranca,
+  App Check, Supabase/RLS e permissoes do backend.
+- Mesmo assim, revisar no Google Cloud Console se a API key esta restrita ao
+  app Android/package correto e aos servicos necessarios. Se a chave estiver
+  sem restricoes ou habilitando APIs sensiveis indevidas, restringir ou rotacionar.
+- Nunca adicionar service accounts, private keys, server keys, arquivos
+  firebase-adminsdk*.json, SUPABASE_SERVICE_ROLE_KEY, FIREBASE_PRIVATE_KEY ou
+  outros segredos reais ao repositorio.
 - O cliente Flutter inicializa Firebase por lib/services/push_notification_service.dart.
 - Se o google-services.json nao existir, o app continua abrindo e registra em
   debug que o FCM ainda nao esta ativo para aquele build.

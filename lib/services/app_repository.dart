@@ -379,6 +379,8 @@ class AppRepository {
     required DateTime start,
     required DateTime end,
     String? userId,
+    String? coordinatorCode,
+    List<String> profileSlugs = const <String>[],
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
@@ -387,6 +389,8 @@ class AppRepository {
         'window_start': start.toUtc().toIso8601String(),
         'window_end': end.toUtc().toIso8601String(),
         'target_user_id': userId,
+        'target_coordinator_code': coordinatorCode,
+        'target_profile_slugs': profileSlugs,
       },
     );
 

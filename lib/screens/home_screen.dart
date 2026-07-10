@@ -50,7 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Vers\u00E3o 0.9.8+23';
+  String _appVersionLabel = 'Vers\u00E3o 0.9.9+24';
   bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
   PerformanceOverview _performanceOverview = PerformanceOverview.empty();
@@ -124,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Vers\u00E3o 0.9.8+23';
+        _appVersionLabel = 'Vers\u00E3o 0.9.9+24';
       });
     }
   }

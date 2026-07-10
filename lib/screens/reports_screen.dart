@@ -10,6 +10,8 @@ import '../services/app_repository.dart';
 
 enum _ReportsSection { overview, users, modules, hours, weekdays }
 
+const String _allUsersPickerValue = '__all_users__';
+
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key, required this.currentUser});
 
@@ -30,17 +32,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
   bool _loading = true;
   String? _errorMessage;
   String? _selectedUserId;
-  int? _selectedQuickRangeDays = 7;
+  String _selectedQuickRange = 'today';
+  String? _selectedCoordinatorCode;
+  final Set<String> _selectedProfileSlugs = <String>{};
+  String? _selectedHourLabel;
+  String? _selectedWeekdayLabel;
   List<AppUser> _users = const <AppUser>[];
   UsageReport _report = UsageReport.empty();
   _ReportsSection _selectedSection = _ReportsSection.overview;
   final Set<String> _expandedUserGroups = <String>{};
+  final Set<String> _expandedModuleUsers = <String>{};
 
   @override
   void initState() {
     super.initState();
-    _endDate = DateTime.now();
-    _startDate = _endDate.subtract(const Duration(days: 6));
+    final now = DateTime.now();
+    _startDate = DateTime(now.year, now.month, now.day);
+    _endDate = _startDate;
     _loadInitialData();
   }
 
@@ -62,7 +70,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         return;
       }
       setState(() {
-        _users = users;
+        _users = users.where((user) => !user.isAdmin).toList();
       });
       await _loadReport();
     } on RepositoryException catch (error) {
@@ -95,6 +103,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
         start: DateTime(_startDate.year, _startDate.month, _startDate.day),
         end: DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59),
         userId: _selectedUserId,
+        coordinatorCode: _coordinatorFilterEnabled
+            ? _selectedCoordinatorCode
+            : null,
+        profileSlugs: _selectedProfileSlugs.toList(),
       );
 
       if (!mounted) {
@@ -139,7 +151,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     setState(() {
-      _selectedQuickRangeDays = null;
+      _selectedQuickRange = 'custom';
       if (isStart) {
         _startDate = picked;
         if (_startDate.isAfter(_endDate)) {
@@ -156,12 +168,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
     await _loadReport();
   }
 
-  Future<void> _applyQuickRange(int days) async {
+  Future<void> _applyQuickRange(String range) async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     setState(() {
-      _selectedQuickRangeDays = days;
-      _endDate = now;
-      _startDate = now.subtract(Duration(days: days - 1));
+      _selectedQuickRange = range;
+      switch (range) {
+        case 'yesterday':
+          _startDate = today.subtract(const Duration(days: 1));
+          _endDate = _startDate;
+          break;
+        case '7d':
+          _endDate = today;
+          _startDate = today.subtract(const Duration(days: 6));
+          break;
+        case 'month':
+          _startDate = DateTime(today.year, today.month);
+          _endDate = today;
+          break;
+        case 'today':
+        default:
+          _startDate = today;
+          _endDate = today;
+          break;
+      }
     });
     await _loadReport();
   }
@@ -306,7 +336,74 @@ class _ReportsScreenState extends State<ReportsScreen> {
   List<UsageBucket> get _topActiveUsers {
     final items = _report.activeUsersDetails.toList()
       ..sort((left, right) => right.value.compareTo(left.value));
-    return items.take(5).toList();
+    return items;
+  }
+
+  List<AppUser> get _coordinatorUsers {
+    final items =
+        _users
+            .where((user) => user.profileSlug == 'coordenador')
+            .where((user) => user.code.trim().isNotEmpty)
+            .toList()
+          ..sort((left, right) => left.label.compareTo(right.label));
+    return items;
+  }
+
+  List<String> get _availableProfileSlugs {
+    final slugs = _users.map((user) => user.profileSlug).toSet()
+      ..remove('admin');
+    final ordered = _selectedCoordinatorCode == null
+        ? <String>[
+            'diretoria',
+            'coordenador',
+            'supervisor',
+            'vendedor',
+            'outros',
+            'sem_perfil',
+          ]
+        : <String>['coordenador', 'supervisor', 'vendedor'];
+    return ordered.where(slugs.contains).toList();
+  }
+
+  bool get _profileFilterAllowsCoordinator {
+    if (_selectedProfileSlugs.isEmpty) {
+      return true;
+    }
+    return _selectedProfileSlugs.every(
+      (slug) =>
+          slug == 'vendedor' || slug == 'supervisor' || slug == 'coordenador',
+    );
+  }
+
+  bool get _coordinatorFilterEnabled => _profileFilterAllowsCoordinator;
+
+  String get _selectedUserLabel {
+    if (_selectedUserId == null) {
+      return 'Todos os usuarios';
+    }
+    for (final user in _users) {
+      if (user.id == _selectedUserId) {
+        return user.label;
+      }
+    }
+    return 'Usuario filtrado';
+  }
+
+  String _profileLabel(String slug) {
+    switch (slug) {
+      case 'diretoria':
+        return 'Diretoria';
+      case 'coordenador':
+        return 'Coordenador';
+      case 'supervisor':
+        return 'Supervisor';
+      case 'vendedor':
+        return 'Vendedor';
+      case 'outros':
+        return 'Outros';
+      default:
+        return 'Sem perfil';
+    }
   }
 
   List<UsageGroup> get _filteredUserGroups {
@@ -434,146 +531,105 @@ class _ReportsScreenState extends State<ReportsScreen> {
     });
   }
 
+  void _toggleModuleUser(String label) {
+    setState(() {
+      if (_expandedModuleUsers.contains(label)) {
+        _expandedModuleUsers.remove(label);
+      } else {
+        _expandedModuleUsers.add(label);
+      }
+    });
+  }
+
+  Future<void> _openUserPicker() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) =>
+          _UserPickerSheet(users: _users, selectedUserId: _selectedUserId),
+    );
+
+    if (selected == null || selected == _selectedUserId) {
+      return;
+    }
+
+    setState(() {
+      _selectedUserId = selected == _allUsersPickerValue ? null : selected;
+    });
+    await _loadReport();
+  }
+
   Widget _buildDropdownLabel(String text) {
     return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
   }
 
-  Widget _buildHeader() {
-    final sparklineItems = _aggregatedHours;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [primaryColor, Color(0xFF1B26A8)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Central de uso',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Resumo administrativo de acessos, horarios e perfis.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.82),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.insights_outlined,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _formatCount(_report.totalLogins),
-                        style: Theme.of(context).textTheme.displaySmall
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                              height: 0.95,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'logins no periodo selecionado',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: 0.82),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: [
-                          _HeroPill(
-                            icon: Icons.people_alt_outlined,
-                            label:
-                                '${_formatCount(_report.activeUsers)} usuarios ativos',
-                          ),
-                          if (_peakHour != null)
-                            _HeroPill(
-                              icon: Icons.schedule_outlined,
-                              label: 'Pico em ${_peakHour!.label}',
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (sparklineItems.isNotEmpty)
-                  SizedBox(
-                    width: 118,
-                    height: 76,
-                    child: CustomPaint(
-                      painter: _SparklinePainter(
-                        values: sparklineItems
-                            .map((item) => item.value)
-                            .toList(),
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildFilterCard() {
+    final coordinatorEnabled = _coordinatorFilterEnabled;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Filtros',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
+            Row(
               children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8ECFF),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.tune_rounded, color: primaryColor),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Filtros do relatorio',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Todos os filtros abaixo aplicam a todas as visoes.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _RangeChip(
+                  label: 'Hoje',
+                  selected: _selectedQuickRange == 'today',
+                  onTap: () => _applyQuickRange('today'),
+                ),
+                _RangeChip(
+                  label: 'Ontem',
+                  selected: _selectedQuickRange == 'yesterday',
+                  onTap: () => _applyQuickRange('yesterday'),
+                ),
+                _RangeChip(
+                  label: '7 dias',
+                  selected: _selectedQuickRange == '7d',
+                  onTap: () => _applyQuickRange('7d'),
+                ),
+                _RangeChip(
+                  label: 'Mes atual',
+                  selected: _selectedQuickRange == 'month',
+                  onTap: () => _applyQuickRange('month'),
+                ),
                 OutlinedButton.icon(
                   onPressed: () => _pickDate(isStart: true),
                   icon: const Icon(Icons.date_range_outlined),
@@ -586,58 +642,114 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _RangeChip(
-                  label: 'Hoje',
-                  selected: _selectedQuickRangeDays == 1,
-                  onTap: () => _applyQuickRange(1),
-                ),
-                _RangeChip(
-                  label: '7 dias',
-                  selected: _selectedQuickRangeDays == 7,
-                  onTap: () => _applyQuickRange(7),
-                ),
-                _RangeChip(
-                  label: '30 dias',
-                  selected: _selectedQuickRangeDays == 30,
-                  onTap: () => _applyQuickRange(30),
-                ),
-              ],
-            ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String?>(
-              initialValue: _selectedUserId,
+              initialValue: coordinatorEnabled
+                  ? _selectedCoordinatorCode
+                  : null,
               isExpanded: true,
               items: <DropdownMenuItem<String?>>[
                 DropdownMenuItem<String?>(
                   value: null,
-                  child: _buildDropdownLabel('Todos os usuarios'),
+                  child: _buildDropdownLabel('Todos os coordenadores'),
                 ),
-                ..._users.map((user) {
-                  final label = user.displayName?.trim().isNotEmpty == true
-                      ? '${user.displayName} (${user.code})'
-                      : user.code;
+                ..._coordinatorUsers.map((user) {
                   return DropdownMenuItem<String?>(
-                    value: user.id,
-                    child: _buildDropdownLabel(label),
+                    value: user.code,
+                    child: _buildDropdownLabel(user.label),
                   );
                 }),
               ],
-              onChanged: (value) async {
-                setState(() {
-                  _selectedUserId = value;
-                });
-                await _loadReport();
-              },
-              decoration: const InputDecoration(
-                labelText: 'Escopo do relatorio',
-                prefixIcon: Icon(Icons.person_search_outlined),
+              onChanged: coordinatorEnabled
+                  ? (value) async {
+                      setState(() {
+                        _selectedCoordinatorCode = value;
+                      });
+                      await _loadReport();
+                    }
+                  : null,
+              decoration: InputDecoration(
+                labelText: 'Coordenador',
+                helperText: coordinatorEnabled
+                    ? 'Filtra coordenador, supervisores e vendedores vinculados.'
+                    : 'Desabilitado para perfis sem coordenador.',
+                prefixIcon: const Icon(Icons.hub_outlined),
               ),
             ),
+            const SizedBox(height: 16),
+            Text(
+              'Perfis',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilterChip(
+                  selected: _selectedProfileSlugs.isEmpty,
+                  onSelected: (_) async {
+                    setState(() {
+                      _selectedProfileSlugs.clear();
+                    });
+                    await _loadReport();
+                  },
+                  label: const Text('Todos'),
+                ),
+                ..._availableProfileSlugs.map((slug) {
+                  final selected = _selectedProfileSlugs.contains(slug);
+                  return FilterChip(
+                    selected: selected,
+                    onSelected: (_) async {
+                      setState(() {
+                        if (selected) {
+                          _selectedProfileSlugs.remove(slug);
+                        } else {
+                          _selectedProfileSlugs.add(slug);
+                        }
+                        if (!_coordinatorFilterEnabled) {
+                          _selectedCoordinatorCode = null;
+                        }
+                      });
+                      await _loadReport();
+                    },
+                    label: Text(_profileLabel(slug)),
+                  );
+                }),
+              ],
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _openUserPicker,
+              icon: const Icon(Icons.person_search_outlined),
+              label: Text(_selectedUserLabel),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                alignment: Alignment.centerLeft,
+              ),
+            ),
+            if (_selectedCoordinatorCode != null ||
+                _selectedProfileSlugs.isNotEmpty ||
+                _selectedUserId != null) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    setState(() {
+                      _selectedCoordinatorCode = null;
+                      _selectedProfileSlugs.clear();
+                      _selectedUserId = null;
+                    });
+                    await _loadReport();
+                  },
+                  icon: const Icon(Icons.clear_all_rounded),
+                  label: const Text('Limpar filtros'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -831,7 +943,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Quem mais apareceu no app dentro do recorte atual.',
+              'Pontuacao: 1 ponto por abertura do app e 1 por modulo aberto, com janela anti-spam de 5 minutos.',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF5E6A7C)),
@@ -1011,8 +1123,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildModulesSection() {
     final modules = _report.moduleOpensByModule.toList()
       ..sort((left, right) => right.value.compareTo(left.value));
-    final groups = _report.moduleUsersByModule.toList()
-      ..sort((left, right) => left.label.compareTo(right.label));
+    final groups = _report.moduleUsersByUser.toList()
+      ..sort((left, right) => (right.value ?? 0).compareTo(left.value ?? 0));
     final topModule = modules.isEmpty ? null : modules.first;
 
     return Column(
@@ -1082,78 +1194,98 @@ class _ReportsScreenState extends State<ReportsScreen> {
         const SizedBox(height: 16),
         if (groups.isEmpty)
           const _EmptySectionCard(
-            message: 'Nenhum usuario por modulo nos filtros atuais.',
+            message: 'Nenhum usuario acessou modulos nos filtros atuais.',
           )
         else
           ...groups.map((group) {
             final items = group.items.toList()
               ..sort((left, right) => right.value.compareTo(left.value));
-            final maxValue = items.isEmpty || items.first.value <= 0
-                ? 1.0
-                : items.first.value;
+            final expanded = _expandedModuleUsers.contains(group.label);
             return Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => _toggleModuleUser(group.label),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE8F1FF),
-                              borderRadius: BorderRadius.circular(14),
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Row(
+                          children: [
+                            _AvatarBadge(
+                              initials: _initials(group.label),
+                              backgroundColor: const Color(0xFFE8F1FF),
+                              foregroundColor: const Color(0xFF1E88E5),
                             ),
-                            child: const Icon(
-                              Icons.apps_outlined,
-                              color: Color(0xFF1E88E5),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    group.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${_formatCount(group.value ?? items.length)} modulo(s) acessado(s)',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: const Color(0xFF64748B),
+                                        ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  group.label,
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w800),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${items.length} usuario(s)',
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: const Color(0xFF64748B),
-                                      ),
-                                ),
-                              ],
+                            Icon(
+                              expanded
+                                  ? Icons.expand_less_rounded
+                                  : Icons.expand_more_rounded,
+                              color: const Color(0xFF64748B),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 14),
-                      ...items.asMap().entries.map((entry) {
-                        final item = entry.value;
-                        return Padding(
-                          padding: EdgeInsets.only(
-                            bottom: entry.key == items.length - 1 ? 0 : 12,
+                      if (expanded) ...[
+                        const Divider(height: 1),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                          child: Column(
+                            children: items.asMap().entries.map((entry) {
+                              final item = entry.value;
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: entry.key == items.length - 1
+                                      ? 0
+                                      : 10,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(child: Text(item.label)),
+                                    Text(
+                                      '${_formatCount(item.value)}x',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w800,
+                                            color: const Color(0xFF1E88E5),
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
                           ),
-                          child: _UserRankRow(
-                            rank: entry.key + 1,
-                            label: item.label,
-                            value: _formatCount(item.value),
-                            ratio: (item.value / maxValue).clamp(0.0, 1.0),
-                            color: const Color(0xFF1E88E5),
-                            backgroundColor: const Color(0xFFE8F1FF),
-                            initials: _initials(item.label),
-                          ),
-                        );
-                      }),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1166,6 +1298,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Widget _buildHoursSection() {
     final hours = _aggregatedHours;
+    final selectedUsers = _report.loginsByHourUsers
+        .where((group) => group.label == _selectedHourLabel)
+        .expand((group) => group.items)
+        .toList();
     return Column(
       children: [
         _SummaryMetricCard(
@@ -1209,9 +1345,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     child: _UsageBarChart(
                       items: hours,
                       color: const Color(0xFF5B3DF5),
+                      selectedLabel: _selectedHourLabel,
+                      onSelected: (label) {
+                        setState(() {
+                          _selectedHourLabel = _selectedHourLabel == label
+                              ? null
+                              : label;
+                        });
+                      },
                     ),
                   ),
                   const SizedBox(height: 18),
+                  if (_selectedHourLabel != null)
+                    _DetailUsersCard(
+                      title: 'Usuarios em $_selectedHourLabel',
+                      users: selectedUsers,
+                      formatCount: _formatCount,
+                    ),
+                  if (_selectedHourLabel != null) const SizedBox(height: 18),
                   ...hours.map(
                     (item) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -1239,6 +1390,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildWeekdaysSection() {
     final weekdays = _aggregatedWeekdays;
     final peak = _peakWeekday;
+    final selectedUsers = _report.loginsByWeekdayUsers
+        .where((group) => group.label == _selectedWeekdayLabel)
+        .expand((group) => group.items)
+        .toList();
     final maxValue = weekdays.isEmpty
         ? 1.0
         : weekdays.map((item) => item.value).reduce(math.max);
@@ -1280,7 +1435,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   const _EmptySectionCard(
                     message: 'Sem logins por dia da semana neste periodo.',
                   )
-                else
+                else ...[
                   ...weekdays.map(
                     (item) => Padding(
                       padding: const EdgeInsets.only(bottom: 14),
@@ -1290,9 +1445,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         fraction: maxValue <= 0
                             ? 0
                             : (item.value / maxValue).clamp(0.0, 1.0),
+                        selected: _selectedWeekdayLabel == item.label,
+                        onTap: () {
+                          setState(() {
+                            _selectedWeekdayLabel =
+                                _selectedWeekdayLabel == item.label
+                                ? null
+                                : item.label;
+                          });
+                        },
                       ),
                     ),
                   ),
+                  if (_selectedWeekdayLabel != null)
+                    _DetailUsersCard(
+                      title: 'Usuarios em $_selectedWeekdayLabel',
+                      users: selectedUsers,
+                      formatCount: _formatCount,
+                    ),
+                ],
               ],
             ),
           ),
@@ -1349,8 +1520,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
                   children: [
-                    _buildHeader(),
-                    const SizedBox(height: 16),
                     _buildFilterCard(),
                     const SizedBox(height: 16),
                     _buildSectionSwitcher(),
@@ -1370,34 +1539,174 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 }
 
-class _HeroPill extends StatelessWidget {
-  const _HeroPill({required this.icon, required this.label});
+class _UserPickerSheet extends StatefulWidget {
+  const _UserPickerSheet({required this.users, required this.selectedUserId});
 
-  final IconData icon;
-  final String label;
+  final List<AppUser> users;
+  final String? selectedUserId;
+
+  @override
+  State<_UserPickerSheet> createState() => _UserPickerSheetState();
+}
+
+class _UserPickerSheetState extends State<_UserPickerSheet> {
+  late final TextEditingController _controller;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  List<AppUser> get _filteredUsers {
+    final query = _query.trim().toLowerCase();
+    final items = widget.users.toList()
+      ..sort((left, right) => left.label.compareTo(right.label));
+
+    if (query.isEmpty) {
+      return items;
+    }
+
+    return items.where((user) {
+      final haystack = <String>[
+        user.code,
+        user.label,
+        user.displayName ?? '',
+        user.loginAlias ?? '',
+        user.profileName,
+      ].join(' ').toLowerCase();
+      return haystack.contains(query);
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 16),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
+    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+    final users = _filteredUsers;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 18, 20, 20 + bottomPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Buscar usuario',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Digite nome, codigo ou perfil',
+                prefixIcon: Icon(Icons.search_rounded),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _query = value;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 480),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFFE8ECFF),
+                        foregroundColor: primaryColor,
+                        child: const Icon(Icons.groups_outlined),
+                      ),
+                      title: const Text('Todos os usuarios'),
+                      subtitle: const Text('Remove o filtro de usuario'),
+                      trailing: widget.selectedUserId == null
+                          ? const Icon(Icons.check_circle, color: primaryColor)
+                          : null,
+                      onTap: () =>
+                          Navigator.of(context).pop(_allUsersPickerValue),
+                    ),
+                    const Divider(height: 1),
+                    if (users.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Text(
+                            'Nenhum usuario encontrado.',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: const Color(0xFF64748B)),
+                          ),
+                        ),
+                      )
+                    else
+                      ...users.map((user) {
+                        final selected = user.id == widget.selectedUserId;
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: const Color(0xFFE8ECFF),
+                            foregroundColor: primaryColor,
+                            child: Text(
+                              user.code.trim().isEmpty
+                                  ? user.profileName
+                                        .trim()
+                                        .substring(
+                                          0,
+                                          math.min(2, user.profileName.length),
+                                        )
+                                        .toUpperCase()
+                                  : user.code
+                                        .trim()
+                                        .substring(
+                                          0,
+                                          math.min(2, user.code.trim().length),
+                                        )
+                                        .toUpperCase(),
+                            ),
+                          ),
+                          title: Text(
+                            user.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(user.profileName),
+                          trailing: selected
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: primaryColor,
+                                )
+                              : null,
+                          onTap: () => Navigator.of(context).pop(user.id),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1717,49 +2026,121 @@ class _WeekdayBarRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.fraction,
+    required this.selected,
+    required this.onTap,
   });
 
   final String label;
   final String value;
   final double fraction;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 82,
-          child: Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: fraction,
-              minHeight: 14,
-              color: primaryColor,
-              backgroundColor: const Color(0xFFE8EDF7),
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 82,
+              child: Text(
+                label,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: fraction,
+                  minHeight: 14,
+                  color: selected ? const Color(0xFF0F766E) : primaryColor,
+                  backgroundColor: const Color(0xFFE8EDF7),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 34,
+              child: Text(
+                value,
+                textAlign: TextAlign.right,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 34,
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
+      ),
+    );
+  }
+}
+
+class _DetailUsersCard extends StatelessWidget {
+  const _DetailUsersCard({
+    required this.title,
+    required this.users,
+    required this.formatCount,
+  });
+
+  final String title;
+  final List<UsageBucket> users;
+  final String Function(num value) formatCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFF),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE4E9F5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
             style: Theme.of(
               context,
-            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
           ),
-        ),
-      ],
+          const SizedBox(height: 12),
+          if (users.isEmpty)
+            Text(
+              'Nenhum usuario encontrado.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF64748B)),
+            )
+          else
+            ...users.map(
+              (user) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(user.label)),
+                    Text(
+                      formatCount(user.value),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -1822,10 +2203,17 @@ class _EmptySectionCard extends StatelessWidget {
 }
 
 class _UsageBarChart extends StatelessWidget {
-  const _UsageBarChart({required this.items, required this.color});
+  const _UsageBarChart({
+    required this.items,
+    required this.color,
+    this.selectedLabel,
+    this.onSelected,
+  });
 
   final List<UsageBucket> items;
   final Color color;
+  final String? selectedLabel;
+  final ValueChanged<String>? onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -1840,84 +2228,51 @@ class _UsageBarChart extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 3),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        height: maxValue <= 0
-                            ? 4
-                            : math.max(4, (item.value / maxValue) * 150),
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(999),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: onSelected == null
+                    ? null
+                    : () => onSelected!(item.label),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Container(
+                          height: maxValue <= 0
+                              ? 4
+                              : math.max(4, (item.value / maxValue) * 150),
+                          decoration: BoxDecoration(
+                            color: selectedLabel == item.label
+                                ? const Color(0xFF2F1FD6)
+                                : color,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF64748B),
+                    const SizedBox(height: 10),
+                    Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: selectedLabel == item.label
+                            ? primaryColor
+                            : const Color(0xFF64748B),
+                        fontWeight: selectedLabel == item.label
+                            ? FontWeight.w800
+                            : null,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
       ],
     );
-  }
-}
-
-class _SparklinePainter extends CustomPainter {
-  const _SparklinePainter({required this.values, required this.color});
-
-  final List<double> values;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (values.length < 2) {
-      return;
-    }
-
-    final minValue = values.reduce(math.min);
-    final maxValue = values.reduce(math.max);
-    final valueRange = (maxValue - minValue).abs() < 0.001
-        ? 1.0
-        : maxValue - minValue;
-    final path = Path();
-
-    for (var index = 0; index < values.length; index++) {
-      final dx = size.width * index / (values.length - 1);
-      final normalized = (values[index] - minValue) / valueRange;
-      final dy = size.height - (normalized * size.height);
-      if (index == 0) {
-        path.moveTo(dx, dy);
-      } else {
-        path.lineTo(dx, dy);
-      }
-    }
-
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 3;
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _SparklinePainter oldDelegate) {
-    return oldDelegate.values != values || oldDelegate.color != color;
   }
 }
 
