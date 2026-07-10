@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -9,6 +11,7 @@ import '../models/kpi_metric_source.dart';
 import '../models/performance_overview.dart';
 import '../models/seller_home_kpis.dart';
 import '../services/app_repository.dart';
+import '../services/push_notification_service.dart';
 import '../utils/business_day_projection.dart';
 import 'admin_screen.dart';
 import 'blocked_orders_screen.dart';
@@ -51,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
   PerformanceOverview _performanceOverview = PerformanceOverview.empty();
+  StreamSubscription<PushNavigationIntent>? _pushNavigationSubscription;
 
   bool get _isAdmin => widget.currentUser.isAdmin;
   bool get _isSeller => widget.currentUser.profileSlug == AppProfile.sellerSlug;
@@ -79,9 +83,26 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _pushNavigationSubscription = PushNotificationService
+        .instance
+        .navigationIntents
+        .listen(_handlePushNavigationIntent);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pendingIntent = PushNotificationService.instance
+          .takePendingNavigationIntent();
+      if (pendingIntent != null) {
+        _handlePushNavigationIntent(pendingIntent);
+      }
+    });
     _recordModuleAccess('home', 'In\u00EDcio');
     _loadAppVersion();
     _loadContent();
+  }
+
+  @override
+  void dispose() {
+    _pushNavigationSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadAppVersion() async {
@@ -207,6 +228,25 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const PerformanceScreen()));
+  }
+
+  Future<void> _handlePushNavigationIntent(PushNavigationIntent intent) async {
+    if (!mounted) {
+      return;
+    }
+
+    switch (intent.module) {
+      case 'performance':
+        await _openPerformance();
+        break;
+      case 'returns':
+        await _openReturns();
+        break;
+      case 'home_daily':
+        await _recordModuleAccess('home_daily_notification', 'Resumo de hoje');
+        await _loadContent();
+        break;
+    }
   }
 
   Future<void> _openReturns() async {

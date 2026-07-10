@@ -15,6 +15,7 @@ from supabase_sync_common import (
     SupabaseSession,
     authenticate_supabase,
     begin_sync_run,
+    dispatch_push_notifications,
     insert_rows,
     invoke_rpc,
     mark_sync_run_failed,
@@ -235,6 +236,8 @@ def main() -> None:
     except Exception as error:
         mark_sync_run_failed(session, run_id, str(error))
         raise
+
+    dispatch_push_notifications(session)
 
     total_venda = sum(row.venda for row in rows)
     total_volume = sum(row.volume for row in rows)

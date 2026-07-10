@@ -39,6 +39,8 @@ migrate_working_dir/
 !.env.example
 *access token*.txt
 *credentials*.json
+Firebase token/
+*firebase-adminsdk*.json
 
 # Symbolication related
 app.*.symbols

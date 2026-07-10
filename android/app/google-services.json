@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "349066104353",
+    "project_id": "gestao-vendas-c6371",
+    "storage_bucket": "gestao-vendas-c6371.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:349066104353:android:088c14de97fb1aed2a5d60",
+        "android_client_info": {
+          "package_name": "br.com.omegadistribuidora.gestao_vendas"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuXf-UfxnyH9YlcBS-XzeCDTIfsKTO0BA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

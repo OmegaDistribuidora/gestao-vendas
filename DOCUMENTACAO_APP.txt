@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 09/07/2026
-Versao atual do projeto: 0.9.7+22
+Ultima atualizacao desta documentacao: 10/07/2026
+Versao atual do projeto: 0.9.8+23
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -29,6 +29,7 @@ WinThor por scripts Python e carregados no Supabase.
 - Oracle WinThor como fonte dos dados operacionais.
 - Apache Airflow para agendamento das cargas documentadas no repositorio.
 - Google Play Console para distribuicao em teste fechado e futuras versoes.
+- Firebase Cloud Messaging para notificacoes push Android.
 
 Dependencias Flutter relevantes:
 
@@ -44,6 +45,8 @@ Dependencias Flutter relevantes:
 - url_launcher
 - http
 - in_app_update
+- firebase_core
+- firebase_messaging
 
 
 3. ESTRUTURA DO REPOSITORIO
@@ -61,6 +64,10 @@ lib/screens/app_bootstrap.dart
 lib/services/app_repository.dart
   Camada central de acesso ao Supabase. Contem autenticacao, consultas,
   chamadas RPC e operacoes administrativas.
+
+lib/services/push_notification_service.dart
+  Inicializa Firebase, registra o handler de mensagens em background,
+  solicita permissao de notificacao e acompanha o token FCM do dispositivo.
 
 lib/models/
   Modelos Dart que convertem os JSONs retornados pelo Supabase.
@@ -597,9 +604,21 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao atual:
 
-- versionName: 0.9.7
-- versionCode: 22
-- Declaracao Flutter: version: 0.9.7+22
+- versionName: 0.9.8
+- versionCode: 23
+- Declaracao Flutter: version: 0.9.8+23
+
+Release 0.9.8+23:
+
+- Firebase Cloud Messaging em producao para notificacoes de metas e devolucoes
+  mesmo com o app fechado.
+- Icone proprio de notificacao Android baseado no conceito visual do app
+  (grafico de vendas/crescimento), configurado em
+  android/app/src/main/res/drawable/ic_stat_sales_notification.xml.
+- Atualizacao in-app alterada para fluxo imediato/obrigatorio da Google Play.
+- Syncs operacionais de vendas, itens, faturamento e devolucoes passam a
+  consumir a fila de notificacoes ao final da carga quando PUSH_SENDER_SECRET
+  esta configurado.
 
 Release 0.9.7+22:
 
@@ -631,19 +650,135 @@ Regras para Google Play:
 Atualizacao dentro do app:
 
 - Usar Google Play In-App Updates, da biblioteca Play Core.
-- O fluxo flexivel esta implementado na inicializacao e volta a verificar o
-  estado quando o aplicativo retorna ao primeiro plano.
+- O fluxo implementado e imediato/obrigatorio via performImmediateUpdate().
+- Quando a Google Play informa uma atualizacao disponivel e permite o fluxo
+  imediato, o usuario precisa atualizar antes de continuar usando o app.
+- Se a Play informar atualizacao disponivel, mas o fluxo imediato nao estiver
+  permitido naquele momento, o app exibe um dialogo bloqueante solicitando nova
+  tentativa de atualizacao.
 - A verificacao comeca no primeiro frame e nao depende do carregamento do
   Supabase terminar com sucesso.
-- A nova versao baixa em segundo plano e o app mostra a acao Instalar quando
-  estiver pronta para reiniciar.
-- Fluxo imediato somente para versoes criticas que impedem o uso seguro.
+- A verificacao volta a rodar quando o aplicativo retorna ao primeiro plano.
 - A verificacao usa a faixa da Play Store disponivel para a conta do usuario,
   sem consulta adicional ao Supabase.
 - Funciona apenas quando o app foi instalado pela Google Play e existe um
   versionCode superior publicado para a conta/faixa do usuario.
 - Erros esperados em APK instalado manualmente e emulador sao ignorados.
 - Guia oficial: https://developer.android.com/guide/playcore/in-app-updates
+
+Firebase Cloud Messaging:
+
+- Projeto Firebase: gestao-vendas.
+- ID do projeto Firebase: gestao-vendas-c6371.
+- Numero do projeto / Sender ID: 349066104353.
+- API Firebase Cloud Messaging V1 ativa no console Firebase.
+- O app Android deve ser cadastrado no Firebase com o package:
+  br.com.omegadistribuidora.gestao_vendas
+- O arquivo baixado pelo console deve ficar em:
+  android/app/google-services.json
+- O Gradle aplica o plugin com.google.gms.google-services somente quando esse
+  arquivo existe, evitando quebrar builds locais antes da configuracao final.
+- O arquivo google-services.json e configuracao do app Firebase, nao e chave de
+  conta de servico. Mesmo assim, conferir antes de commit/release e nunca
+  adicionar chaves privadas, service accounts ou server keys ao repositorio.
+- O cliente Flutter inicializa Firebase por lib/services/push_notification_service.dart.
+- Se o google-services.json nao existir, o app continua abrindo e registra em
+  debug que o FCM ainda nao esta ativo para aquele build.
+- Em Android 13 ou superior, a permissao POST_NOTIFICATIONS e solicitada pelo
+  app quando o usuario loga com "lembrar login" habilitado.
+- Em debug, o token FCM atual e impresso no console para teste manual pelo
+  Firebase Console. Tokens nao devem ser registrados em logs de producao.
+- A associacao token FCM -> usuario/perfil fica na tabela app_push_tokens.
+- O app nao consulta tokens diretamente. Ele apenas chama register_push_token
+  e revoke_push_token, ambas com security definer e baseadas em auth.uid().
+- Tokens so ficam ativos para vendedor, supervisor e coordenador com login
+  automatico salvo no app e permissao de notificacao concedida.
+- Ao logout, ao trocar usuario do aparelho, ou ao entrar sem "lembrar login",
+  o token do dispositivo e revogado/desativado.
+- O token real e guardado apenas no backend para envio via Firebase; o hash
+  SHA-256 em token_hash e usado para deduplicacao.
+- Eventos de notificacao ficam em app_push_notification_events como outbox.
+- Entregas por token ficam em app_push_notification_deliveries.
+- A tabela app_push_metric_progress_state guarda o ultimo percentual visto por
+  usuario/metrica/periodo e evita duplicidade nos marcos 25/50/75/90/100.
+- A migration 20260710120000_push_notifications.sql cria as tabelas, RPCs,
+  funcoes auxiliares de dias uteis e avaliacao de notificacoes.
+- Notificacoes com payload "notification" podem aparecer mesmo com o app
+  fechado quando enviadas pelo FCM e permitidas pelo usuario/sistema.
+- Ao tocar na notificacao mensal, o app abre Performance.
+- Ao tocar na notificacao de devolucao, o app abre Devolucoes, que por padrao
+  ja carrega o periodo Hoje.
+- Ao tocar na notificacao diaria, o app permanece/abre na Home e atualiza o
+  Resumo de hoje.
+
+Regras de notificacao implementadas:
+
+- Metas financeiras diarias e mensais.
+- Meta secundaria diaria e mensal: Positivacao ou SKU conforme a meta do
+  perfil no mes.
+- Marcos de atingimento: 25%, 50%, 75%, 90% e 100%.
+- Uma notificacao por usuario, metrica, periodo e marco.
+- Quando uma atualizacao faz o usuario cruzar varios marcos de uma vez, somente
+  o maior marco cruzado naquela avaliacao e notificado. Ex.: de 35% para 68%
+  notifica apenas 50%; de 35% para 94% notifica apenas 90%.
+- Devolucoes novas para vendedor, supervisor e coordenador conforme o escopo
+  do perfil.
+- Uma notificacao por devolucao/pedido/usuario escopado.
+- Admin, diretoria, outros e sem_perfil nao recebem push nesta fase.
+
+Envio pelo backend:
+
+- A Edge Function supabase/functions/send-push-notifications/index.ts consome
+  eventos queued e envia pelo Firebase Cloud Messaging HTTP v1.
+- A funcao exige Authorization: Bearer <PUSH_SENDER_SECRET>.
+- Secrets necessarios no Supabase:
+  - PUSH_SENDER_SECRET
+  - FIREBASE_SERVICE_ACCOUNT_JSON
+  - SUPABASE_SERVICE_ROLE_KEY
+  - SUPABASE_URL
+- Como alternativa ao FIREBASE_SERVICE_ACCOUNT_JSON, podem ser usados:
+  - FIREBASE_PROJECT_ID
+  - FIREBASE_CLIENT_EMAIL
+  - FIREBASE_PRIVATE_KEY
+- Nao salvar service account, private key ou server key no repositorio.
+- O endpoint aceita evaluate=true para executar evaluate_push_notifications
+  antes de enviar a fila.
+- O trigger evaluate_push_notifications_after_sync avalia metas/devolucoes
+  quando jobs relevantes em etl_sync_runs mudam para applied.
+- A avaliacao cria eventos queued; o envio efetivo ao Firebase ocorre quando a
+  Edge Function consome essa fila.
+- As syncs Python operacionais chamam a Edge Function ao final das cargas
+  relevantes por meio de tool/supabase_sync_common.py:
+  - oracle_sales_sync.py
+  - oracle_sales_order_items_sync.py
+  - oracle_billing_sync.py
+  - oracle_returns_sync.py
+- Essa chamada e best-effort: falha ou ausencia de PUSH_SENDER_SECRET nao deve
+  derrubar a carga de dados, apenas registra aviso no log.
+- O .env operacional do Airflow/OneDrive precisa conter PUSH_SENDER_SECRET.
+- Para cargas fora de etl_sync_runs, chamar evaluate_push_notifications ou a
+  Edge Function com evaluate=true ao final da rotina; em seguida, consumir a
+  fila com a Edge Function send-push-notifications.
+
+Passos para concluir a configuracao Firebase:
+
+1. No Firebase Console, abrir o projeto gestao-vendas.
+2. Adicionar um app Android.
+3. Informar o package br.com.omegadistribuidora.gestao_vendas.
+4. Baixar o google-services.json.
+5. Salvar em android/app/google-services.json.
+6. Executar flutter pub get.
+7. Rodar flutter run em um emulador/dispositivo Android.
+8. Copiar o token FCM exibido em debug e enviar uma notificacao de teste pelo
+   Firebase Console > Cloud Messaging.
+9. Criar uma service account do Firebase/Google Cloud com permissao de envio
+   FCM HTTP v1.
+10. Configurar os secrets da Edge Function no Supabase.
+11. Publicar a funcao send-push-notifications.
+12. Aplicar a migration 20260710120000_push_notifications.sql.
+13. Logar no app marcando "lembrar login" e aceitar notificacoes.
+14. Chamar a Edge Function com evaluate=true para gerar/enviar eventos de
+    teste, usando forceInitialNotifications=true apenas em ambiente de teste.
 
 Comandos usuais:
 

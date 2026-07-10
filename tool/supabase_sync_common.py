@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
@@ -83,6 +84,84 @@ def invoke_rpc(
     if not response.text.strip():
         return None
     return response.json()
+
+
+def dispatch_push_notifications(
+    session: SupabaseSession,
+    *,
+    limit: int = 100,
+) -> dict[str, object] | None:
+    """Consume queued push notifications through the Supabase Edge Function.
+
+    The sync scripts should call this after relevant RPCs commit their ETL run.
+    It is intentionally best-effort: missing PUSH_SENDER_SECRET simply disables
+    dispatch for environments that are not configured for push, and transient
+    push failures must not fail the Oracle -> Supabase data load.
+    """
+
+    push_sender_secret = os.getenv("PUSH_SENDER_SECRET", "").strip()
+    if not push_sender_secret:
+        print(
+            json.dumps(
+                {
+                    "push_notifications": "skipped",
+                    "reason": "PUSH_SENDER_SECRET not configured",
+                },
+                ensure_ascii=False,
+            )
+        )
+        return None
+
+    response = requests.post(
+        f"{session.url}/functions/v1/send-push-notifications",
+        headers={
+            "Authorization": f"Bearer {push_sender_secret}",
+            "Content-Type": "application/json",
+            "User-Agent": "omega-sync/etl-v2",
+        },
+        data=json.dumps({"limit": limit}),
+        timeout=60,
+    )
+    if not response.ok:
+        print(
+            json.dumps(
+                {
+                    "push_notifications": "failed",
+                    "status_code": response.status_code,
+                    "response": response.text[:1000],
+                },
+                ensure_ascii=False,
+            )
+        )
+        return None
+
+    try:
+        result = response.json()
+    except ValueError:
+        result = {"raw_response": response.text}
+
+    if isinstance(result, dict):
+        print(
+            json.dumps(
+                {
+                    "push_notifications": "dispatched",
+                    **{str(key): value for key, value in result.items()},
+                },
+                ensure_ascii=False,
+            )
+        )
+        return {str(key): value for key, value in result.items()}
+
+    print(
+        json.dumps(
+            {
+                "push_notifications": "dispatched",
+                "response": result,
+            },
+            ensure_ascii=False,
+        )
+    )
+    return {"response": result}
 
 
 def insert_rows(

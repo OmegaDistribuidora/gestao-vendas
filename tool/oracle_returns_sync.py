@@ -20,6 +20,7 @@ from oracle_financial_sync_common import (
 )
 from supabase_sync_common import (
     begin_sync_run,
+    dispatch_push_notifications,
     insert_rows,
     invoke_rpc,
     mark_sync_run_failed,
@@ -352,6 +353,8 @@ def main() -> None:
         mark_sync_run_failed(session, financial_run_id, str(error))
         mark_sync_run_failed(session, detail_run_id, str(error))
         raise
+
+    dispatch_push_notifications(session)
 
     total_faturamento = sum(row.faturamento for row in financial_rows)
     total_volume = sum(row.volume for row in financial_rows)

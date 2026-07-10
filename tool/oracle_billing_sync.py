@@ -11,7 +11,11 @@ from oracle_financial_sync_common import (
     require_env,
     stage_financial_rows,
 )
-from supabase_sync_common import mark_sync_run_failed, set_sync_run_rows_staged
+from supabase_sync_common import (
+    dispatch_push_notifications,
+    mark_sync_run_failed,
+    set_sync_run_rows_staged,
+)
 
 
 SNAPSHOT_TYPE = "F"
@@ -95,6 +99,8 @@ def main() -> None:
     except Exception as error:
         mark_sync_run_failed(session, run_id, str(error))
         raise
+
+    dispatch_push_notifications(session)
 
     total_faturamento = sum(row.faturamento for row in rows)
     total_volume = sum(row.volume for row in rows)

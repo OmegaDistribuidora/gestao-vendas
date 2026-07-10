@@ -6,6 +6,7 @@ import 'package:in_app_update/in_app_update.dart';
 import '../core/app_theme.dart';
 import '../models/app_user.dart';
 import '../services/app_repository.dart';
+import '../services/push_notification_service.dart';
 import '../models/remembered_login.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
@@ -44,7 +45,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _updateCheckStarted) {
-      unawaited(_checkForFlexibleUpdate());
+      unawaited(_checkForImmediateUpdate());
     }
   }
 
@@ -62,7 +63,16 @@ class _AppBootstrapState extends State<AppBootstrap>
 
       if (rememberedLogin?.rememberLogin == true) {
         sessionUser = await _repository.restoreSession();
+        if (sessionUser != null) {
+          unawaited(
+            PushNotificationService.instance.registerForCurrentUser(
+              rememberLoginEnabled: true,
+              profileSlug: sessionUser.profileSlug,
+            ),
+          );
+        }
       } else {
+        await PushNotificationService.instance.revokeForCurrentUser();
         await _repository.signOut();
       }
 
@@ -92,11 +102,11 @@ class _AppBootstrapState extends State<AppBootstrap>
     }
     _updateCheckStarted = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_checkForFlexibleUpdate());
+      unawaited(_checkForImmediateUpdate());
     });
   }
 
-  Future<void> _checkForFlexibleUpdate() async {
+  Future<void> _checkForImmediateUpdate() async {
     if (_updateCheckInProgress) {
       return;
     }
@@ -107,21 +117,17 @@ class _AppBootstrapState extends State<AppBootstrap>
         return;
       }
 
-      if (updateInfo.installStatus == InstallStatus.downloaded) {
-        _showUpdateReadyMessage();
-        return;
-      }
-
       if (updateInfo.updateAvailability != UpdateAvailability.updateAvailable ||
-          !updateInfo.flexibleUpdateAllowed) {
+          updateInfo.installStatus == InstallStatus.downloaded) {
         return;
       }
 
-      final result = await InAppUpdate.startFlexibleUpdate();
-      if (!mounted || result != AppUpdateResult.success) {
+      if (updateInfo.immediateUpdateAllowed) {
+        await InAppUpdate.performImmediateUpdate();
         return;
       }
-      _showUpdateReadyMessage();
+
+      _showMandatoryUpdateMessage();
     } catch (_) {
       // Play In-App Updates is unavailable for sideloaded APKs and emulators.
     } finally {
@@ -129,33 +135,33 @@ class _AppBootstrapState extends State<AppBootstrap>
     }
   }
 
-  void _showUpdateReadyMessage() {
+  void _showMandatoryUpdateMessage() {
     if (!mounted) {
       return;
     }
 
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: const Text('Atualizacao pronta para instalar.'),
-        duration: const Duration(days: 1),
-        action: SnackBarAction(
-          label: 'Instalar',
-          onPressed: () {
-            unawaited(_completeFlexibleUpdate());
-          },
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Atualizacao obrigatoria'),
+          content: const Text(
+            'Existe uma nova versao do Gestao de Vendas. '
+            'Atualize pela Google Play para continuar usando o app.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                unawaited(_checkForImmediateUpdate());
+              },
+              child: const Text('Atualizar'),
+            ),
+          ],
         ),
       ),
     );
-  }
-
-  Future<void> _completeFlexibleUpdate() async {
-    try {
-      await InAppUpdate.completeFlexibleUpdate();
-    } catch (_) {
-      // Google Play will offer the update again on a future app session.
-    }
   }
 
   Future<void> _handleLogin({
@@ -174,7 +180,14 @@ class _AppBootstrapState extends State<AppBootstrap>
           identifier: login,
           rememberLogin: true,
         );
+        unawaited(
+          PushNotificationService.instance.registerForCurrentUser(
+            rememberLoginEnabled: true,
+            profileSlug: user.profileSlug,
+          ),
+        );
       } else {
+        await PushNotificationService.instance.revokeForCurrentUser();
         await _repository.clearRememberedLogin();
       }
 
@@ -194,6 +207,7 @@ class _AppBootstrapState extends State<AppBootstrap>
   }
 
   Future<void> _handleLogout() async {
+    await PushNotificationService.instance.revokeForCurrentUser();
     await _repository.clearRememberedLogin();
     await _repository.signOut();
 
