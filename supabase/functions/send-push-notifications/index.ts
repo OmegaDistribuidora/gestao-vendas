@@ -197,7 +197,8 @@ async function sendFirebaseMessage({
           android: {
             priority: 'high',
             notification: {
-              click_action: 'FLUTTER_NOTIFICATION_CLICK',
+              icon: 'ic_stat_sales_notification',
+              color: '#006BFF',
             },
           },
         },
