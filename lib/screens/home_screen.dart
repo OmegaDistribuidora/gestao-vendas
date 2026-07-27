@@ -40,6 +40,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const Duration _saoPauloUtcOffset = Duration(hours: -3);
+
   final AppRepository _repository = AppRepository.instance;
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'pt_BR',
@@ -50,7 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Vers\u00E3o 0.9.9+24';
+  String _appVersionLabel = 'Vers\u00E3o 0.9.10+25';
   bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
   PerformanceOverview _performanceOverview = PerformanceOverview.empty();
@@ -63,7 +65,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _isCoordinator =>
       widget.currentUser.profileSlug == AppProfile.coordinatorSlug;
   bool get _showsHomeKpis => !_isAdmin;
-  bool get _isNamedKpiProfile => _isSeller || _isSupervisor || _isCoordinator;
+  bool get _isNamedKpiProfile =>
+      _isSeller ||
+      _isSupervisor ||
+      _isCoordinator ||
+      widget.currentUser.profileSlug == AppProfile.boardSlug ||
+      widget.currentUser.profileSlug == AppProfile.othersSlug;
   bool get _showsPerformanceModule => true;
   bool get _showsCustomersWithoutPurchaseModule =>
       _isSeller || _isSupervisor || _isCoordinator;
@@ -124,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Vers\u00E3o 0.9.9+24';
+        _appVersionLabel = 'Vers\u00E3o 0.9.10+25';
       });
     }
   }
@@ -135,9 +142,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _errorMessage = null;
     });
 
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day);
-    final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    final today = _nowInSaoPaulo();
+    final start = _saoPauloDayStartUtc(today);
+    final end = _saoPauloDayEndUtc(today);
 
     try {
       final homeKpis = await _repository.getHomeKpis(
@@ -445,8 +452,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   DateTime get _projectionMonthStart {
-    final now = DateTime.now();
+    final now = _nowInSaoPaulo();
     return DateTime(now.year, now.month, 1);
+  }
+
+  DateTime _nowInSaoPaulo() {
+    return DateTime.now().toUtc().add(_saoPauloUtcOffset);
+  }
+
+  DateTime _saoPauloDayStartUtc(DateTime saoPauloDate) {
+    return DateTime.utc(
+      saoPauloDate.year,
+      saoPauloDate.month,
+      saoPauloDate.day,
+    ).subtract(_saoPauloUtcOffset);
+  }
+
+  DateTime _saoPauloDayEndUtc(DateTime saoPauloDate) {
+    return _saoPauloDayStartUtc(
+      saoPauloDate,
+    ).add(const Duration(days: 1)).subtract(const Duration(seconds: 1));
+  }
+
+  DateTime _toSaoPauloTime(DateTime dateTime) {
+    return dateTime.toUtc().add(_saoPauloUtcOffset);
+  }
+
+  String _formatSaoPauloTime(DateTime dateTime) {
+    return DateFormat('HH:mm', 'pt_BR').format(_toSaoPauloTime(dateTime));
   }
 
   PerformanceOverviewItem? get _overallPerformanceItem =>
@@ -797,7 +830,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Atualizado ${DateFormat('HH:mm', 'pt_BR').format(_homeKpis.lastSalesUpdatedAt!)}',
+                        'Atualizado ${_formatSaoPauloTime(_homeKpis.lastSalesUpdatedAt!)}',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: const Color(0xFF7A8597),
                           fontWeight: FontWeight.w700,

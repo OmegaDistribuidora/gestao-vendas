@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 10/07/2026
-Versao atual do projeto: 0.9.9+24
+Ultima atualizacao desta documentacao: 24/07/2026
+Versao atual do projeto: 0.9.10+25
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -146,9 +146,11 @@ na interface nao substitui a autorizacao no backend.
 - Apresenta indicadores comerciais conforme perfil e periodo.
 - Os valores financeiros usam as regras de venda, faturamento e devolucao
   definidas nas RPCs do Supabase.
-- No Resumo de hoje, vendedor, supervisor e coordenador tambem veem a
-  Meta Financeira de hoje e a Meta Positivacao de hoje. Quando a meta
-  secundaria do Performance for SKU, o texto muda para Meta SKU de hoje.
+- No Resumo de hoje, vendedor, supervisor, coordenador, diretoria e outros
+  tambem veem a Meta Financeira de hoje e a Meta Positivacao de hoje. Quando a
+  meta secundaria do Performance for SKU, o texto muda para Meta SKU de hoje.
+- Perfis de visao geral, como diretoria e outros, usam as metas consolidadas
+  gerais do backend.
 - As metas diarias usam a mesma regra de necessidade diaria do modulo
   Performance, baseada em dias uteis restantes, metas mensais e no mes atual
   da Home.
@@ -179,6 +181,9 @@ na interface nao substitui a autorizacao no backend.
 - Os valores apresentados sao liquidos, com devolucoes deduzidas.
 - Exibe valor, volume, pedidos e positivacao conforme os dados disponiveis.
 - Usa a tabela de fornecedores para nomes e identificacao visual.
+- O card "Geral" usa totais deduplicados do backend. Positivacao geral nao e
+  calculada pela soma das positivacoes por fornecedor, pois o mesmo cliente
+  pode comprar de varios fornecedores no mesmo periodo.
 
 6.4 Devolucoes
 
@@ -626,9 +631,29 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao atual:
 
-- versionName: 0.9.9
-- versionCode: 24
-- Declaracao Flutter: version: 0.9.9+24
+- versionName: 0.9.10
+- versionCode: 25
+- Declaracao Flutter: version: 0.9.10+25
+
+Release 0.9.10+25:
+
+- Análise por Fornecedor corrigida para mostrar o card Geral com positivacao
+  deduplicada, evitando inflar o total quando o mesmo cliente compra de varios
+  fornecedores.
+- RPC get_supplier_analysis passa a devolver o objeto overall com totais
+  gerais deduplicados.
+- Home passa a carregar metas diarias tambem para perfis de visao geral
+  diretoria e outros, usando metas consolidadas gerais.
+- Notificacoes push de meta batida passam a funcionar para todos os perfis
+  reais com token ativo, login automatico e permissao de notificacao.
+- Perfis de visao geral, como diretoria, outros e admin, recebem notificacoes
+  de metas gerais consolidadas.
+- Notificacoes de devolucao continuam restritas a vendedor, supervisor e
+  coordenador nesta etapa.
+- Novas migrations Supabase:
+  20260713120757_fix_daily_push_metrics_home_source.sql,
+  20260724100000_supplier_analysis_dedup_overall.sql,
+  20260724113000_push_goal_notifications_all_profiles.sql.
 
 Release 0.9.9+24:
 
@@ -742,8 +767,9 @@ Firebase Cloud Messaging:
 - A associacao token FCM -> usuario/perfil fica na tabela app_push_tokens.
 - O app nao consulta tokens diretamente. Ele apenas chama register_push_token
   e revoke_push_token, ambas com security definer e baseadas em auth.uid().
-- Tokens so ficam ativos para vendedor, supervisor e coordenador com login
-  automatico salvo no app e permissao de notificacao concedida.
+- Tokens ficam ativos para perfis reais do app, exceto sem_perfil, desde que o
+  usuario tenha login automatico salvo no app e permissao de notificacao
+  concedida.
 - Ao logout, ao trocar usuario do aparelho, ou ao entrar sem "lembrar login",
   o token do dispositivo e revogado/desativado.
 - O token real e guardado apenas no backend para envio via Firebase; o hash
@@ -767,6 +793,9 @@ Regras de notificacao implementadas:
 - Metas financeiras diarias e mensais.
 - Meta secundaria diaria e mensal: Positivacao ou SKU conforme a meta do
   perfil no mes.
+- Perfis vendedor, supervisor e coordenador recebem metas conforme seu escopo.
+- Perfis de visao geral, como diretoria, outros e admin, recebem metas gerais
+  consolidadas.
 - Marcos de atingimento: 25%, 50%, 75%, 90% e 100%.
 - Uma notificacao por usuario, metrica, periodo e marco.
 - Quando uma atualizacao faz o usuario cruzar varios marcos de uma vez, somente
@@ -775,7 +804,8 @@ Regras de notificacao implementadas:
 - Devolucoes novas para vendedor, supervisor e coordenador conforme o escopo
   do perfil.
 - Uma notificacao por devolucao/pedido/usuario escopado.
-- Admin, diretoria, outros e sem_perfil nao recebem push nesta fase.
+- sem_perfil nao recebe push. Notificacoes de devolucao para perfis de visao
+  geral nao foram habilitadas nesta etapa.
 
 Envio pelo backend:
 

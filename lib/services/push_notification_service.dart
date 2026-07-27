@@ -324,9 +324,8 @@ class PushNotificationService {
   }
 
   static bool _isPushProfile(String profileSlug) {
-    return profileSlug == 'vendedor' ||
-        profileSlug == 'supervisor' ||
-        profileSlug == 'coordenador';
+    final normalizedProfile = profileSlug.trim().toLowerCase();
+    return normalizedProfile.isNotEmpty && normalizedProfile != 'sem_perfil';
   }
 
   static Future<String> _loadOrCreateDeviceId() async {

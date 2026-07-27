@@ -5,26 +5,35 @@ class SupplierAnalysis {
   const SupplierAnalysis({
     required this.metricSource,
     required this.lastUpdatedAt,
+    required this.overall,
     required this.suppliers,
   });
 
   final KpiMetricSource metricSource;
   final DateTime? lastUpdatedAt;
+  final SupplierAnalysisItem? overall;
   final List<SupplierAnalysisItem> suppliers;
 
   factory SupplierAnalysis.empty() {
     return const SupplierAnalysis(
       metricSource: KpiMetricSource.venda,
       lastUpdatedAt: null,
+      overall: null,
       suppliers: <SupplierAnalysisItem>[],
     );
   }
 
   factory SupplierAnalysis.fromJson(Map<String, dynamic> json) {
     final suppliersJson = json['suppliers'];
+    final overallJson = json['overall'];
     return SupplierAnalysis(
       metricSource: parseKpiMetricSource(json['metric_source'] as String?),
       lastUpdatedAt: _parseDate(json['last_updated_at']),
+      overall: overallJson is Map
+          ? SupplierAnalysisItem.fromJson(
+              overallJson.map((key, value) => MapEntry('$key', value)),
+            )
+          : null,
       suppliers: suppliersJson is List
           ? suppliersJson
                 .whereType<Map>()

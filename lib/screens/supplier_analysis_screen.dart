@@ -49,6 +49,11 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
       return const <SupplierAnalysisItem>[];
     }
 
+    final overall = _analysis.overall;
+    if (overall != null) {
+      return [overall, ..._analysis.suppliers];
+    }
+
     final totalAmount = _analysis.suppliers.fold<double>(
       0,
       (sum, item) => sum + item.grossAmount,
