@@ -594,18 +594,26 @@ class _SupplierCard extends StatelessWidget {
                 _MiniMetricTile(
                   title: 'Financeiro Liquido',
                   value: formatCurrency(supplier.netAmount),
+                  accentColor: kpiFinancialColor,
+                  accentBackgroundColor: kpiFinancialBackgroundColor,
                 ),
                 _MiniMetricTile(
                   title: 'Volume Liquido',
                   value: formatVolume(supplier.netVolume),
+                  accentColor: kpiVolumeColor,
+                  accentBackgroundColor: kpiVolumeBackgroundColor,
                 ),
                 _MiniMetricTile(
                   title: 'Pedidos Liquidos',
                   value: '${supplier.netOrders}',
+                  accentColor: kpiOrdersColor,
+                  accentBackgroundColor: kpiOrdersBackgroundColor,
                 ),
                 _MiniMetricTile(
                   title: 'Positivação Liquida',
                   value: '${supplier.netPositivation}',
+                  accentColor: kpiPositivationColor,
+                  accentBackgroundColor: kpiPositivationBackgroundColor,
                 ),
               ],
             ),
@@ -617,10 +625,17 @@ class _SupplierCard extends StatelessWidget {
 }
 
 class _MiniMetricTile extends StatelessWidget {
-  const _MiniMetricTile({required this.title, required this.value});
+  const _MiniMetricTile({
+    required this.title,
+    required this.value,
+    required this.accentColor,
+    required this.accentBackgroundColor,
+  });
 
   final String title;
   final String value;
+  final Color accentColor;
+  final Color accentBackgroundColor;
 
   @override
   Widget build(BuildContext context) {
@@ -628,9 +643,9 @@ class _MiniMetricTile extends StatelessWidget {
       width: 148,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F9FF),
+        color: accentBackgroundColor.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE1E6F5)),
+        border: Border.all(color: accentColor.withValues(alpha: 0.16)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -638,7 +653,7 @@ class _MiniMetricTile extends StatelessWidget {
           Text(
             title,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF5E6A7C),
+              color: accentColor.withValues(alpha: 0.74),
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -651,9 +666,10 @@ class _MiniMetricTile extends StatelessWidget {
               child: Text(
                 value,
                 maxLines: 1,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: accentColor,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ),

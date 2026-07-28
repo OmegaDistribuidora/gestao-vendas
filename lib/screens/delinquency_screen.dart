@@ -436,8 +436,8 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
         title: 'Pedidos',
         value: '${_overview.totalOrders}',
         icon: Icons.receipt_long_outlined,
-        accentColor: const Color(0xFF1D4ED8),
-        accentBackgroundColor: const Color(0xFFE8EEFF),
+        accentColor: kpiOrdersColor,
+        accentBackgroundColor: kpiOrdersBackgroundColor,
       ),
       _buildMetricCard(
         title: 'Clientes',

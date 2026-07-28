@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 24/07/2026
-Versao atual do projeto: 0.9.10+25
+Ultima atualizacao desta documentacao: 28/07/2026
+Versao atual do projeto: 0.9.11+26
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -158,6 +158,10 @@ na interface nao substitui a autorizacao no backend.
   principal + Meta diaria e Volume + metrica secundaria.
 - O card da meta diaria mostra o percentual do dia em uma barra de progresso,
   com o percentual exibido apenas no selo do lado direito.
+- Padrao visual dos indicadores: financeiro/venda/faturamento em verde,
+  positivacao em azul, SKU/produtos distintos em roxo, volume em ciano e
+  contadores de pedidos em laranja/amarelo. As metas usam a mesma cor do
+  indicador correspondente.
 - Produtos distintos sao calculados a partir dos itens dos pedidos que
   tambem entram no resumo de venda do periodo, evitando divergencia entre
   Venda/Volume/Positivacao e o total de produtos. Se o detalhe de itens ainda
@@ -631,9 +635,21 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao atual:
 
-- versionName: 0.9.10
-- versionCode: 25
-- Declaracao Flutter: version: 0.9.10+25
+- versionName: 0.9.11
+- versionCode: 26
+- Declaracao Flutter: version: 0.9.11+26
+
+Release 0.9.11+26:
+
+- Padronizacao visual das cores dos indicadores entre os modulos:
+  financeiro/venda/faturamento em verde, positivacao em azul,
+  SKU/produtos distintos em roxo, volume em ciano e pedidos em laranja.
+- Metas financeiras, metas de positivacao e metas de SKU usam a mesma cor
+  semantica do indicador correspondente.
+- Analise por Fornecedor passa a aplicar o mesmo padrao visual nos cards de
+  Financeiro Liquido, Volume Liquido, Pedidos Liquidos e Positivacao Liquida.
+- Icone principal do aplicativo atualizado a partir de assets/app_icon.png,
+  com mipmaps Android regenerados por flutter_launcher_icons.
 
 Release 0.9.10+25:
 

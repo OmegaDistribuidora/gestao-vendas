@@ -724,11 +724,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ? Icons.inventory_2_outlined
         : Icons.people_alt_outlined;
     final secondaryMetricAccent = usesSkuMetric
-        ? const Color(0xFF7C3AED)
-        : const Color(0xFF0B6E4F);
+        ? kpiSkuColor
+        : kpiPositivationColor;
     final secondaryMetricBackground = usesSkuMetric
-        ? const Color(0xFFF0E8FF)
-        : const Color(0xFFE5F4ED);
+        ? kpiSkuBackgroundColor
+        : kpiPositivationBackgroundColor;
     final otherMetricTitle = usesSkuMetric
         ? 'Positiva\u00E7\u00E3o'
         : 'Produtos distintos';
@@ -739,11 +739,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ? Icons.people_alt_outlined
         : Icons.inventory_2_outlined;
     final otherMetricAccent = usesSkuMetric
-        ? const Color(0xFF0B6E4F)
-        : const Color(0xFF7C3AED);
+        ? kpiPositivationColor
+        : kpiSkuColor;
     final otherMetricBackground = usesSkuMetric
-        ? const Color(0xFFE5F4ED)
-        : const Color(0xFFF0E8FF);
+        ? kpiPositivationBackgroundColor
+        : kpiSkuBackgroundColor;
 
     final financialProgress = _dailyProgressPct(
       actualToday: _netAmount,
@@ -758,8 +758,8 @@ class _HomeScreenState extends State<HomeScreen> {
       title: 'Venda',
       value: _formatCurrency(_netAmount),
       icon: Icons.trending_up_rounded,
-      accentColor: const Color(0xFF4864FF),
-      accentBackgroundColor: const Color(0xFFE8ECFF),
+      accentColor: kpiFinancialColor,
+      accentBackgroundColor: kpiFinancialBackgroundColor,
     );
     final financialTarget = _TodayMetricData(
       title: 'Meta Financeira de hoje',
@@ -767,8 +767,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ? 'Sem meta'
           : _formatRequiredCurrency(financialSummary),
       icon: Icons.flag_outlined,
-      accentColor: const Color(0xFF4864FF),
-      accentBackgroundColor: const Color(0xFFE8ECFF),
+      accentColor: kpiFinancialColor,
+      accentBackgroundColor: kpiFinancialBackgroundColor,
     );
     final secondaryActual = _TodayMetricData(
       title: secondaryMetricTitle,
@@ -792,8 +792,8 @@ class _HomeScreenState extends State<HomeScreen> {
       title: 'Volume',
       value: _formatDecimal(_netVolume),
       icon: Icons.stacked_bar_chart_rounded,
-      accentColor: const Color(0xFF00838F),
-      accentBackgroundColor: const Color(0xFFE1F3F4),
+      accentColor: kpiVolumeColor,
+      accentBackgroundColor: kpiVolumeBackgroundColor,
     );
     final otherMetric = _TodayMetricData(
       title: otherMetricTitle,
@@ -845,8 +845,8 @@ class _HomeScreenState extends State<HomeScreen> {
               left: financialActual,
               right: financialTarget,
               progressPercent: financialProgress,
-              progressColor: const Color(0xFF4864FF),
-              progressBackgroundColor: const Color(0xFFE1E5F5),
+              progressColor: kpiFinancialColor,
+              progressBackgroundColor: kpiFinancialBackgroundColor,
               percentFormatter: _formatPercent,
             ),
             const SizedBox(height: 10),

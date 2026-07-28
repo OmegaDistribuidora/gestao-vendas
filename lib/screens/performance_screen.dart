@@ -519,7 +519,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     return _MetricPanelData(
       title: item.financialLabel,
       icon: Icons.paid_outlined,
-      accentColor: const Color(0xFF0F766E),
+      accentColor: kpiFinancialColor,
       showProjection: true,
       showPaceStatus: true,
       actualLabel: _formatCurrency(item.actualFin),
@@ -551,9 +551,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       icon: item.usesSkuMetric
           ? Icons.inventory_2_outlined
           : Icons.groups_outlined,
-      accentColor: item.usesSkuMetric
-          ? const Color(0xFF7C3AED)
-          : const Color(0xFF1D4ED8),
+      accentColor: item.usesSkuMetric ? kpiSkuColor : kpiPositivationColor,
       showProjection: false,
       showPaceStatus: false,
       actualLabel: _formatInteger(item.secondaryActual),

@@ -272,15 +272,15 @@ class _ReturnsScreenState extends State<ReturnsScreen> {
         title: 'Volume',
         value: _formatNumber(_analysis.totalVolume),
         icon: Icons.widgets_outlined,
-        accentColor: const Color(0xFF7C3AED),
-        accentBackgroundColor: const Color(0xFFF2EAFE),
+        accentColor: kpiVolumeColor,
+        accentBackgroundColor: kpiVolumeBackgroundColor,
       ),
       _buildMetricCard(
         title: 'Pedidos',
         value: '${_analysis.totalOrders}',
         icon: Icons.assignment_return_outlined,
-        accentColor: const Color(0xFFFF7A00),
-        accentBackgroundColor: const Color(0xFFFFF0DD),
+        accentColor: kpiOrdersColor,
+        accentBackgroundColor: kpiOrdersBackgroundColor,
       ),
     ];
 

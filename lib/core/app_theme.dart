@@ -2,6 +2,17 @@ import 'package:flutter/material.dart';
 
 const Color primaryColor = Color(0xFF010066);
 
+const Color kpiFinancialColor = Color(0xFF0B6E4F);
+const Color kpiFinancialBackgroundColor = Color(0xFFE5F4ED);
+const Color kpiPositivationColor = Color(0xFF4864FF);
+const Color kpiPositivationBackgroundColor = Color(0xFFE8ECFF);
+const Color kpiSkuColor = Color(0xFF7C3AED);
+const Color kpiSkuBackgroundColor = Color(0xFFF0E8FF);
+const Color kpiVolumeColor = Color(0xFF00838F);
+const Color kpiVolumeBackgroundColor = Color(0xFFE1F3F4);
+const Color kpiOrdersColor = Color(0xFFFF7A00);
+const Color kpiOrdersBackgroundColor = Color(0xFFFFF0DD);
+
 ThemeData buildAppTheme() {
   return ThemeData(
     useMaterial3: true,
