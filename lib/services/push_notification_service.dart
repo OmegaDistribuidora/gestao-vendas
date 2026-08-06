@@ -81,7 +81,7 @@ class PushNotificationService {
       if (kDebugMode) {
         debugPrint(
           'Firebase ainda nao foi configurado para este build. '
-          'Adicione android/app/google-services.json para ativar o FCM. '
+          'Adicione a configuracao Firebase da plataforma para ativar o FCM. '
           'Detalhe: $error',
         );
         debugPrintStack(stackTrace: stackTrace);
@@ -105,6 +105,13 @@ class PushNotificationService {
     final messaging = FirebaseMessaging.instance;
 
     await messaging.setAutoInitEnabled(true);
+    if (Platform.isIOS) {
+      await messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    }
 
     await _tokenRefreshSubscription?.cancel();
     _tokenRefreshSubscription = messaging.onTokenRefresh.listen(
@@ -162,7 +169,7 @@ class PushNotificationService {
       return;
     }
 
-    final token = await messaging.getToken();
+    final token = await _getMessagingToken(messaging);
     await _registerToken(
       token: token,
       rememberLoginEnabled: rememberLoginEnabled,
@@ -241,6 +248,28 @@ class PushNotificationService {
         timeSensitive: AppleNotificationSetting.disabled,
       );
     }
+  }
+
+  Future<String?> _getMessagingToken(FirebaseMessaging messaging) async {
+    if (Platform.isIOS) {
+      String? apnsToken;
+      for (var attempt = 0; attempt < 10; attempt++) {
+        apnsToken = await messaging.getAPNSToken();
+        if (apnsToken != null && apnsToken.trim().isNotEmpty) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+
+      if (apnsToken == null || apnsToken.trim().isEmpty) {
+        if (kDebugMode) {
+          debugPrint('Token APNs ainda nao esta disponivel.');
+        }
+        return null;
+      }
+    }
+
+    return messaging.getToken();
   }
 
   Future<void> _registerToken({
