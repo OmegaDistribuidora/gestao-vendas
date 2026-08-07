@@ -633,11 +633,13 @@ volume de staging e timeout das funcoes do Supabase.
 13. VERSAO E DISTRIBUICAO ANDROID
 ---------------------------------
 
-Versao atual:
+Versao Android atualmente publicada:
 
 - versionName: 0.9.11
 - versionCode: 26
-- Declaracao Flutter: version: 0.9.11+26
+- Release Google Play: version: 0.9.11+26
+- A declaracao Flutter esta temporariamente em version: 0.9.11+27 para a
+  segunda compilacao iOS do TestFlight. O build Android 27 nao foi publicado.
 
 Release 0.9.11+26:
 
@@ -888,6 +890,26 @@ flutter build appbundle --release
 Saida padrao do App Bundle:
 
 build/app/outputs/bundle/release/app-release.aab
+
+
+13.1. VERSAO E DISTRIBUICAO IOS
+-------------------------------
+
+- Bundle ID: br.com.omegadistribuidora.gestaovendas
+- Apple App ID: 6798829250
+- Versao minima: iOS 15.0
+- CI/CD e assinatura: Codemagic com assinatura automatica App Store.
+- Firebase iOS: GoogleService-Info.plist injetado no pre-build por variavel
+  secreta GOOGLE_SERVICE_INFO_PLIST_BASE64.
+- APNs: chave configurada no Firebase para desenvolvimento e producao.
+- Primeira entrega aceita: 0.9.11 build 26.
+- Candidata para teste externo: 0.9.11 build 27.
+- O build 27 inclui NSLocationAlwaysAndWhenInUseUsageDescription para corrigir
+  o aviso ITMS-90683 da Apple.
+- ITSAppUsesNonExemptEncryption esta definido como false porque o aplicativo
+  utiliza somente criptografia isenta para comunicacao segura, autenticacao e
+  armazenamento fornecidos pelo sistema/runtime e servicos integrados.
+- Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
 
 
 14. DESENVOLVIMENTO E VALIDACAO

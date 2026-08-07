@@ -4,7 +4,7 @@
 
 - Nome: `Gestão de Vendas`
 - Bundle ID: `br.com.omegadistribuidora.gestaovendas`
-- Versão Flutter atual: `0.9.11+26`
+- Versão Flutter atual: `0.9.11+27`
 - Versão mínima do iOS: `15.0`
 
 O Bundle ID precisa ser idêntico no Apple Developer, App Store Connect, Firebase,
@@ -61,3 +61,12 @@ APNs usada pelo Firebase.
 - Enviar automaticamente para revisão da App Store: desabilitado no primeiro teste
 
 Antes do build iOS, o script `tool/prepare_ios_firebase.sh` precisa ser executado.
+
+## TestFlight
+
+- A build `0.9.11 (26)` foi a primeira entrega aceita pelo App Store Connect.
+- A build `0.9.11 (27)` adiciona a descrição de localização exigida pela
+  validação `ITMS-90683` e declara que o app utiliza somente criptografia isenta
+  de documentação de exportação.
+- Para testes internos, não é necessário marcar `Submit to TestFlight beta review`.
+- Para grupos externos, a build precisa ser enviada à revisão beta da Apple.
