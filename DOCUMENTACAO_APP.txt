@@ -1,15 +1,16 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 28/07/2026
-Versao atual do projeto: 0.9.11+26
+Ultima atualizacao desta documentacao: 11/08/2026
+Versao atual do projeto: 0.9.12+28
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
 1. OBJETIVO DO APLICATIVO
 -------------------------
 
-O Gestao de Vendas e um aplicativo Android interno da Omega Distribuidora.
+O Gestao de Vendas e um aplicativo Flutter Android/iOS interno da Omega
+Distribuidora.
 Ele centraliza indicadores comerciais, informacoes operacionais e consultas
 por hierarquia de vendedores, supervisores e coordenadores.
 
@@ -166,6 +167,15 @@ na interface nao substitui a autorizacao no backend.
   tambem entram no resumo de venda do periodo, evitando divergencia entre
   Venda/Volume/Positivacao e o total de produtos. Se o detalhe de itens ainda
   nao estiver carregado, a RPC pode usar o mix de faturamento como fallback.
+- A positivacao realizada da Home e interativa. Ao tocar no indicador, o app
+  chama get_home_positive_customers e lista codigo, nome e valor bruto total
+  comprado hoje por cliente. O escopo e o mesmo do Resumo de hoje: vendedor
+  ve somente suas vendas, supervisor sua equipe, coordenador sua estrutura e
+  perfis de visao geral veem toda a empresa. A consulta usa app_customers para
+  o nome e preserva o codigo como fallback caso a base de clientes ainda nao
+  contenha o cadastro.
+- Enquanto a Home estiver aberta, seus dados sao atualizados silenciosamente
+  a cada 2 minutos, sem substituir a tela por um indicador de carregamento.
 
 6.2 Performance
 
@@ -178,6 +188,14 @@ na interface nao substitui a autorizacao no backend.
 - Mostra media por dia util e necessidade diaria para atingir a meta.
 - A projecao considera fins de semana e feriados configurados na regra de
   dias uteis.
+- Para vendedor, supervisor e coordenador, o cabecalho mensal mostra
+  "Premiacao: valor atual/possibilidade maxima". Os dois valores sao a soma
+  dos indicadores elegiveis do consolidado Geral e de todos os fornecedores.
+  Cada combinacao fornecedor/indicador e contabilizada uma unica vez.
+- O resumo de premiacao nao e exibido para perfis sem premiacao, como
+  diretoria e outros, nem quando nao existe possibilidade cadastrada.
+- Enquanto a tela estiver aberta, a Performance e atualizada silenciosamente
+  a cada 2 minutos, preservando o mes e o escopo selecionados.
 
 6.3 Analise por Fornecedor
 
@@ -507,6 +525,17 @@ Scripts principais em tool/:
 - oracle_performance_sku_sync.py
   SKU mensal por perfil e fornecedor.
 
+- gold_performance_oracle_source_sync.py
+  Fonte operacional exclusiva da gold.performance. Consulta diretamente o
+  Oracle/WinThor e atualiza, de forma atomica, gold_src.fvendas,
+  gold_src.fdevolucao e gold_src.ffaturamento no PostgreSQL Omega. A carga
+  normal substitui somente ontem e hoje; --backfill reconcilia desde
+  2026-06-01. As tabelas historicas filial.* usadas pelo BI nao sao alteradas.
+  As consultas reproduzem as regras canonicas do Transf_Dados, inclusive
+  filiais 1/3/4, condvenda 1, cancelamentos, bonificacoes e mapeamentos de
+  fornecedor. O arquivo .env e a credencial PostgreSQL permanecem externos ao
+  repositorio.
+
 - performance_targets_sync.py
   Metas de performance.
 
@@ -597,6 +626,55 @@ APP_oracle_sales_reconcile_sync
 - Corrige eventuais divergencias historicas entre o resumo de venda e os itens
   usados para Produtos distintos/SKU.
 
+gold_performance
+
+- DAG versionada em airflow/gold_performance_dag.py.
+- Copia operacional utilizada pelo Airflow:
+  C:\Users\POWERBI\Desktop\gold_performance\gold_performance_dag.py
+- Agenda operacional: a cada 2 minutos, das 06:00 as 23:59.
+- Executa obrigatoriamente na sequencia:
+  1. atualiza ontem e hoje em gold_src diretamente do Oracle;
+  2. recalcula o mes atual e o anterior na tabela local gold.performance.
+- A troca da janela em gold_src usa staging e uma unica transacao. Se Oracle,
+  validacao ou PostgreSQL falhar, a fonte valida anterior e a Gold sao
+  preservadas; a sincronizacao seguinte para o app nao e liberada.
+- O SQL da estrutura/procedure permanece em:
+  C:\Users\POWERBI\Desktop\gold_performance\01_estrutura_e_carga_performance.sql
+- A procedure usa gold_src.fvendas, gold_src.fdevolucao e
+  gold_src.ffaturamento somente para os fatos comerciais. Metas, hierarquia,
+  roteirizacao, inadimplencia e demais dimensoes continuam nas tabelas filial.
+
+gold_performance_oracle_reconcile
+
+- Definida no mesmo arquivo airflow/gold_performance_dag.py.
+- Agenda operacional: diariamente as 05:15.
+- Reconsulta o Oracle desde 2026-06-01 e reconcilia toda a faixa utilizada
+  pela Gold. Isso captura cancelamentos, devolucoes e correcoes retroativas
+  sem aumentar a carga Oracle executada a cada 2 minutos.
+
+omega_gold_performance_app_sync
+
+- DAG versionada em airflow/omega_gold_performance_app_sync_dag.py e
+  implantada em /home/powerbi/airflow/dags.
+- Agenda operacional: a cada 2 minutos, das 06:00 as 23:59.
+- Aguarda a execucao correspondente de gold_performance e depois replica o
+  resultado para app_gold_performance no Supabase.
+- A replica usa etl_stg_gold_performance e a RPC
+  apply_gold_performance_sync. Os lotes sao preparados no staging e a
+  reconciliacao (upsert + exclusao de linhas ausentes) ocorre em uma unica
+  transacao. Leitores continuam vendo a versao anterior completa ate o commit,
+  eliminando o intervalo em que a Home poderia exibir "Sem meta" durante a
+  substituicao das linhas do mes.
+- A credencial do PostgreSQL local permanece fora do repositorio. O script
+  tool/gold_performance_app_sync.py aceita variavel de ambiente e o arquivo
+  operacional protegido existente na maquina.
+- Esta frequencia garante o recalculo e a replica a cada 2 minutos sobre a
+  fonte curta gold_src, atualizada diretamente do Oracle no mesmo ciclo.
+- As cargas integrais filial.fvendas, filial.ffaturamento e
+  filial.fdevolucao continuam independentes e destinadas ao BI/historico de
+  quatro anos. Elas nao fazem mais parte do caminho critico da performance do
+  aplicativo e nao devem ter sua frequencia aumentada por causa da Gold.
+
 omega_customer_opportunities_prune
 
 - Agenda padrao: 07:15, 10:15, 13:15 e 16:15.
@@ -628,18 +706,51 @@ volume de staging e timeout das funcoes do Supabase.
   get_usage_report para filtros globais de relatorios, exclusao de admin,
   ranking de usuarios por pontuacao anti-spam, detalhamento por usuario nos
   modulos e drill-down de usuarios por hora/dia.
+- A migration 20260811100000_atomic_gold_performance_sync.sql adiciona o
+  staging e a aplicacao atomica da Gold no Supabase, com rastreio em
+  etl_sync_runs.
+- A migration 20260811101000_home_positive_customers.sql adiciona a RPC
+  get_home_positive_customers para o detalhamento da positivacao diaria por
+  cliente, respeitando vendedor, supervisor, coordenador e visao geral.
 
 
-13. VERSAO E DISTRIBUICAO ANDROID
----------------------------------
+13. VERSAO E DISTRIBUICAO
+-------------------------
 
-Versao Android atualmente publicada:
+Versao preparada para Android e iOS:
 
-- versionName: 0.9.11
-- versionCode: 26
-- Release Google Play: version: 0.9.11+26
-- A declaracao Flutter esta temporariamente em version: 0.9.11+27 para a
-  segunda compilacao iOS do TestFlight. O build Android 27 nao foi publicado.
+- versionName / CFBundleShortVersionString: 0.9.12
+- versionCode / CFBundleVersion: 28
+- Release multiplataforma: 0.9.12+28
+
+Release 0.9.12+28:
+
+- Performance de agosto/2026 em diante passa a usar gold.performance, com
+  venda liquida mensal, metas, premios e indicadores completos por perfil e
+  fornecedor. Meses anteriores mantem o calculo legado.
+- A fonte operacional curta da Gold consulta diretamente o Oracle e atualiza
+  ontem/hoje a cada 2 minutos, sem depender das tabelas historicas do BI.
+- Home usa venda bruta no realizado e nas notificacoes diarias; metas e
+  notificacoes mensais continuam sobre venda liquida da Gold.
+- Metas diarias passam a ser calculadas no backend e permanecem constantes
+  durante o dia.
+- Sincronizacao de app_gold_performance tornada atomica para impedir metas
+  temporariamente ausentes durante a atualizacao de 2 minutos.
+- Positivacao realizada da Home passa a abrir o detalhamento dos clientes que
+  compraram hoje, com codigo, nome e valor bruto total da compra.
+- Performance amplia indicadores, projecao/tendencia, necessidade diaria,
+  ritmo, volume, efetividade, lucratividade, inadimplencia e premiacao total,
+  respeitando regras de vendedor, supervisor, coordenador e visao geral.
+- Resumos por fornecedor passam a incluir Volume, alem de Financeiro e
+  Positivacao/SKU.
+- Tipo do vendedor vem da classificacao oficial; Redes usa SKU, enquanto os
+  demais usam Positivacao. Supervisores 33 e 35 tambem usam SKU.
+- Notificacoes de devolucao passam a atender todos os perfis, com escopo pela
+  hierarquia; diretoria/outros recebem o consolidado geral.
+- Mapa de oportunidades fica disponivel para todos os perfis, mantendo os
+  controles de escopo do backend.
+- Preparacao iOS preserva Firebase/APNs, localizacao, criptografia isenta,
+  Bundle ID br.com.omegadistribuidora.gestaovendas e build 28 para Codemagic.
 
 Release 0.9.11+26:
 
@@ -903,13 +1014,14 @@ build/app/outputs/bundle/release/app-release.aab
   secreta GOOGLE_SERVICE_INFO_PLIST_BASE64.
 - APNs: chave configurada no Firebase para desenvolvimento e producao.
 - Primeira entrega aceita: 0.9.11 build 26.
-- Candidata para teste externo: 0.9.11 build 27.
+- Versao aprovada e utilizada em teste externo: 0.9.11 build 27.
 - O build 27 inclui NSLocationAlwaysAndWhenInUseUsageDescription para corrigir
   o aviso ITMS-90683 da Apple.
 - ITSAppUsesNonExemptEncryption esta definido como false porque o aplicativo
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
+- Proxima entrega multiplataforma: 0.9.12 build 28.
 
 
 14. DESENVOLVIMENTO E VALIDACAO

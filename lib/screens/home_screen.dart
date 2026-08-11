@@ -7,12 +7,12 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
+import '../models/home_positive_customers.dart';
 import '../models/kpi_metric_source.dart';
 import '../models/performance_overview.dart';
 import '../models/seller_home_kpis.dart';
 import '../services/app_repository.dart';
 import '../services/push_notification_service.dart';
-import '../utils/business_day_projection.dart';
 import 'admin_screen.dart';
 import 'blocked_orders_screen.dart';
 import 'change_password_screen.dart';
@@ -52,11 +52,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _loading = true;
   String? _errorMessage;
-  String _appVersionLabel = 'Vers\u00E3o 0.9.10+25';
+  String _appVersionLabel = 'Vers\u00E3o 0.9.12+28';
   bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
   PerformanceOverview _performanceOverview = PerformanceOverview.empty();
   StreamSubscription<PushNavigationIntent>? _pushNavigationSubscription;
+  Timer? _refreshTimer;
+  bool _autoRefreshing = false;
 
   bool get _isAdmin => widget.currentUser.isAdmin;
   bool get _isSeller => widget.currentUser.profileSlug == AppProfile.sellerSlug;
@@ -74,16 +76,13 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _showsPerformanceModule => true;
   bool get _showsCustomersWithoutPurchaseModule =>
       _isSeller || _isSupervisor || _isCoordinator;
-  bool get _showsCustomerOpportunitiesModule =>
-      (_isSeller || _isSupervisor || _isCoordinator) &&
-      _customerOpportunitiesEnabled;
+  bool get _showsCustomerOpportunitiesModule => _customerOpportunitiesEnabled;
   bool get _showsRecoveredCustomersModule =>
       !_isSeller && !_isSupervisor && !_isCoordinator;
 
-  double get _netAmount => _homeKpis.grossAmount + _homeKpis.returnAmount;
-  double get _netVolume => _homeKpis.grossVolume + _homeKpis.returnVolume;
-  int get _netPositivation =>
-      _homeKpis.grossPositivation - _homeKpis.returnPositivation;
+  double get _todayAmount => _homeKpis.grossAmount;
+  double get _todayVolume => _homeKpis.grossVolume;
+  int get _todayPositivation => _homeKpis.grossPositivation;
 
   int _clampPositiveCount(int value) => value < 0 ? 0 : value;
 
@@ -104,12 +103,29 @@ class _HomeScreenState extends State<HomeScreen> {
     _recordModuleAccess('home', 'In\u00EDcio');
     _loadAppVersion();
     _loadContent();
+    _refreshTimer = Timer.periodic(
+      const Duration(minutes: 2),
+      (_) => unawaited(_autoRefresh()),
+    );
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _pushNavigationSubscription?.cancel();
     super.dispose();
+  }
+
+  Future<void> _autoRefresh() async {
+    if (!mounted || _loading || _autoRefreshing) {
+      return;
+    }
+    _autoRefreshing = true;
+    try {
+      await _loadContent(silent: true);
+    } finally {
+      _autoRefreshing = false;
+    }
   }
 
   Future<void> _loadAppVersion() async {
@@ -131,16 +147,18 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       setState(() {
-        _appVersionLabel = 'Vers\u00E3o 0.9.10+25';
+        _appVersionLabel = 'Vers\u00E3o 0.9.12+28';
       });
     }
   }
 
-  Future<void> _loadContent() async {
-    setState(() {
-      _loading = true;
-      _errorMessage = null;
-    });
+  Future<void> _loadContent({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _errorMessage = null;
+      });
+    }
 
     final today = _nowInSaoPaulo();
     final start = _saoPauloDayStartUtc(today);
@@ -160,14 +178,12 @@ class _HomeScreenState extends State<HomeScreen> {
           performanceOverview = PerformanceOverview.empty();
         }
       }
-      var customerOpportunitiesEnabled = _isSupervisor || _isCoordinator;
-      if (_isSeller) {
-        try {
-          customerOpportunitiesEnabled = await _repository
-              .canAccessCustomerOpportunities();
-        } catch (_) {
-          customerOpportunitiesEnabled = false;
-        }
+      var customerOpportunitiesEnabled = false;
+      try {
+        customerOpportunitiesEnabled = await _repository
+            .canAccessCustomerOpportunities();
+      } catch (_) {
+        customerOpportunitiesEnabled = false;
       }
 
       if (!mounted) {
@@ -182,6 +198,10 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (error) {
       if (!mounted) {
+        return;
+      }
+
+      if (silent) {
         return;
       }
 
@@ -203,6 +223,162 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     await _loadContent();
+  }
+
+  Future<void> _showTodayPositiveCustomers() async {
+    final today = _nowInSaoPaulo();
+    final start = _saoPauloDayStartUtc(today);
+    final end = _saoPauloDayEndUtc(today);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return FractionallySizedBox(
+          heightFactor: 0.72,
+          child: FutureBuilder<HomePositiveCustomers>(
+            future: _repository.getHomePositiveCustomers(
+              start: start,
+              end: end,
+            ),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(color: primaryColor),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: Text(
+                      'Não foi possível carregar os clientes de hoje.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                );
+              }
+
+              final details = snapshot.data;
+              final items = details?.items ?? const <HomePositiveCustomer>[];
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Clientes positivados hoje',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${details?.totalClients ?? 0} clientes • ${_formatCurrency(details?.totalAmount ?? 0)}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF5E6A7C),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: items.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Ainda não há clientes positivados hoje.',
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: items.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final item = items[index];
+                                return Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF7F9FF),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: const Color(0xFFE1E6F5),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 38,
+                                        height: 38,
+                                        decoration: BoxDecoration(
+                                          color: kpiPositivationBackgroundColor,
+                                          borderRadius: BorderRadius.circular(
+                                            9,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.person_outline_rounded,
+                                          color: kpiPositivationColor,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${item.clientCode} • ${item.clientName}',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleSmall
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Compra de hoje',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .labelSmall
+                                                  ?.copyWith(
+                                                    color: const Color(
+                                                      0xFF7A8597,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        _formatCurrency(item.totalAmount),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleSmall
+                                            ?.copyWith(
+                                              color: kpiFinancialColor,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _openReports() async {
@@ -451,11 +627,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  DateTime get _projectionMonthStart {
-    final now = _nowInSaoPaulo();
-    return DateTime(now.year, now.month, 1);
-  }
-
   DateTime _nowInSaoPaulo() {
     return DateTime.now().toUtc().add(_saoPauloUtcOffset);
   }
@@ -484,30 +655,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   PerformanceOverviewItem? get _overallPerformanceItem =>
       _performanceOverview.overallItem;
-
-  String _formatRequiredCurrency(BusinessDayProjectionSummary summary) {
-    final targetValue = summary.targetValue;
-    if (targetValue == null || targetValue <= 0) {
-      return 'Sem meta';
-    }
-    final requiredValue = summary.requiredPerBusinessDay;
-    if (requiredValue == null) {
-      return 'Sem dias \u00FAteis';
-    }
-    return _formatCurrency(requiredValue);
-  }
-
-  String _formatRequiredInteger(BusinessDayProjectionSummary summary) {
-    final targetValue = summary.targetValue;
-    if (targetValue == null || targetValue <= 0) {
-      return 'Sem meta';
-    }
-    final requiredValue = summary.requiredPerBusinessDay;
-    if (requiredValue == null) {
-      return 'Sem dias \u00FAteis';
-    }
-    return _decimalFormat.format(requiredValue.ceil());
-  }
 
   double? _dailyProgressPct({
     required double actualToday,
@@ -696,30 +843,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildKpiOverviewSection() {
     final overallItem = _overallPerformanceItem;
-    final financialSummary = overallItem == null
-        ? null
-        : BusinessDayProjection.summarize(
-            actualValue: overallItem.actualFin,
-            targetValue: overallItem.targetFin,
-            monthStart: _projectionMonthStart,
-          );
-    final secondarySummary = overallItem == null
-        ? null
-        : BusinessDayProjection.summarize(
-            actualValue: overallItem.secondaryActual.toDouble(),
-            targetValue: overallItem.secondaryTarget?.toDouble(),
-            monthStart: _projectionMonthStart,
-          );
-    final usesSkuMetric = overallItem?.usesSkuMetric == true;
+    final usesSkuMetric = _homeKpis.secondaryMetricType != null
+        ? _homeKpis.secondaryMetricType == 'sku'
+        : overallItem?.usesSkuMetric == true;
     final secondaryActualToday = usesSkuMetric
         ? _homeKpis.distinctProducts.toDouble()
-        : _clampPositiveCount(_netPositivation).toDouble();
+        : _clampPositiveCount(_todayPositivation).toDouble();
     final secondaryMetricTitle = usesSkuMetric
         ? 'SKU'
         : 'Positiva\u00E7\u00E3o';
     final secondaryMetricValue = usesSkuMetric
         ? '${_homeKpis.distinctProducts}'
-        : '${_clampPositiveCount(_netPositivation)}';
+        : '${_clampPositiveCount(_todayPositivation)}';
     final secondaryMetricIcon = usesSkuMetric
         ? Icons.inventory_2_outlined
         : Icons.people_alt_outlined;
@@ -733,7 +868,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ? 'Positiva\u00E7\u00E3o'
         : 'Produtos distintos';
     final otherMetricValue = usesSkuMetric
-        ? '${_clampPositiveCount(_netPositivation)}'
+        ? '${_clampPositiveCount(_todayPositivation)}'
         : '${_homeKpis.distinctProducts}';
     final otherMetricIcon = usesSkuMetric
         ? Icons.people_alt_outlined
@@ -746,26 +881,26 @@ class _HomeScreenState extends State<HomeScreen> {
         : kpiSkuBackgroundColor;
 
     final financialProgress = _dailyProgressPct(
-      actualToday: _netAmount,
-      dailyTarget: financialSummary?.requiredPerBusinessDay,
+      actualToday: _todayAmount,
+      dailyTarget: _homeKpis.dailyFinancialTarget,
     );
     final secondaryProgress = _dailyProgressPct(
       actualToday: secondaryActualToday,
-      dailyTarget: secondarySummary?.requiredPerBusinessDay,
+      dailyTarget: _homeKpis.dailySecondaryTarget,
     );
 
     final financialActual = _TodayMetricData(
       title: 'Venda',
-      value: _formatCurrency(_netAmount),
+      value: _formatCurrency(_todayAmount),
       icon: Icons.trending_up_rounded,
       accentColor: kpiFinancialColor,
       accentBackgroundColor: kpiFinancialBackgroundColor,
     );
     final financialTarget = _TodayMetricData(
       title: 'Meta Financeira de hoje',
-      value: financialSummary == null
+      value: _homeKpis.dailyFinancialTarget == null
           ? 'Sem meta'
-          : _formatRequiredCurrency(financialSummary),
+          : _formatCurrency(_homeKpis.dailyFinancialTarget!),
       icon: Icons.flag_outlined,
       accentColor: kpiFinancialColor,
       accentBackgroundColor: kpiFinancialBackgroundColor,
@@ -776,21 +911,22 @@ class _HomeScreenState extends State<HomeScreen> {
       icon: secondaryMetricIcon,
       accentColor: secondaryMetricAccent,
       accentBackgroundColor: secondaryMetricBackground,
+      onTap: usesSkuMetric ? null : _showTodayPositiveCustomers,
     );
     final secondaryTarget = _TodayMetricData(
       title: usesSkuMetric
           ? 'Meta SKU de hoje'
           : 'Meta Positiva\u00E7\u00E3o de hoje',
-      value: secondarySummary == null
+      value: _homeKpis.dailySecondaryTarget == null
           ? 'Sem meta'
-          : _formatRequiredInteger(secondarySummary),
+          : _decimalFormat.format(_homeKpis.dailySecondaryTarget!.ceil()),
       icon: usesSkuMetric ? Icons.inventory_2_outlined : Icons.groups_outlined,
       accentColor: secondaryMetricAccent,
       accentBackgroundColor: secondaryMetricBackground,
     );
     final volumeMetric = _TodayMetricData(
       title: 'Volume',
-      value: _formatDecimal(_netVolume),
+      value: _formatDecimal(_todayVolume),
       icon: Icons.stacked_bar_chart_rounded,
       accentColor: kpiVolumeColor,
       accentBackgroundColor: kpiVolumeBackgroundColor,
@@ -801,6 +937,7 @@ class _HomeScreenState extends State<HomeScreen> {
       icon: otherMetricIcon,
       accentColor: otherMetricAccent,
       accentBackgroundColor: otherMetricBackground,
+      onTap: usesSkuMetric ? _showTodayPositiveCustomers : null,
     );
 
     return Card(
@@ -1230,6 +1367,7 @@ class _TodayMetricData {
     required this.icon,
     required this.accentColor,
     required this.accentBackgroundColor,
+    this.onTap,
   });
 
   final String title;
@@ -1237,6 +1375,7 @@ class _TodayMetricData {
   final IconData icon;
   final Color accentColor;
   final Color accentBackgroundColor;
+  final VoidCallback? onTap;
 }
 
 class _GroupedTodayKpiCard extends StatelessWidget {
@@ -1376,7 +1515,7 @@ class _TodayMetricPane extends StatelessWidget {
   Widget build(BuildContext context) {
     final isStatusValue = data.value.startsWith('Sem ');
 
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -1404,6 +1543,14 @@ class _TodayMetricPane extends StatelessWidget {
                 ),
               ),
             ),
+            if (data.onTap != null) ...[
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 19,
+                color: data.accentColor,
+              ),
+            ],
           ],
         ),
         const SizedBox(height: 14),
@@ -1427,6 +1574,20 @@ class _TodayMetricPane extends StatelessWidget {
           ),
         ),
       ],
+    );
+
+    if (data.onTap == null) {
+      return content;
+    }
+
+    return Semantics(
+      button: true,
+      label: '${data.title}: ${data.value}. Ver clientes.',
+      child: InkWell(
+        onTap: data.onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: content,
+      ),
     );
   }
 }

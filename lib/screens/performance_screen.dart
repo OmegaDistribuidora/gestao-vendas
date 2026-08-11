@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -42,18 +43,67 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   String? _selectedMonthValue;
   String? _selectedScopeValue;
   KpiMetricSource _selectedMetricSource = KpiMetricSource.venda;
+  Timer? _refreshTimer;
+  bool _autoRefreshing = false;
 
   bool get _isSeller => _overview.profileSlug == AppProfile.sellerSlug;
   bool get _isSupervisor => _overview.profileSlug == AppProfile.supervisorSlug;
   bool get _isCoordinator =>
       _overview.profileSlug == AppProfile.coordinatorSlug;
   bool get _isNamedProfile => _isSeller || _isSupervisor || _isCoordinator;
-  bool get _showsMetricSourceSelector => !_isNamedProfile;
+  bool get _showsMetricSourceSelector => false;
   bool get _showsScopeSelector => _scopeOptions.isNotEmpty;
   bool get _viewerIsSupervisor =>
       _overview.viewerProfileSlug == AppProfile.supervisorSlug;
   bool get _viewerIsCoordinator =>
       _overview.viewerProfileSlug == AppProfile.coordinatorSlug;
+  bool get _viewerIsSeller =>
+      _overview.viewerProfileSlug == AppProfile.sellerSlug;
+  bool get _viewerIsNamedProfile =>
+      _viewerIsSeller || _viewerIsSupervisor || _viewerIsCoordinator;
+  bool get _viewerIsBroadProfile => !_viewerIsNamedProfile;
+
+  PerformanceMetric? get _sellerDelinquencyMetric {
+    if (!_viewerIsSeller) {
+      return null;
+    }
+    final overallItem = _overview.overallItem;
+    if (overallItem == null || !overallItem.usesGoldPerformance) {
+      return null;
+    }
+    for (final metric in overallItem.metrics) {
+      if (metric.key == 'delinquency' &&
+          metric.actual != null &&
+          metric.target != null) {
+        return metric;
+      }
+    }
+    return null;
+  }
+
+  ({double current, double maximum})? get _prizeSummary {
+    if (!_viewerIsNamedProfile) {
+      return null;
+    }
+
+    var current = 0.0;
+    var maximum = 0.0;
+    final countedMetrics = <String>{};
+    for (final item in _overview.items) {
+      for (final metric in item.metrics) {
+        if (metric.possibility <= 0 ||
+            !countedMetrics.add('${item.code}|${metric.key}')) {
+          continue;
+        }
+        current += metric.prize;
+        maximum += metric.possibility;
+      }
+    }
+    if (maximum <= 0) {
+      return null;
+    }
+    return (current: current, maximum: maximum);
+  }
 
   List<PerformanceScopeOption> get _scopeOptions {
     final seenValues = <String>{};
@@ -61,6 +111,17 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     for (final scope in _overview.availableScopes) {
       if (seenValues.add(scope.value)) {
         options.add(scope);
+      }
+    }
+    return options;
+  }
+
+  List<PerformanceMonthOption> get _monthOptions {
+    final seenValues = <String>{};
+    final options = <PerformanceMonthOption>[];
+    for (final month in _overview.availableMonths) {
+      if (seenValues.add(month.value)) {
+        options.add(month);
       }
     }
     return options;
@@ -79,6 +140,34 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   void initState() {
     super.initState();
     _loadOverview();
+    _refreshTimer = Timer.periodic(
+      const Duration(minutes: 2),
+      (_) => unawaited(_autoRefresh()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _autoRefresh() async {
+    if (!mounted || _loading || _autoRefreshing) {
+      return;
+    }
+    _autoRefreshing = true;
+    try {
+      await _loadOverview(
+        monthStart: _overview.selectedMonthStart,
+        metricSource: _selectedMetricSource,
+        targetScopeProfileSlug: _selectedScope?.profileSlug,
+        targetScopeOwnerCode: _selectedScope?.ownerCode,
+        silent: true,
+      );
+    } finally {
+      _autoRefreshing = false;
+    }
   }
 
   Future<void> _loadOverview({
@@ -86,11 +175,14 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     KpiMetricSource? metricSource,
     String? targetScopeProfileSlug,
     String? targetScopeOwnerCode,
+    bool silent = false,
   }) async {
-    setState(() {
-      _loading = true;
-      _errorMessage = null;
-    });
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       final overview = await _repository.getPerformanceOverview(
@@ -121,6 +213,10 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
       });
     } catch (error) {
       if (!mounted) {
+        return;
+      }
+
+      if (silent) {
         return;
       }
 
@@ -462,7 +558,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                 labelText: 'Mês de referência',
                 prefixIcon: Icon(Icons.calendar_month_outlined),
               ),
-              items: _overview.availableMonths
+              items: _monthOptions
                   .map(
                     (month) => DropdownMenuItem<String>(
                       value: month.value,
@@ -491,6 +587,73 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                 ),
               ],
             ),
+            if (_prizeSummary case final summary?) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7F9FF),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFDCE3F4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.emoji_events_outlined,
+                      size: 20,
+                      color: Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Premiação: ${_formatCurrency(summary.current)}/'
+                          '${_formatCurrency(summary.maximum)}',
+                          maxLines: 1,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: const Color(0xFF334155),
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (_sellerDelinquencyMetric case final metric?) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF8E8),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFF5D98B)),
+                ),
+                child: Text(
+                  'Sua inadimplência está em '
+                  '${_formatPercent(metric.actual! * 100)}. Você deve ficar '
+                  'abaixo de ${_formatPercent(metric.target! * 100)} para não '
+                  'ter parte de sua premiação retida.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFF7C5A05),
+                    fontWeight: FontWeight.w700,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -498,6 +661,17 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   }
 
   List<_MetricPanelData> _buildMetricPanels(PerformanceOverviewItem item) {
+    if (item.usesGoldPerformance) {
+      return item.metrics
+          .where(
+            (metric) =>
+                !(metric.key == 'delinquency' &&
+                    ((_viewerIsSeller && item.isOverall) ||
+                        _viewerIsBroadProfile)),
+          )
+          .map(_buildGoldMetricPanel)
+          .toList();
+    }
     final panels = <_MetricPanelData>[_buildFinancialPanel(item)];
 
     if (item.hasSecondaryMetric ||
@@ -509,6 +683,136 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     return panels;
   }
 
+  _MetricPanelData _buildGoldMetricPanel(PerformanceMetric metric) {
+    String value(double? number) {
+      if (number == null) return 'Sem meta';
+      switch (metric.format) {
+        case 'currency':
+          return _formatCurrency(number);
+        case 'integer':
+          return _formatInteger(number.round());
+        case 'percent':
+          return _formatPercent(number * 100);
+        default:
+          return _integerFormat.format(double.parse(number.toStringAsFixed(2)));
+      }
+    }
+
+    final effectiveTarget =
+        metric.key == 'effectiveness' &&
+            _viewerIsBroadProfile &&
+            metric.target == null
+        ? 0.30
+        : metric.target;
+    final effectiveProgressPct =
+        metric.progressPct ??
+        (metric.actual != null && effectiveTarget != null && effectiveTarget > 0
+            ? (metric.actual! / effectiveTarget) * 100
+            : null);
+    final isDelinquency = metric.key == 'delinquency';
+    final isWithinDelinquencyTarget =
+        isDelinquency &&
+        metric.actual != null &&
+        effectiveTarget != null &&
+        metric.actual! <= effectiveTarget;
+    final delinquencyCompliancePct =
+        !isDelinquency ||
+            metric.actual == null ||
+            effectiveTarget == null ||
+            effectiveTarget <= 0
+        ? null
+        : metric.actual! <= effectiveTarget
+        ? 100.0
+        : (effectiveTarget / metric.actual!) * 100;
+    final visual = switch (metric.key) {
+      'financial' || 'financial_15' => (Icons.paid_outlined, kpiFinancialColor),
+      'positivation' => (Icons.groups_outlined, kpiPositivationColor),
+      'sku' => (Icons.inventory_2_outlined, kpiSkuColor),
+      'volume' => (Icons.stacked_bar_chart_outlined, kpiVolumeColor),
+      'delinquency' => (
+        isWithinDelinquencyTarget
+            ? Icons.verified_outlined
+            : Icons.warning_amber_rounded,
+        isWithinDelinquencyTarget
+            ? const Color(0xFF15803D)
+            : const Color(0xFFF59E0B),
+      ),
+      'profitability' => (Icons.savings_outlined, kpiFinancialColor),
+      'effectiveness' => (Icons.route_outlined, kpiPositivationColor),
+      _ => (Icons.insights_outlined, primaryColor),
+    };
+    final remaining = effectiveTarget == null || metric.actual == null
+        ? '--'
+        : metric.lowerIsBetter
+        ? (metric.actual! <= effectiveTarget
+              ? 'Dentro da meta'
+              : value(metric.actual! - effectiveTarget))
+        : value(math.max(effectiveTarget - metric.actual!, 0));
+    final isMainFinancial = metric.key == 'financial';
+    final projection = isMainFinancial
+        ? BusinessDayProjection.summarize(
+            actualValue: metric.actual ?? 0,
+            targetValue: effectiveTarget,
+            monthStart: _projectionMonthStart,
+          )
+        : null;
+    final prizeInCents = (metric.prize * 100).round();
+    final possibilityInCents = (metric.possibility * 100).round();
+    final showsPrize = _viewerIsNamedProfile && possibilityInCents > 0;
+    final prizeHighlight = !showsPrize
+        ? _PrizeHighlight.neutral
+        : prizeInCents <= 0
+        ? _PrizeHighlight.missing
+        : prizeInCents >= possibilityInCents
+        ? _PrizeHighlight.maximum
+        : _PrizeHighlight.neutral;
+
+    return _MetricPanelData(
+      metricKey: metric.key,
+      title: metric.label,
+      icon: visual.$1,
+      accentColor: visual.$2,
+      showProjection: isMainFinancial,
+      showPaceStatus: isMainFinancial,
+      showOperationalDetails: isMainFinancial,
+      actualLabel: value(metric.actual),
+      targetLabel: value(effectiveTarget),
+      projectedLabel: projection == null
+          ? '--'
+          : value(projection.projectedValue),
+      remainingLabel: remaining,
+      averageLabel: projection == null
+          ? '--'
+          : '${_formatCompactCurrency(projection.averagePerBusinessDay)}/dia útil',
+      requiredDailyLabel: projection == null
+          ? '--'
+          : _formatRequiredCurrency(projection),
+      actualProgressPct:
+          projection?.actualProgressPct ??
+          delinquencyCompliancePct ??
+          effectiveProgressPct,
+      projectedProgressPct:
+          projection?.projectedProgressPct ??
+          delinquencyCompliancePct ??
+          effectiveProgressPct,
+      paceStatus: projection?.paceStatus ?? ProjectionPaceStatus.noTarget,
+      prizeLabel: showsPrize ? _formatCurrency(metric.prize) : null,
+      possibilityLabel: showsPrize ? _formatCurrency(metric.possibility) : null,
+      prizeHighlight: prizeHighlight,
+      progressHeadlineLabel:
+          metric.key == 'effectiveness' ||
+              metric.key == 'profitability' ||
+              isDelinquency
+          ? value(metric.actual)
+          : null,
+      progressEndLabel: isDelinquency
+          ? 'Meta ≤ ${value(effectiveTarget)}'
+          : metric.key == 'effectiveness' || metric.key == 'profitability'
+          ? value(effectiveTarget)
+          : '100%',
+    );
+  }
+
   _MetricPanelData _buildFinancialPanel(PerformanceOverviewItem item) {
     final summary = BusinessDayProjection.summarize(
       actualValue: item.actualFin,
@@ -517,6 +821,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     );
 
     return _MetricPanelData(
+      metricKey: 'financial',
       title: item.financialLabel,
       icon: Icons.paid_outlined,
       accentColor: kpiFinancialColor,
@@ -547,6 +852,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
     );
 
     return _MetricPanelData(
+      metricKey: item.usesSkuMetric ? 'sku' : 'positivation',
       title: item.secondaryLabel,
       icon: item.usesSkuMetric
           ? Icons.inventory_2_outlined
@@ -766,8 +1072,11 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   }
 }
 
+enum _PrizeHighlight { neutral, missing, maximum }
+
 class _MetricPanelData {
   const _MetricPanelData({
+    this.metricKey,
     required this.title,
     required this.icon,
     required this.accentColor,
@@ -782,8 +1091,15 @@ class _MetricPanelData {
     required this.actualProgressPct,
     required this.projectedProgressPct,
     required this.paceStatus,
+    this.showOperationalDetails = true,
+    this.prizeLabel,
+    this.possibilityLabel,
+    this.prizeHighlight = _PrizeHighlight.neutral,
+    this.progressHeadlineLabel,
+    this.progressEndLabel = '100%',
   });
 
+  final String? metricKey;
   final String title;
   final IconData icon;
   final Color accentColor;
@@ -798,6 +1114,12 @@ class _MetricPanelData {
   final double? actualProgressPct;
   final double? projectedProgressPct;
   final ProjectionPaceStatus paceStatus;
+  final bool showOperationalDetails;
+  final String? prizeLabel;
+  final String? possibilityLabel;
+  final _PrizeHighlight prizeHighlight;
+  final String? progressHeadlineLabel;
+  final String progressEndLabel;
 }
 
 class _SupplierPerformanceCard extends StatefulWidget {
@@ -821,10 +1143,36 @@ class _SupplierPerformanceCard extends StatefulWidget {
 class _SupplierPerformanceCardState extends State<_SupplierPerformanceCard> {
   bool _expanded = false;
 
+  _MetricPanelData? _panelFor(
+    List<_MetricPanelData> panels,
+    Set<String> metricKeys,
+  ) {
+    for (final panel in panels) {
+      if (metricKeys.contains(panel.metricKey)) {
+        return panel;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
     final panels = widget.panels;
+    final compactPanels = <_MetricPanelData>[];
+    final financialPanel =
+        _panelFor(panels, const {'financial'}) ??
+        (panels.isEmpty ? null : panels.first);
+    final secondaryPanel = _panelFor(panels, const {'positivation', 'sku'});
+    final volumePanel = _panelFor(panels, const {'volume'});
+    for (final panel in [financialPanel, secondaryPanel, volumePanel]) {
+      if (panel != null && !compactPanels.contains(panel)) {
+        compactPanels.add(panel);
+      }
+    }
+    if (compactPanels.length == 1 && panels.length > 1) {
+      compactPanels.add(panels[1]);
+    }
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -896,19 +1244,15 @@ class _SupplierPerformanceCardState extends State<_SupplierPerformanceCard> {
               : Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: Column(
-                    children: [
-                      _CompactSupplierProgress(
-                        data: panels.first,
-                        formatPercent: widget.formatPercent,
-                      ),
-                      if (panels.length > 1) ...[
-                        const SizedBox(height: 10),
-                        _CompactSupplierProgress(
-                          data: panels[1],
+                    children: compactPanels.asMap().entries.map((entry) {
+                      return Padding(
+                        padding: EdgeInsets.only(top: entry.key == 0 ? 0 : 10),
+                        child: _CompactSupplierProgress(
+                          data: entry.value,
                           formatPercent: widget.formatPercent,
                         ),
-                      ],
-                    ],
+                      );
+                    }).toList(),
                   ),
                 ),
           children: [
@@ -1135,6 +1479,8 @@ class _MetricProjectionPanel extends StatelessWidget {
     final projectedPercentLabel = data.projectedProgressPct == null
         ? 'Tend. --'
         : 'Tend. ${formatPercent(data.projectedProgressPct)}';
+    final progressHeadlineLabel =
+        data.progressHeadlineLabel ?? formatPercent(data.actualProgressPct);
     final statusData = data.showPaceStatus ? _buildStatusData(data) : null;
 
     return Container(
@@ -1184,7 +1530,7 @@ class _MetricProjectionPanel extends StatelessWidget {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        formatPercent(data.actualProgressPct),
+                        progressHeadlineLabel,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: data.accentColor,
                           fontWeight: FontWeight.w900,
@@ -1212,6 +1558,7 @@ class _MetricProjectionPanel extends StatelessWidget {
             color: data.accentColor,
             actualFraction: actualFraction,
             projectedFraction: projectedFraction,
+            endLabel: data.progressEndLabel,
           ),
           const SizedBox(height: 14),
           const Divider(height: 1, color: Color(0xFFE3E8F5)),
@@ -1219,51 +1566,57 @@ class _MetricProjectionPanel extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _MetricInfoTile(title: 'Meta', value: data.targetLabel),
-              const SizedBox(height: 8),
-              _MetricInfoTile(title: 'Realizado', value: data.actualLabel),
+              _MetricValuePair(
+                actualValue: data.actualLabel,
+                targetValue: data.targetLabel,
+              ),
               if (data.showProjection) ...[
                 const SizedBox(height: 8),
                 _MetricInfoTile(title: 'Tendência', value: data.projectedLabel),
               ],
-              const SizedBox(height: 8),
-              _MetricInfoTile(
-                title: 'Falta para meta',
-                value: data.remainingLabel,
-              ),
+              if (data.prizeLabel != null) ...[
+                const SizedBox(height: 8),
+                _PrizePossibilityLine(
+                  prize: data.prizeLabel!,
+                  possibility: data.possibilityLabel ?? '--',
+                  highlight: data.prizeHighlight,
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 14),
-          const Divider(height: 1, color: Color(0xFFE3E8F5)),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _InfoPill(
-                    icon: Icons.flag_outlined,
-                    label: 'Nec. Diária: ${data.requiredDailyLabel}',
-                    maxWidth: constraints.maxWidth,
-                  ),
-                  _InfoPill(
-                    icon: Icons.bar_chart_outlined,
-                    label: 'Média/dia útil: ${data.averageLabel}',
-                    maxWidth: constraints.maxWidth,
-                  ),
-                  if (statusData != null)
+          if (data.showOperationalDetails) ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Color(0xFFE3E8F5)),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
                     _InfoPill(
-                      icon: statusData.icon,
-                      label: statusData.label,
-                      foregroundColor: statusData.foregroundColor,
-                      backgroundColor: statusData.backgroundColor,
+                      icon: Icons.flag_outlined,
+                      label: 'Nec. Diária: ${data.requiredDailyLabel}',
                       maxWidth: constraints.maxWidth,
                     ),
-                ],
-              );
-            },
-          ),
+                    _InfoPill(
+                      icon: Icons.bar_chart_outlined,
+                      label: 'Média/dia útil: ${data.averageLabel}',
+                      maxWidth: constraints.maxWidth,
+                    ),
+                    if (statusData != null)
+                      _InfoPill(
+                        icon: statusData.icon,
+                        label: statusData.label,
+                        foregroundColor: statusData.foregroundColor,
+                        backgroundColor: statusData.backgroundColor,
+                        maxWidth: constraints.maxWidth,
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -1322,11 +1675,13 @@ class _ProjectedProgressBar extends StatelessWidget {
     required this.color,
     required this.actualFraction,
     required this.projectedFraction,
+    required this.endLabel,
   });
 
   final Color color;
   final double actualFraction;
   final double projectedFraction;
+  final String endLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -1416,13 +1771,165 @@ class _ProjectedProgressBar extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Text(
-          '100%',
+          endLabel,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: const Color(0xFF64748B),
             fontWeight: FontWeight.w700,
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MetricValuePair extends StatelessWidget {
+  const _MetricValuePair({
+    required this.actualValue,
+    required this.targetValue,
+  });
+
+  final String actualValue;
+  final String targetValue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE3E8F5)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _InlineMetricValue(label: 'Realizado', value: actualValue),
+          ),
+          Container(
+            width: 1,
+            height: 34,
+            margin: const EdgeInsets.symmetric(horizontal: 10),
+            color: const Color(0xFFDCE3F0),
+          ),
+          Expanded(
+            child: _InlineMetricValue(
+              label: 'Meta',
+              value: targetValue,
+              alignEnd: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineMetricValue extends StatelessWidget {
+  const _InlineMetricValue({
+    required this.label,
+    required this.value,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final String value;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final alignment = alignEnd
+        ? CrossAxisAlignment.end
+        : CrossAxisAlignment.start;
+    return Column(
+      crossAxisAlignment: alignment,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: const Color(0xFF64748B),
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+          ),
+        ),
+        const SizedBox(height: 5),
+        SizedBox(
+          width: double.infinity,
+          height: 20,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: alignEnd ? Alignment.centerRight : Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                height: 1.05,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PrizePossibilityLine extends StatelessWidget {
+  const _PrizePossibilityLine({
+    required this.prize,
+    required this.possibility,
+    required this.highlight,
+  });
+
+  final String prize;
+  final String possibility;
+  final _PrizeHighlight highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final (backgroundColor, borderColor, foregroundColor) = switch (highlight) {
+      _PrizeHighlight.missing => (
+        const Color(0xFFFFF1F2),
+        const Color(0xFFFCA5A5),
+        const Color(0xFFB91C1C),
+      ),
+      _PrizeHighlight.maximum => (
+        const Color(0xFFECFDF3),
+        const Color(0xFF86EFAC),
+        const Color(0xFF15803D),
+      ),
+      _PrizeHighlight.neutral => (
+        const Color(0xFFF7F9FF),
+        const Color(0xFFE3E8F5),
+        const Color(0xFF334155),
+      ),
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1.2),
+      ),
+      child: SizedBox(
+        height: 20,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            highlight == _PrizeHighlight.maximum
+                ? 'Parabéns! Você receberá o prêmio de $possibility'
+                : 'Prêmio: $prize  |  Possibilidade: $possibility',
+            maxLines: 1,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: foregroundColor,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

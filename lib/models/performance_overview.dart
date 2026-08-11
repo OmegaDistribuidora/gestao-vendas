@@ -165,9 +165,24 @@ class PerformanceMonthOption {
 
   factory PerformanceMonthOption.fromJson(Map<String, dynamic> json) {
     final parsedMonthStart = DateTime.tryParse('${json['month_start'] ?? ''}');
+    final monthStart = parsedMonthStart ?? DateTime(2026, 1, 1);
+    const monthNames = <String>[
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
+    ];
     return PerformanceMonthOption(
-      monthStart: parsedMonthStart ?? DateTime(2026, 1, 1),
-      label: '${json['label'] ?? ''}',
+      monthStart: monthStart,
+      label: '${monthNames[monthStart.month - 1]} / ${monthStart.year}',
     );
   }
 }
@@ -188,6 +203,13 @@ class PerformanceOverviewItem {
     this.targetSku,
     this.skuProgressPct,
     this.secondaryMetricType,
+    this.typeUser,
+    this.routeDoubled,
+    this.prizeTotal = 0,
+    this.possibilityTotal = 0,
+    this.status,
+    this.observations,
+    this.metrics = const <PerformanceMetric>[],
   });
 
   final String code;
@@ -204,6 +226,15 @@ class PerformanceOverviewItem {
   final int actualSku;
   final double? skuProgressPct;
   final String? secondaryMetricType;
+  final String? typeUser;
+  final String? routeDoubled;
+  final double prizeTotal;
+  final double possibilityTotal;
+  final String? status;
+  final String? observations;
+  final List<PerformanceMetric> metrics;
+
+  bool get usesGoldPerformance => metrics.isNotEmpty;
 
   bool get isOverall => code == '1';
   bool get usesSkuMetric => secondaryMetricType == 'sku';
@@ -242,6 +273,22 @@ class PerformanceOverviewItem {
       actualSku: _toInt(json['actual_sku']),
       skuProgressPct: _toNullableDouble(json['sku_progress_pct']),
       secondaryMetricType: json['secondary_metric_type'] as String?,
+      typeUser: json['type_user'] as String?,
+      routeDoubled: json['route_doubled'] as String?,
+      prizeTotal: _toDouble(json['prize_total']),
+      possibilityTotal: _toDouble(json['possibility_total']),
+      status: json['status'] as String?,
+      observations: json['observations'] as String?,
+      metrics: json['metrics'] is List
+          ? (json['metrics'] as List)
+                .whereType<Map>()
+                .map(
+                  (row) => PerformanceMetric.fromJson(
+                    row.map((key, value) => MapEntry('$key', value)),
+                  ),
+                )
+                .toList()
+          : const <PerformanceMetric>[],
     );
   }
 
@@ -277,5 +324,45 @@ class PerformanceOverviewItem {
       return null;
     }
     return _toInt(value);
+  }
+}
+
+class PerformanceMetric {
+  const PerformanceMetric({
+    required this.key,
+    required this.label,
+    required this.format,
+    this.target,
+    this.actual,
+    this.progressPct,
+    this.prize = 0,
+    this.possibility = 0,
+    this.lowerIsBetter = false,
+  });
+
+  final String key;
+  final String label;
+  final String format;
+  final double? target;
+  final double? actual;
+  final double? progressPct;
+  final double prize;
+  final double possibility;
+  final bool lowerIsBetter;
+
+  factory PerformanceMetric.fromJson(Map<String, dynamic> json) {
+    return PerformanceMetric(
+      key: '${json['key'] ?? ''}',
+      label: '${json['label'] ?? ''}',
+      format: '${json['format'] ?? 'decimal'}',
+      target: PerformanceOverviewItem._toNullableDouble(json['target']),
+      actual: PerformanceOverviewItem._toNullableDouble(json['actual']),
+      progressPct: PerformanceOverviewItem._toNullableDouble(
+        json['progress_pct'],
+      ),
+      prize: PerformanceOverviewItem._toDouble(json['prize']),
+      possibility: PerformanceOverviewItem._toDouble(json['possibility']),
+      lowerIsBetter: json['lower_is_better'] as bool? ?? false,
+    );
   }
 }

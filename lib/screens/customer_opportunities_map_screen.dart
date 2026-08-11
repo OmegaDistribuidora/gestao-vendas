@@ -1125,10 +1125,15 @@ class _MapSummary extends StatelessWidget {
   final ValueChanged<String?> onNeighborhoodSelected;
   final ValueChanged<String?> onActivitySelected;
 
-  bool get _isCoordinator =>
-      overview.viewerProfileSlug == AppProfile.coordinatorSlug;
+  bool get _selectsSupervisor =>
+      overview.viewerProfileSlug == AppProfile.coordinatorSlug ||
+      overview.availableSupervisors.isNotEmpty ||
+      overview.requiresSupervisor;
   bool get _selectsSeller =>
-      overview.viewerProfileSlug == AppProfile.supervisorSlug || _isCoordinator;
+      overview.viewerProfileSlug == AppProfile.supervisorSlug ||
+      _selectsSupervisor ||
+      overview.availableSellers.isNotEmpty ||
+      overview.requiresSeller;
   bool get _isNearMeSelected =>
       selectedNeighborhoodKey == nearMeNeighborhoodKey;
   int get _sellerTotalOpportunities {
@@ -1179,7 +1184,7 @@ class _MapSummary extends StatelessWidget {
                 ),
               ],
             ),
-            if (_isCoordinator)
+            if (_selectsSupervisor)
               _FilterDropdown(
                 icon: Icons.account_tree_outlined,
                 hint: 'Selecione o supervisor',

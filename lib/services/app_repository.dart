@@ -11,6 +11,7 @@ import '../models/blocked_orders_overview.dart';
 import '../models/customer_opportunities.dart';
 import '../models/customers_without_purchase.dart';
 import '../models/delinquency_overview.dart';
+import '../models/home_positive_customers.dart';
 import '../models/kpi_metric_source.dart';
 import '../models/performance_overview.dart';
 import '../models/recovered_customer_opportunities.dart';
@@ -435,11 +436,10 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_home_kpis',
+      'get_home_kpis_v2',
       params: <String, dynamic>{
         'window_start': start.toUtc().toIso8601String(),
         'window_end': end.toUtc().toIso8601String(),
-        'metric_source': metricSource.value,
       },
     );
 
@@ -448,6 +448,30 @@ class AppRepository {
     }
 
     return SellerHomeKpis.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<HomePositiveCustomers> getHomePositiveCustomers({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    await _ensureCurrentUserAccess();
+    final response = await _supabase.rpc(
+      'get_home_positive_customers',
+      params: <String, dynamic>{
+        'window_start': start.toUtc().toIso8601String(),
+        'window_end': end.toUtc().toIso8601String(),
+      },
+    );
+
+    if (response is! Map) {
+      return const HomePositiveCustomers(
+        totalClients: 0,
+        totalAmount: 0,
+        items: <HomePositiveCustomer>[],
+      );
+    }
+
+    return HomePositiveCustomers.fromJson(_stringKeyedMap(response));
   }
 
   Future<SupplierAnalysis> getSupplierAnalysis({
@@ -480,10 +504,9 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_performance_overview',
+      'get_performance_overview_v2',
       params: <String, dynamic>{
         'target_month_start': monthStart?.toIso8601String().split('T').first,
-        'metric_source': metricSource.value,
         'target_scope_profile_slug': targetScopeProfileSlug,
         'target_scope_owner_code': targetScopeOwnerCode,
       },
@@ -581,7 +604,7 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_customer_opportunities',
+      'get_customer_opportunities_v2',
       params: <String, dynamic>{
         'target_neighborhood_key': targetNeighborhoodKey,
         'target_activity_key': targetActivityKey,
@@ -603,7 +626,7 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_customer_opportunity_details',
+      'get_customer_opportunity_details_v2',
       params: <String, dynamic>{
         'target_tax_id': taxId,
         'target_seller_code': targetSellerCode,
@@ -636,7 +659,9 @@ class AppRepository {
 
   Future<bool> canAccessCustomerOpportunities() async {
     await _ensureCurrentUserAccess();
-    final response = await _supabase.rpc('can_access_customer_opportunities');
+    final response = await _supabase.rpc(
+      'can_access_customer_opportunities_v2',
+    );
     return response == true;
   }
 

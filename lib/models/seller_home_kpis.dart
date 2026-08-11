@@ -14,6 +14,10 @@ class SellerHomeKpis {
     required this.distinctProducts,
     required this.lastSalesUpdatedAt,
     required this.lastFinancialUpdatedAt,
+    this.dailyFinancialTarget,
+    this.dailySecondaryTarget,
+    this.secondaryMetricType,
+    this.goldUpdatedAt,
   });
 
   final KpiMetricSource metricSource;
@@ -28,6 +32,10 @@ class SellerHomeKpis {
   final int distinctProducts;
   final DateTime? lastSalesUpdatedAt;
   final DateTime? lastFinancialUpdatedAt;
+  final double? dailyFinancialTarget;
+  final double? dailySecondaryTarget;
+  final String? secondaryMetricType;
+  final DateTime? goldUpdatedAt;
 
   factory SellerHomeKpis.empty() {
     return const SellerHomeKpis(
@@ -43,6 +51,10 @@ class SellerHomeKpis {
       distinctProducts: 0,
       lastSalesUpdatedAt: null,
       lastFinancialUpdatedAt: null,
+      dailyFinancialTarget: null,
+      dailySecondaryTarget: null,
+      secondaryMetricType: null,
+      goldUpdatedAt: null,
     );
   }
 
@@ -75,7 +87,17 @@ class SellerHomeKpis {
           0,
       lastSalesUpdatedAt: _parseDate(json['last_sales_updated_at']),
       lastFinancialUpdatedAt: _parseDate(json['last_financial_updated_at']),
+      dailyFinancialTarget: _nullableDouble(json['daily_financial_target']),
+      dailySecondaryTarget: _nullableDouble(json['daily_secondary_target']),
+      secondaryMetricType: json['secondary_metric_type'] as String?,
+      goldUpdatedAt: _parseDate(json['gold_updated_at']),
     );
+  }
+
+  static double? _nullableDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   static DateTime? _parseDate(Object? value) {
