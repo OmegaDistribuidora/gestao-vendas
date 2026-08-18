@@ -230,6 +230,7 @@ class DelinquencyClientSummary {
   const DelinquencyClientSummary({
     required this.codcli,
     required this.clientName,
+    required this.address,
     required this.totalAmount,
     required this.totalOrders,
     required this.orders,
@@ -237,6 +238,7 @@ class DelinquencyClientSummary {
 
   final String codcli;
   final String clientName;
+  final String address;
   final double totalAmount;
   final int totalOrders;
   final List<DelinquencyOrderEntry> orders;
@@ -246,6 +248,7 @@ class DelinquencyClientSummary {
     return DelinquencyClientSummary(
       codcli: '${json['codcli'] ?? ''}',
       clientName: TextSanitizer.normalize('${json['client_name'] ?? ''}'),
+      address: TextSanitizer.normalize('${json['address'] ?? ''}'),
       totalAmount: DelinquencyOverview._toDouble(json['total_amount']),
       totalOrders: DelinquencyOverview._toInt(json['total_orders']),
       orders: rawOrders is List
@@ -264,6 +267,7 @@ class DelinquencyClientSummary {
   DelinquencyClientSummary copyWith({
     String? codcli,
     String? clientName,
+    String? address,
     double? totalAmount,
     int? totalOrders,
     List<DelinquencyOrderEntry>? orders,
@@ -271,6 +275,7 @@ class DelinquencyClientSummary {
     return DelinquencyClientSummary(
       codcli: codcli ?? this.codcli,
       clientName: clientName ?? this.clientName,
+      address: address ?? this.address,
       totalAmount: totalAmount ?? this.totalAmount,
       totalOrders: totalOrders ?? this.totalOrders,
       orders: orders ?? this.orders,

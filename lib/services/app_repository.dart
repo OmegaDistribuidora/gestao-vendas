@@ -466,6 +466,7 @@ class AppRepository {
     if (response is! Map) {
       return const HomePositiveCustomers(
         totalClients: 0,
+        totalNewCustomers: 0,
         totalAmount: 0,
         items: <HomePositiveCustomer>[],
       );
@@ -478,14 +479,18 @@ class AppRepository {
     required DateTime start,
     required DateTime end,
     required KpiMetricSource metricSource,
+    String? targetScopeProfileSlug,
+    String? targetScopeOwnerCode,
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_supplier_analysis',
+      'get_supplier_analysis_v2',
       params: <String, dynamic>{
         'window_start': start.toUtc().toIso8601String(),
         'window_end': end.toUtc().toIso8601String(),
         'metric_source': metricSource.value,
+        'target_scope_profile_slug': targetScopeProfileSlug,
+        'target_scope_owner_code': targetScopeOwnerCode,
       },
     );
 
@@ -545,7 +550,7 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_delinquency_overview',
+      'get_delinquency_overview_v2',
       params: <String, dynamic>{
         'target_scope_profile_slug': targetScopeProfileSlug,
         'target_scope_owner_code': targetScopeOwnerCode,

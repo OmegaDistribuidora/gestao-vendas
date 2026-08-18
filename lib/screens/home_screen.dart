@@ -55,6 +55,12 @@ class _HomeScreenState extends State<HomeScreen> {
   String _appVersionLabel = 'Vers\u00E3o 0.9.12+28';
   bool _customerOpportunitiesEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
+  HomePositiveCustomers _todayPositiveCustomers = const HomePositiveCustomers(
+    totalClients: 0,
+    totalNewCustomers: 0,
+    totalAmount: 0,
+    items: <HomePositiveCustomer>[],
+  );
   PerformanceOverview _performanceOverview = PerformanceOverview.empty();
   StreamSubscription<PushNavigationIntent>? _pushNavigationSubscription;
   Timer? _refreshTimer;
@@ -85,6 +91,12 @@ class _HomeScreenState extends State<HomeScreen> {
   int get _todayPositivation => _homeKpis.grossPositivation;
 
   int _clampPositiveCount(int value) => value < 0 ? 0 : value;
+
+  String get _positivationValue {
+    final total = _clampPositiveCount(_todayPositivation);
+    final newCustomers = _todayPositiveCustomers.totalNewCustomers;
+    return '$total ($newCustomers ${newCustomers == 1 ? 'novo' : 'novos'})';
+  }
 
   @override
   void initState() {
@@ -170,6 +182,15 @@ class _HomeScreenState extends State<HomeScreen> {
         end: end,
         metricSource: KpiMetricSource.venda,
       );
+      var todayPositiveCustomers = _todayPositiveCustomers;
+      try {
+        todayPositiveCustomers = await _repository.getHomePositiveCustomers(
+          start: start,
+          end: end,
+        );
+      } catch (_) {
+        // Mantem o ultimo resumo valido se o detalhamento falhar.
+      }
       var performanceOverview = PerformanceOverview.empty();
       if (_isNamedKpiProfile) {
         try {
@@ -192,6 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _homeKpis = homeKpis;
+        _todayPositiveCustomers = todayPositiveCustomers;
         _performanceOverview = performanceOverview;
         _customerOpportunitiesEnabled = customerOpportunitiesEnabled;
         _loading = false;
@@ -276,7 +298,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${details?.totalClients ?? 0} clientes • ${_formatCurrency(details?.totalAmount ?? 0)}',
+                      '${details?.totalClients ?? 0} clientes • '
+                      '${_formatCurrency(details?.totalAmount ?? 0)} • '
+                      '${details?.totalNewCustomers ?? 0} novos',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: const Color(0xFF5E6A7C),
                         fontWeight: FontWeight.w700,
@@ -340,16 +364,48 @@ class _HomeScreenState extends State<HomeScreen> {
                                                   ),
                                             ),
                                             const SizedBox(height: 4),
-                                            Text(
-                                              'Compra de hoje',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .labelSmall
-                                                  ?.copyWith(
-                                                    color: const Color(
-                                                      0xFF7A8597,
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  'Compra de hoje',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        color: const Color(
+                                                          0xFF7A8597,
+                                                        ),
+                                                      ),
+                                                ),
+                                                if (item.isNewInMonth) ...[
+                                                  const SizedBox(width: 8),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 7,
+                                                          vertical: 3,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          kpiPositivationBackgroundColor,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            99,
+                                                          ),
+                                                    ),
+                                                    child: const Text(
+                                                      'Novo!',
+                                                      style: TextStyle(
+                                                        color:
+                                                            kpiPositivationColor,
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.w900,
+                                                      ),
                                                     ),
                                                   ),
+                                                ],
+                                              ],
                                             ),
                                           ],
                                         ),
@@ -854,7 +910,7 @@ class _HomeScreenState extends State<HomeScreen> {
         : 'Positiva\u00E7\u00E3o';
     final secondaryMetricValue = usesSkuMetric
         ? '${_homeKpis.distinctProducts}'
-        : '${_clampPositiveCount(_todayPositivation)}';
+        : _positivationValue;
     final secondaryMetricIcon = usesSkuMetric
         ? Icons.inventory_2_outlined
         : Icons.people_alt_outlined;
@@ -868,7 +924,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ? 'Positiva\u00E7\u00E3o'
         : 'Produtos distintos';
     final otherMetricValue = usesSkuMetric
-        ? '${_clampPositiveCount(_todayPositivation)}'
+        ? _positivationValue
         : '${_homeKpis.distinctProducts}';
     final otherMetricIcon = usesSkuMetric
         ? Icons.people_alt_outlined

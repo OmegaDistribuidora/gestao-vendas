@@ -4,7 +4,7 @@
 
 - Nome: `Gestão de Vendas`
 - Bundle ID: `br.com.omegadistribuidora.gestaovendas`
-- Versão Flutter atual: `0.9.12+28`
+- Versão Flutter atual: `0.9.13+29`
 - Versão mínima do iOS: `15.0`
 
 O Bundle ID precisa ser idêntico no Apple Developer, App Store Connect, Firebase,
@@ -68,8 +68,8 @@ Antes do build iOS, o script `tool/prepare_ios_firebase.sh` precisa ser executad
 - A build `0.9.11 (27)` adiciona a descrição de localização exigida pela
   validação `ITMS-90683` e declara que o app utiliza somente criptografia isenta
   de documentação de exportação.
-- A próxima entrega é `0.9.12 (28)`. O Codemagic deve usar a branch/tag que
-  contém `version: 0.9.12+28`; o Flutter propagará automaticamente `0.9.12`
-  para `CFBundleShortVersionString` e `28` para `CFBundleVersion`.
+- A próxima entrega é `0.9.13 (29)`. O Codemagic deve usar a branch/tag que
+  contém `version: 0.9.13+29`; o Flutter propagará automaticamente `0.9.13`
+  para `CFBundleShortVersionString` e `29` para `CFBundleVersion`.
 - Para testes internos, não é necessário marcar `Submit to TestFlight beta review`.
 - Para grupos externos, a build precisa ser enviada à revisão beta da Apple.

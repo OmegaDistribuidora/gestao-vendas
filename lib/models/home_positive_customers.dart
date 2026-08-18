@@ -3,11 +3,13 @@ import '../utils/text_sanitizer.dart';
 class HomePositiveCustomers {
   const HomePositiveCustomers({
     required this.totalClients,
+    required this.totalNewCustomers,
     required this.totalAmount,
     required this.items,
   });
 
   final int totalClients;
+  final int totalNewCustomers;
   final double totalAmount;
   final List<HomePositiveCustomer> items;
 
@@ -15,6 +17,7 @@ class HomePositiveCustomers {
     final rawItems = json['items'];
     return HomePositiveCustomers(
       totalClients: (json['total_clients'] as num?)?.toInt() ?? 0,
+      totalNewCustomers: (json['total_new_customers'] as num?)?.toInt() ?? 0,
       totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
       items: rawItems is List
           ? rawItems
@@ -35,11 +38,13 @@ class HomePositiveCustomer {
     required this.clientCode,
     required this.clientName,
     required this.totalAmount,
+    required this.isNewInMonth,
   });
 
   final String clientCode;
   final String clientName;
   final double totalAmount;
+  final bool isNewInMonth;
 
   factory HomePositiveCustomer.fromJson(Map<String, dynamic> json) {
     return HomePositiveCustomer(
@@ -48,6 +53,7 @@ class HomePositiveCustomer {
         '${json['client_name'] ?? ''}'.trim(),
       ),
       totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
+      isNewInMonth: json['is_new_in_month'] == true,
     );
   }
 }

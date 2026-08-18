@@ -337,6 +337,29 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
     return _dateFormat.format(value);
   }
 
+  String _formatDueDateWithOverdueDays(DateTime? value) {
+    if (value == null) {
+      return '--';
+    }
+
+    final saoPauloNow = DateTime.now().toUtc().subtract(
+      const Duration(hours: 3),
+    );
+    final today = DateTime(
+      saoPauloNow.year,
+      saoPauloNow.month,
+      saoPauloNow.day,
+    );
+    final dueDate = DateTime(value.year, value.month, value.day);
+    final elapsedDays = today.difference(dueDate).inDays;
+    final overdueDays = elapsedDays > 0 ? elapsedDays : 0;
+    final overdueLabel = overdueDays == 1
+        ? '1 dia vencido'
+        : '$overdueDays dias vencidos';
+
+    return '${_formatDate(value)} ($overdueLabel)';
+  }
+
   Widget _buildMetricCard({
     required String title,
     required String value,
@@ -537,7 +560,10 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
             runSpacing: 8,
             children: [
               _InfoPill(label: 'Emissao: ${_formatDate(order.dtemissao)}'),
-              _InfoPill(label: 'Vencimento: ${_formatDate(order.dtvenc)}'),
+              _InfoPill(
+                label:
+                    'Vencimento: ${_formatDueDateWithOverdueDays(order.dtvenc)}',
+              ),
               if (order.prestacao.trim().isNotEmpty)
                 _InfoPill(label: 'Prestacao: ${order.prestacao}'),
               if (order.duplicata.trim().isNotEmpty)
@@ -572,8 +598,39 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 6),
-          child: Text(
-            'Valor: ${_formatCurrency(client.totalAmount)} - Pedidos: ${client.totalOrders}',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Valor: ${_formatCurrency(client.totalAmount)} - Pedidos: ${client.totalOrders}',
+              ),
+              if (client.address.trim().isNotEmpty) ...[
+                const SizedBox(height: 7),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 1),
+                      child: Icon(
+                        Icons.location_on_outlined,
+                        size: 16,
+                        color: Color(0xFF65738A),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        client.address,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF65738A),
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ),
         ),
         children: client.orders.map(_buildOrderTile).toList(),

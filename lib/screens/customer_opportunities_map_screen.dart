@@ -372,10 +372,6 @@ class _CustomerOpportunitiesMapScreenState
       builder: (context) => _OpportunityDetailsLoader(
         details: details,
         currencyFormat: _currencyFormat,
-        onCalculateRoute: (opportunity) async {
-          Navigator.of(context).pop();
-          await _calculateRoute(opportunity);
-        },
         onOpenExternalRoute: (opportunity) async {
           Navigator.of(context).pop();
           await _openRouteInExternalApp(opportunity);
@@ -1591,13 +1587,11 @@ class _OpportunityDetailsSheet extends StatelessWidget {
   const _OpportunityDetailsSheet({
     required this.opportunity,
     required this.currencyFormat,
-    required this.onCalculateRoute,
     required this.onOpenExternalRoute,
   });
 
   final CustomerOpportunity opportunity;
   final NumberFormat currencyFormat;
-  final Future<void> Function(CustomerOpportunity opportunity) onCalculateRoute;
   final Future<void> Function(CustomerOpportunity opportunity)
   onOpenExternalRoute;
 
@@ -1695,7 +1689,6 @@ class _OpportunityDetailsSheet extends StatelessWidget {
               if (opportunity.fullAddress.isNotEmpty)
                 _AddressRouteRow(
                   address: opportunity.fullAddress,
-                  onCalculateRoute: () => onCalculateRoute(opportunity),
                   onOpenExternalRoute: () => onOpenExternalRoute(opportunity),
                 ),
               const SizedBox(height: 2),
@@ -1722,7 +1715,7 @@ class _OpportunityDetailsSheet extends StatelessWidget {
               ),
               const SizedBox(height: 18),
               Text(
-                'Fornecedores comprados',
+                'Sugestão de Fornecedores',
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: const Color(0xFF172033),
@@ -1835,12 +1828,10 @@ class _MetricTile extends StatelessWidget {
 class _AddressRouteRow extends StatelessWidget {
   const _AddressRouteRow({
     required this.address,
-    required this.onCalculateRoute,
     required this.onOpenExternalRoute,
   });
 
   final String address;
-  final VoidCallback onCalculateRoute;
   final VoidCallback onOpenExternalRoute;
 
   @override
@@ -1873,7 +1864,6 @@ class _AddressRouteRow extends StatelessWidget {
                       ),
                     );
                     final routeButton = _RouteOptionsButton(
-                      onCalculateRoute: onCalculateRoute,
                       onOpenExternalRoute: onOpenExternalRoute,
                     );
 
@@ -1952,49 +1942,16 @@ class _ExternalNavigationAppPicker extends StatelessWidget {
 }
 
 class _RouteOptionsButton extends StatelessWidget {
-  const _RouteOptionsButton({
-    required this.onCalculateRoute,
-    required this.onOpenExternalRoute,
-  });
+  const _RouteOptionsButton({required this.onOpenExternalRoute});
 
-  final VoidCallback onCalculateRoute;
   final VoidCallback onOpenExternalRoute;
 
   @override
   Widget build(BuildContext context) {
-    return MenuAnchor(
-      menuChildren: [
-        MenuItemButton(
-          onPressed: onCalculateRoute,
-          leadingIcon: const Icon(Icons.map_outlined),
-          child: const Text('Calcular no app'),
-        ),
-        MenuItemButton(
-          onPressed: onOpenExternalRoute,
-          leadingIcon: const Icon(Icons.open_in_new_rounded),
-          child: const Text('Usar outro app'),
-        ),
-      ],
-      builder: (context, controller, child) {
-        return FilledButton.tonalIcon(
-          onPressed: () {
-            if (controller.isOpen) {
-              controller.close();
-            } else {
-              controller.open();
-            }
-          },
-          icon: const Icon(Icons.alt_route_rounded),
-          label: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Calcular Rota'),
-              SizedBox(width: 4),
-              Icon(Icons.expand_more_rounded, size: 18),
-            ],
-          ),
-        );
-      },
+    return FilledButton.tonalIcon(
+      onPressed: onOpenExternalRoute,
+      icon: const Icon(Icons.navigation_outlined),
+      label: const Text('Abrir rota'),
     );
   }
 }
@@ -2003,13 +1960,11 @@ class _OpportunityDetailsLoader extends StatelessWidget {
   const _OpportunityDetailsLoader({
     required this.details,
     required this.currencyFormat,
-    required this.onCalculateRoute,
     required this.onOpenExternalRoute,
   });
 
   final Future<CustomerOpportunity> details;
   final NumberFormat currencyFormat;
-  final Future<void> Function(CustomerOpportunity opportunity) onCalculateRoute;
   final Future<void> Function(CustomerOpportunity opportunity)
   onOpenExternalRoute;
 
@@ -2055,7 +2010,6 @@ class _OpportunityDetailsLoader extends StatelessWidget {
         return _OpportunityDetailsSheet(
           opportunity: snapshot.data!,
           currencyFormat: currencyFormat,
-          onCalculateRoute: onCalculateRoute,
           onOpenExternalRoute: onOpenExternalRoute,
         );
       },

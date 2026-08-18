@@ -43,10 +43,18 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
   _SupplierPeriodPreset _selectedPeriod = _SupplierPeriodPreset.today;
   DateTime? _customStartDate;
   DateTime? _customEndDate;
+  String? _selectedSupplierCode;
+  String? _selectedScopeValue;
 
   List<SupplierAnalysisItem> get _supplierItemsWithGeneral {
     if (_analysis.suppliers.isEmpty) {
       return const <SupplierAnalysisItem>[];
+    }
+
+    if (_selectedSupplierCode != null) {
+      return _analysis.suppliers
+          .where((item) => item.code == _selectedSupplierCode)
+          .toList(growable: false);
     }
 
     final overall = _analysis.overall;
@@ -102,6 +110,19 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
       ),
       ..._analysis.suppliers,
     ];
+  }
+
+  SupplierAnalysisScope? get _selectedScope {
+    final selectedValue = _selectedScopeValue;
+    if (selectedValue == null) {
+      return null;
+    }
+    for (final scope in _analysis.availableScopes) {
+      if (scope.value == selectedValue) {
+        return scope;
+      }
+    }
+    return null;
   }
 
   @override
@@ -201,12 +222,20 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
         start: _periodStart,
         end: _periodEnd,
         metricSource: _selectedMetricSource,
+        targetScopeProfileSlug: _selectedScope?.profileSlug,
+        targetScopeOwnerCode: _selectedScope?.ownerCode,
       );
       if (!mounted) {
         return;
       }
       setState(() {
         _analysis = analysis;
+        if (_selectedSupplierCode != null &&
+            !analysis.suppliers.any(
+              (supplier) => supplier.code == _selectedSupplierCode,
+            )) {
+          _selectedSupplierCode = null;
+        }
         _loading = false;
       });
     } catch (error) {
@@ -278,6 +307,23 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
 
     setState(() {
       _selectedMetricSource = metricSource;
+    });
+    await _loadAnalysis();
+  }
+
+  void _handleSupplierChanged(String? supplierCode) {
+    setState(() {
+      _selectedSupplierCode = supplierCode;
+    });
+  }
+
+  Future<void> _handleScopeChanged(String? scopeValue) async {
+    if (scopeValue == _selectedScopeValue) {
+      return;
+    }
+    setState(() {
+      _selectedScopeValue = scopeValue;
+      _selectedSupplierCode = null;
     });
     await _loadAnalysis();
   }
@@ -429,6 +475,60 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                                     label: Text(_dateFormat.format(_periodEnd)),
                                   ),
                                 ],
+                              ),
+                            ],
+                            const SizedBox(height: 14),
+                            DropdownButtonFormField<String>(
+                              key: ValueKey<String?>(_selectedSupplierCode),
+                              initialValue: _selectedSupplierCode,
+                              isExpanded: true,
+                              decoration: const InputDecoration(
+                                labelText: 'Fornecedor',
+                                prefixIcon: Icon(Icons.inventory_2_outlined),
+                              ),
+                              items: [
+                                const DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Text('Todos os fornecedores'),
+                                ),
+                                ..._analysis.suppliers.map(
+                                  (supplier) => DropdownMenuItem<String>(
+                                    value: supplier.code,
+                                    child: Text(
+                                      '${supplier.code} - ${supplier.supplierName}',
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              onChanged: _handleSupplierChanged,
+                            ),
+                            if (_analysis.availableScopes.isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              DropdownButtonFormField<String>(
+                                key: ValueKey<String?>(_selectedScopeValue),
+                                initialValue: _selectedScopeValue,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  labelText: 'Vendedor/Supervisor',
+                                  prefixIcon: Icon(Icons.people_alt_outlined),
+                                ),
+                                items: [
+                                  const DropdownMenuItem<String>(
+                                    value: null,
+                                    child: Text('Todos'),
+                                  ),
+                                  ..._analysis.availableScopes.map(
+                                    (scope) => DropdownMenuItem<String>(
+                                      value: scope.value,
+                                      child: Text(
+                                        scope.label,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                onChanged: _handleScopeChanged,
                               ),
                             ],
                           ],

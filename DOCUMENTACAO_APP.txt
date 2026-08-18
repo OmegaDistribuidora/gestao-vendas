@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 11/08/2026
-Versao atual do projeto: 0.9.12+28
+Ultima atualizacao desta documentacao: 18/08/2026
+Versao atual do projeto: 0.9.13+29
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -747,6 +747,12 @@ volume de staging e timeout das funcoes do Supabase.
   lucratividade consolidada de Diretoria, Outros e Admin para usar o
   faturamento liquido enviado no payload da Gold, preservando a assinatura e
   o contrato JSON de get_performance_overview_v2.
+- A migration 20260818130000_home_new_customers.sql amplia o detalhamento da
+  positivacao da Home com a quantidade de clientes novos no mes e identifica
+  cada cliente cuja compra do dia foi a primeira compra mensal.
+- A migration 20260818143000_delinquency_addresses_supplier_scope.sql inclui
+  o endereco dos clientes na inadimplencia e adiciona o recorte hierarquico
+  da Analise por Fornecedor para vendedores e supervisores selecionados.
 
 
 13. VERSAO E DISTRIBUICAO
@@ -754,9 +760,30 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.12
-- versionCode / CFBundleVersion: 28
-- Release multiplataforma: 0.9.12+28
+- versionName / CFBundleShortVersionString: 0.9.13
+- versionCode / CFBundleVersion: 29
+- Release multiplataforma: 0.9.13+29
+
+Release 0.9.13+29:
+
+- Home passa a destacar quantos clientes positivados no dia sao novos no mes.
+- Detalhamento da positivacao diaria identifica cada cliente novo e apresenta
+  no cabecalho o total geral, o total de novos e o valor vendido no dia.
+- Mapa de Oportunidades remove o calculo interno de rota via Mapbox e mantem
+  somente a abertura de rotas no Google Maps e no Waze.
+- O rotulo dos fornecedores no detalhe da oportunidade passa a ser
+  "Sugestao de Fornecedores".
+- Inadimplencia passa a exibir os dias vencidos de cada prestacao e o endereco
+  do cliente antes da expansao dos pedidos.
+- Analise por Fornecedor recebe filtro visual de fornecedor e filtro de
+  vendedor/supervisor com autorizacao hierarquica: supervisor acessa seus
+  vendedores; coordenador acessa seus vendedores e supervisores; perfis de
+  visao geral acessam todos.
+- Consolidado da Gold tem correcoes de efetividade e lucratividade para
+  Diretoria, Outros e Admin, preservando os calculos dos demais perfis.
+- Preparacao iOS preserva Firebase/APNs, permissoes de localizacao,
+  criptografia isenta, Bundle ID br.com.omegadistribuidora.gestaovendas e
+  propaga versao 0.9.13 build 29 pelo Flutter no Codemagic.
 
 Release 0.9.12+28:
 
@@ -1057,7 +1084,7 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Proxima entrega multiplataforma: 0.9.12 build 28.
+- Entrega multiplataforma atual: 0.9.13 build 29.
 
 
 14. DESENVOLVIMENTO E VALIDACAO
