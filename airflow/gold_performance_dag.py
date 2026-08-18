@@ -50,8 +50,8 @@ def _run_oracle_source(*extra_args: str) -> None:
 
 
 def atualizar_fontes_oracle() -> None:
-    # Default script window is yesterday through today. It captures late changes
-    # without repeatedly reading the historical BI horizon from Oracle.
+    # Default script window is the whole current month through today. It captures
+    # retroactive order edits while avoiding the full historical BI horizon.
     _run_oracle_source()
 
 

@@ -633,8 +633,12 @@ gold_performance
   C:\Users\POWERBI\Desktop\gold_performance\gold_performance_dag.py
 - Agenda operacional: a cada 2 minutos, das 06:00 as 23:59.
 - Executa obrigatoriamente na sequencia:
-  1. atualiza ontem e hoje em gold_src diretamente do Oracle;
+  1. substitui em gold_src o mes corrente inteiro, do primeiro dia ate hoje,
+     consultando diretamente o Oracle;
   2. recalcula o mes atual e o anterior na tabela local gold.performance.
+- A janela mensal frequente captura cancelamentos, exclusoes, mudancas de
+  quantidade e demais alteracoes retroativas em pedidos do mes corrente em no
+  maximo 2 minutos. A agenda permanece a cada 2 minutos.
 - A troca da janela em gold_src usa staging e uma unica transacao. Se Oracle,
   validacao ou PostgreSQL falhar, a fonte valida anterior e a Gold sao
   preservadas; a sincronizacao seguinte para o app nao e liberada.
@@ -643,6 +647,33 @@ gold_performance
 - A procedure usa gold_src.fvendas, gold_src.fdevolucao e
   gold_src.ffaturamento somente para os fatos comerciais. Metas, hierarquia,
   roteirizacao, inadimplencia e demais dimensoes continuam nas tabelas filial.
+- faturamento_liquido foi adicionado como a ultima coluna fisica de
+  gold.performance, sem renomear, remover ou reposicionar qualquer campo
+  anterior. Ele corresponde a soma de faturamento e devolucoes de
+  gold_src.ffaturamento e e a base monetaria da lucratividade.
+- Para Diretoria, Outros e Admin, a RPC consolida as linhas Gerais dos
+  coordenadores e calcula a lucratividade da empresa por
+  (faturamento_liquido + custo_devolucao - custo_faturamento) /
+  faturamento_liquido, sempre depois de somar cada componente. Nao se usa
+  media simples de percentuais nem realizado_financeiro, pois este e venda
+  liquida. O formato da resposta da RPC permanece inalterado, portanto a
+  correcao nao exige nova versao do aplicativo nas lojas.
+- Para vendedor CLT - Redes (st_tipo Rds Clt), Financeiro, SKU e Volume por
+  fornecedor sao independentes. Cada indicador paga o valor-base da top5 ao
+  atingir 100% da meta e acrescenta proporcionalmente ate R$52,00 entre 100%
+  e 120%, com teto em valor-base + R$52,00. Com a base atual de R$100,00,
+  100% paga R$100,00, 110% paga R$126,00, 115% paga R$139,00 e 120% ou mais
+  paga R$152,00. A possibilidade maxima e R$456,00 por fornecedor quando os
+  tres indicadores possuem meta e parametrizacao.
+- Em gold_src.fdevolucao, data registra quando a devolucao entrou e
+  data_venda_original registra a data do pedido. A Gold desconta a devolucao na
+  competencia e no dia da venda original; por isso o recalculo do mes anterior
+  captura devolucoes recebidas no mes seguinte.
+- A Gold inclui movimentos de vendedores bloqueados e do time Outros. Quando vendedor,
+  supervisor ou coordenador nao possui meta, sao geradas linhas informativas Geral e por
+  fornecedor, com premios zerados. Como a visao empresarial ja soma todas as linhas de
+  Coordenador, coordenadores informativos sem meta passam a compor automaticamente a venda geral
+  e por fornecedor sem exigir atualizacao do aplicativo.
 
 gold_performance_oracle_reconcile
 
@@ -712,6 +743,10 @@ volume de staging e timeout das funcoes do Supabase.
 - A migration 20260811101000_home_positive_customers.sql adiciona a RPC
   get_home_positive_customers para o detalhamento da positivacao diaria por
   cliente, respeitando vendedor, supervisor, coordenador e visao geral.
+- A migration 20260814155000_fix_gold_company_profitability.sql corrige a
+  lucratividade consolidada de Diretoria, Outros e Admin para usar o
+  faturamento liquido enviado no payload da Gold, preservando a assinatura e
+  o contrato JSON de get_performance_overview_v2.
 
 
 13. VERSAO E DISTRIBUICAO
@@ -728,8 +763,9 @@ Release 0.9.12+28:
 - Performance de agosto/2026 em diante passa a usar gold.performance, com
   venda liquida mensal, metas, premios e indicadores completos por perfil e
   fornecedor. Meses anteriores mantem o calculo legado.
-- A fonte operacional curta da Gold consulta diretamente o Oracle e atualiza
-  ontem/hoje a cada 2 minutos, sem depender das tabelas historicas do BI.
+- A fonte operacional curta da Gold consulta diretamente o Oracle e substitui
+  todo o mes corrente a cada 2 minutos, sem depender das tabelas historicas do
+  BI.
 - Home usa venda bruta no realizado e nas notificacoes diarias; metas e
   notificacoes mensais continuam sobre venda liquida da Gold.
 - Metas diarias passam a ser calculadas no backend e permanecem constantes

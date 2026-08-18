@@ -64,6 +64,7 @@ GROUP BY
 ORACLE_RETURNS_QUERY = """
 SELECT
     TRUNC(pcmov.dtmov) AS data,
+    TRUNC(pcpedc.data) AS data_venda_original,
     pcmov.codusur,
     pcmov.codcli,
     pcfornec.codfornec,
@@ -87,7 +88,7 @@ WHERE pcmov.dtmov >= :window_start
   AND pcmov.codoper IN ('E', 'ED')
   AND (pcmov.pbonific = 0 OR pcmov.pbonific IS NULL)
 GROUP BY
-    TRUNC(pcmov.dtmov), pcmov.codusur, pcmov.codcli,
+    TRUNC(pcmov.dtmov), TRUNC(pcpedc.data), pcmov.codusur, pcmov.codcli,
     pcfornec.codfornec, pcmov.codprod
 """
 
@@ -198,7 +199,17 @@ SOURCES = (
     SourceSpec(
         "fdevolucao",
         ORACLE_RETURNS_QUERY,
-        ("data", "codusur", "codcli", "codfornec", "codprod", "qt", "faturamento", "volume"),
+        (
+            "data",
+            "data_venda_original",
+            "codusur",
+            "codcli",
+            "codfornec",
+            "codprod",
+            "qt",
+            "faturamento",
+            "volume",
+        ),
     ),
     SourceSpec(
         "ffaturamento",
@@ -295,11 +306,15 @@ def _create_objects(connection: psycopg.Connection, schema: str) -> None:
         """).format(schema_id),
         sql.SQL("""
             create table if not exists {}.fdevolucao (
-                data date not null, codusur integer not null, codcli integer not null,
+                data date not null, data_venda_original date not null,
+                codusur integer not null, codcli integer not null,
                 codfornec integer not null, codprod integer not null,
                 qt numeric not null, faturamento numeric not null, volume numeric not null
             )
         """).format(schema_id),
+        sql.SQL("alter table {}.fdevolucao add column if not exists data_venda_original date").format(
+            schema_id
+        ),
         sql.SQL("""
             create table if not exists {}.ffaturamento (
                 tipo text not null, data date not null, codusur integer not null,
@@ -323,6 +338,10 @@ def _create_objects(connection: psycopg.Connection, schema: str) -> None:
         sql.SQL("create index if not exists {} on {}.fdevolucao (data, codusur, codfornec)").format(
             sql.Identifier(f"ix_{schema}_fdevolucao_window"), schema_id
         ),
+        sql.SQL(
+            "create index if not exists {} on {}.fdevolucao "
+            "(data_venda_original, codusur, codfornec)"
+        ).format(sql.Identifier(f"ix_{schema}_fdevolucao_sale_window"), schema_id),
         sql.SQL("create index if not exists {} on {}.ffaturamento (data, codusur, codfornec)").format(
             sql.Identifier(f"ix_{schema}_ffaturamento_window"), schema_id
         ),
@@ -491,7 +510,8 @@ def main() -> None:
     if args.backfill:
         start = FIRST_GOLD_DATE
     else:
-        start = args.start_date or max(FIRST_GOLD_DATE, today - timedelta(days=1))
+        current_month_start = date(today.year, today.month, 1)
+        start = args.start_date or max(FIRST_GOLD_DATE, current_month_start)
     end_inclusive = args.end_date or today
     end_exclusive = end_inclusive + timedelta(days=1)
     if start < FIRST_GOLD_DATE or end_exclusive <= start:
