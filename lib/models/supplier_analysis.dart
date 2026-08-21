@@ -134,6 +134,9 @@ class SupplierAnalysisItem {
     required this.grossVolume,
     required this.grossOrders,
     required this.grossPositivation,
+    this.effectiveOrders,
+    this.effectivePositivation,
+    this.newPositivation,
   });
 
   final String code;
@@ -146,12 +149,24 @@ class SupplierAnalysisItem {
   final double grossVolume;
   final int grossOrders;
   final int grossPositivation;
+  final int? effectiveOrders;
+  final int? effectivePositivation;
+  final int? newPositivation;
 
   double get netAmount => grossAmount + returnAmount;
   double get netVolume => grossVolume + returnVolume;
-  int get netOrders => _clampPositive(grossOrders - returnOrders);
+  int get netOrders =>
+      effectiveOrders ?? _clampPositive(grossOrders - returnOrders);
   int get netPositivation =>
+      effectivePositivation ??
       _clampPositive(grossPositivation - returnPositivation);
+  String get positivationLabel {
+    final newCustomers = newPositivation;
+    if (newCustomers == null) {
+      return '$netPositivation';
+    }
+    return '$netPositivation ($newCustomers ${newCustomers == 1 ? 'novo' : 'novos'})';
+  }
 
   factory SupplierAnalysisItem.fromJson(Map<String, dynamic> json) {
     return SupplierAnalysisItem(
@@ -167,6 +182,9 @@ class SupplierAnalysisItem {
       grossVolume: (json['gross_volume'] as num?)?.toDouble() ?? 0,
       grossOrders: (json['gross_orders'] as num?)?.toInt() ?? 0,
       grossPositivation: (json['gross_positivation'] as num?)?.toInt() ?? 0,
+      effectiveOrders: (json['net_orders'] as num?)?.toInt(),
+      effectivePositivation: (json['net_positivation'] as num?)?.toInt(),
+      newPositivation: (json['new_positivation'] as num?)?.toInt(),
     );
   }
 

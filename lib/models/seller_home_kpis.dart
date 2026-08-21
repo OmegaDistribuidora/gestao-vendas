@@ -16,6 +16,7 @@ class SellerHomeKpis {
     required this.lastFinancialUpdatedAt,
     this.dailyFinancialTarget,
     this.dailySecondaryTarget,
+    this.dailyNewPositivation,
     this.secondaryMetricType,
     this.goldUpdatedAt,
   });
@@ -34,6 +35,7 @@ class SellerHomeKpis {
   final DateTime? lastFinancialUpdatedAt;
   final double? dailyFinancialTarget;
   final double? dailySecondaryTarget;
+  final int? dailyNewPositivation;
   final String? secondaryMetricType;
   final DateTime? goldUpdatedAt;
 
@@ -53,6 +55,7 @@ class SellerHomeKpis {
       lastFinancialUpdatedAt: null,
       dailyFinancialTarget: null,
       dailySecondaryTarget: null,
+      dailyNewPositivation: null,
       secondaryMetricType: null,
       goldUpdatedAt: null,
     );
@@ -89,6 +92,7 @@ class SellerHomeKpis {
       lastFinancialUpdatedAt: _parseDate(json['last_financial_updated_at']),
       dailyFinancialTarget: _nullableDouble(json['daily_financial_target']),
       dailySecondaryTarget: _nullableDouble(json['daily_secondary_target']),
+      dailyNewPositivation: (json['daily_new_positivation'] as num?)?.toInt(),
       secondaryMetricType: json['secondary_metric_type'] as String?,
       goldUpdatedAt: _parseDate(json['gold_updated_at']),
     );

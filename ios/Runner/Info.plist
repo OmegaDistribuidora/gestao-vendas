@@ -29,9 +29,13 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Usamos sua localização para manter o mapa de oportunidades atualizado e mostrar clientes próximos durante o uso do recurso.</string>
+	<string>Usamos sua localização no mapa de oportunidades e para registrar o local de conclusão das atividades da Agenda.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Usamos sua localização para mostrar oportunidades e clientes próximos no mapa.</string>
+	<string>Usamos sua localização para mostrar clientes próximos e registrar o local ao concluir atividades da Agenda.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O Gestão de Vendas usa a câmera para anexar fotos às atividades da Agenda.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O Gestão de Vendas acessa suas fotos para anexá-las às atividades da Agenda.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

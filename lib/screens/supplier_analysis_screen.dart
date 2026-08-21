@@ -58,58 +58,7 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
     }
 
     final overall = _analysis.overall;
-    if (overall != null) {
-      return [overall, ..._analysis.suppliers];
-    }
-
-    final totalAmount = _analysis.suppliers.fold<double>(
-      0,
-      (sum, item) => sum + item.grossAmount,
-    );
-    final totalVolume = _analysis.suppliers.fold<double>(
-      0,
-      (sum, item) => sum + item.grossVolume,
-    );
-    final totalReturnAmount = _analysis.suppliers.fold<double>(
-      0,
-      (sum, item) => sum + item.returnAmount,
-    );
-    final totalReturnVolume = _analysis.suppliers.fold<double>(
-      0,
-      (sum, item) => sum + item.returnVolume,
-    );
-    final totalOrders = _analysis.suppliers.fold<int>(
-      0,
-      (sum, item) => sum + item.grossOrders,
-    );
-    final totalReturnOrders = _analysis.suppliers.fold<int>(
-      0,
-      (sum, item) => sum + item.returnOrders,
-    );
-    final totalPositivation = _analysis.suppliers.fold<int>(
-      0,
-      (sum, item) => sum + item.grossPositivation,
-    );
-    final totalReturnPositivation = _analysis.suppliers.fold<int>(
-      0,
-      (sum, item) => sum + item.returnPositivation,
-    );
-
-    return [
-      SupplierAnalysisItem(
-        code: '__geral__',
-        supplierName: 'Geral',
-        grossAmount: totalAmount,
-        returnAmount: totalReturnAmount,
-        returnVolume: totalReturnVolume,
-        returnOrders: totalReturnOrders,
-        returnPositivation: totalReturnPositivation,
-        grossVolume: totalVolume,
-        grossOrders: totalOrders,
-        grossPositivation: totalPositivation,
-      ),
-      ..._analysis.suppliers,
-    ];
+    return [?overall, ..._analysis.suppliers];
   }
 
   SupplierAnalysisScope? get _selectedScope {
@@ -704,14 +653,14 @@ class _SupplierCard extends StatelessWidget {
                   accentBackgroundColor: kpiVolumeBackgroundColor,
                 ),
                 _MiniMetricTile(
-                  title: 'Pedidos Liquidos',
+                  title: 'Pedidos',
                   value: '${supplier.netOrders}',
                   accentColor: kpiOrdersColor,
                   accentBackgroundColor: kpiOrdersBackgroundColor,
                 ),
                 _MiniMetricTile(
-                  title: 'Positivação Liquida',
-                  value: '${supplier.netPositivation}',
+                  title: 'Positivação',
+                  value: supplier.positivationLabel,
                   accentColor: kpiPositivationColor,
                   accentBackgroundColor: kpiPositivationBackgroundColor,
                 ),

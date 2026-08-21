@@ -72,13 +72,55 @@ class AppRepository {
     }
 
     try {
-      final user = await _loadCurrentUser(enforceActive: true);
+      if (!await _refreshCurrentSessionIfNeeded()) {
+        await _supabase.auth.signOut();
+        return null;
+      }
+
+      AppUser user;
+      try {
+        user = await _loadCurrentUser(enforceActive: true);
+      } on PostgrestException catch (error) {
+        if (!_isExpiredJwt(error) ||
+            !await _refreshCurrentSessionIfNeeded(force: true)) {
+          rethrow;
+        }
+        user = await _loadCurrentUser(enforceActive: true);
+      }
       await _recordLoginEventSafely(user);
       return user;
+    } on AuthException {
+      await _supabase.auth.signOut();
+      return null;
     } on RepositoryException {
       await _supabase.auth.signOut();
       return null;
     }
+  }
+
+  Future<bool> _refreshCurrentSessionIfNeeded({bool force = false}) async {
+    var session = _supabase.auth.currentSession;
+    if (session == null) {
+      return false;
+    }
+
+    final expiresAt = session.expiresAt;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final shouldRefresh = force || (expiresAt != null && expiresAt <= now + 60);
+    if (!shouldRefresh) {
+      return true;
+    }
+
+    final response = await _supabase.auth.refreshSession();
+    session = response.session;
+    return session != null && session.accessToken.trim().isNotEmpty;
+  }
+
+  bool _isExpiredJwt(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    return error.code == 'PGRST303' ||
+        message.contains('jwt expired') ||
+        message.contains('token is expired');
   }
 
   Future<AppUser> authenticate({

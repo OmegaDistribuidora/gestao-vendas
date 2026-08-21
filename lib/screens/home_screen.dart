@@ -14,6 +14,7 @@ import '../models/seller_home_kpis.dart';
 import '../services/app_repository.dart';
 import '../services/push_notification_service.dart';
 import 'admin_screen.dart';
+import 'agenda_screen.dart';
 import 'blocked_orders_screen.dart';
 import 'change_password_screen.dart';
 import 'customer_opportunities_map_screen.dart';
@@ -85,6 +86,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _showsCustomerOpportunitiesModule => _customerOpportunitiesEnabled;
   bool get _showsRecoveredCustomersModule =>
       !_isSeller && !_isSupervisor && !_isCoordinator;
+  bool get _showsAgendaModule =>
+      widget.currentUser.profile?.canAccessAgenda ?? false;
 
   double get _todayAmount => _homeKpis.grossAmount;
   double get _todayVolume => _homeKpis.grossVolume;
@@ -552,6 +555,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openAgenda() async {
+    await _recordModuleAccess('agenda', 'Agenda');
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const AgendaScreen()));
+  }
+
   Future<void> _openChangePassword() async {
     await _recordModuleAccess('trocar_senha', 'Trocar senha');
     if (!mounted) {
@@ -652,6 +665,15 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     await _openRecoveredCustomers();
+  }
+
+  Future<void> _openAgendaFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await _openAgenda();
   }
 
   Future<void> _openChangePasswordFromDrawer() async {
@@ -801,6 +823,13 @@ class _HomeScreenState extends State<HomeScreen> {
           accent: const Color(0xFF1E88E5),
           onTap: _openReports,
         ),
+      if (_showsAgendaModule)
+        _HomeShortcutData(
+          title: 'Agenda',
+          icon: Icons.calendar_month_outlined,
+          accent: const Color(0xFF4B61FF),
+          onTap: _openAgenda,
+        ),
     ];
 
     return items;
@@ -904,7 +933,9 @@ class _HomeScreenState extends State<HomeScreen> {
         : overallItem?.usesSkuMetric == true;
     final secondaryActualToday = usesSkuMetric
         ? _homeKpis.distinctProducts.toDouble()
-        : _clampPositiveCount(_todayPositivation).toDouble();
+        : (_homeKpis.dailyNewPositivation ??
+                  _todayPositiveCustomers.totalNewCustomers)
+              .toDouble();
     final secondaryMetricTitle = usesSkuMetric
         ? 'SKU'
         : 'Positiva\u00E7\u00E3o';
@@ -1317,6 +1348,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: _openReportsFromDrawer,
                         ),
                       ],
+                      if (_showsAgendaModule)
+                        ListTile(
+                          leading: const Icon(Icons.calendar_month_outlined),
+                          title: const Text('Agenda'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openAgendaFromDrawer,
+                        ),
                     ],
                   ),
                 ),

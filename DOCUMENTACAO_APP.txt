@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 18/08/2026
-Versao atual do projeto: 0.9.13+29
+Ultima atualizacao desta documentacao: 21/08/2026
+Versao atual do projeto: 0.9.14+30
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -340,9 +340,7 @@ Busca local:
 
 Disponibilidade:
 
-- Disponivel para vendedor, supervisor e coordenador.
-- Vendedores com meta de SKU no mes corrente sao considerados redes e nao
-  recebem o modulo.
+- Disponivel para todos os perfis autorizados do aplicativo.
 - Supervisor precisa selecionar um vendedor. Coordenador precisa selecionar
   primeiro um supervisor e depois um vendedor.
 - A interface e o RPC validam perfil, hierarquia e vendedor selecionado.
@@ -381,11 +379,11 @@ Tela:
 - O botao de centralizacao enquadra todos os pontos visiveis.
 - Ao tocar no marcador, abre nome, fantasia, CPF/CNPJ, atividade, cidade,
   bairro, endereco completo, sugestao de limite de credito, potencial de
-  mercado e fornecedores conhecidos.
-- Com permissao de localizacao, calcula a rota de carro ate a oportunidade
-  pela API Directions do Mapbox, exibe distancia, duracao e instrucoes e
-  acompanha a posicao do aparelho enquanto o modo de rota estiver ativo.
-- Tambem permite abrir a navegacao em um aplicativo externo compativel.
+  mercado e sugestao de fornecedores.
+- Com permissao de localizacao, mostra oportunidades em um raio proximo e
+  permite recentralizar o mapa na posicao atual.
+- A navegacao e aberta externamente no Google Maps ou Waze. O aplicativo nao
+  calcula nem acompanha rotas internamente.
 - O resumo informa quantidade de oportunidades, bairros atendidos e horario
   da ultima carga.
 
@@ -398,6 +396,46 @@ Tela:
 - Exibe quantidade recuperada, dados cadastrais, origem, localidade, potencial
   de mercado e data da recuperacao.
 - Permite busca textual nos clientes recuperados.
+
+6.12 Agenda
+
+Objetivo e integracao:
+
+- Extensao mobile do servico Agenda Omega hospedado no Railway.
+- O aplicativo consulta a API HTTPS publica da Agenda; nenhuma credencial do
+  PostgreSQL da Agenda e armazenada no aplicativo.
+- A identidade e validada pelo token Supabase e relacionada ao usuario da
+  Agenda pelo perfil e pelo codigo comercial.
+- A API padrao e https://agenda-omega-production.up.railway.app e pode ser
+  sobrescrita no build com AGENDA_API_URL.
+
+Perfis e escopo:
+
+- Vendedor nao acessa o modulo.
+- Supervisor e coordenador veem somente as proprias atividades.
+- Diretoria e Outros podem selecionar e consultar a agenda de supervisores e
+  coordenadores.
+- A agenda abre no periodo Hoje e tambem oferece Semana e Mes.
+- As atividades sao agrupadas em pendentes, em andamento e concluidas.
+
+Acoes permitidas no aplicativo:
+
+- Supervisor e coordenador podem criar atividades apenas para si mesmos.
+- A pasta regional e definida no backend pela hierarquia comercial: Capital
+  para coordenador 12, Cariri para coordenador 13 e Interior para coordenador
+  10, incluindo seus respectivos supervisores.
+- Nao e permitido excluir, reatribuir responsavel ou editar livremente uma
+  atividade pelo aplicativo.
+- E permitido iniciar/concluir, adicionar observacao e anexar foto pela
+  camera ou biblioteca, alem de visualizar anexos existentes.
+- Ao concluir, o aplicativo tenta registrar coordenadas e endereco. Se a
+  permissao nao for concedida, registra que a localizacao nao foi
+  compartilhada. A localizacao fica visivel somente para perfis autorizados
+  no sistema web da Agenda.
+- A API e consultada ao abrir, alterar periodo/responsavel, atualizar a tela ou
+  concluir uma acao; nao existe polling continuo em segundo plano.
+- Sessoes Supabase proximas da expiracao sao renovadas antes das chamadas para
+  evitar falha PGRST303/JWT expired.
 
 
 7. FLUXO DE DADOS
@@ -753,6 +791,16 @@ volume de staging e timeout das funcoes do Supabase.
 - A migration 20260818143000_delinquency_addresses_supplier_scope.sql inclui
   o endereco dos clientes na inadimplencia e adiciona o recorte hierarquico
   da Analise por Fornecedor para vendedores e supervisores selecionados.
+- A migration 20260820123000_supplier_analysis_effective_balances.sql corrige
+  Pedidos e Positivacao na Analise por Fornecedor para considerar o saldo
+  efetivo apos devolucoes totais ou parciais e atribui a devolucao ao periodo
+  da venda original, tanto em Venda quanto em Faturamento.
+- A migration 20260820194500_supplier_analysis_new_monthly_customers.sql inclui
+  clientes novos por fornecedor e no consolidado Geral quando todo o periodo
+  selecionado pertence ao mesmo mes.
+- A migration 20260820203000_daily_new_positivation_progress.sql passa a usar
+  apenas clientes cuja primeira compra mensal ocorreu no dia no progresso e
+  nas notificacoes da meta diaria de Positivacao.
 
 
 13. VERSAO E DISTRIBUICAO
@@ -760,9 +808,36 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.13
-- versionCode / CFBundleVersion: 29
-- Release multiplataforma: 0.9.13+29
+- versionName / CFBundleShortVersionString: 0.9.14
+- versionCode / CFBundleVersion: 30
+- Release multiplataforma: 0.9.14+30
+
+Release 0.9.14+30:
+
+- Novo modulo Agenda para supervisor, coordenador, Diretoria e Outros,
+  integrado ao Agenda Omega no Railway e indisponivel para vendedores.
+- Supervisores e coordenadores podem consultar, criar para si, iniciar e
+  concluir atividades, adicionar observacoes e anexar/visualizar fotos, sem
+  permissao para excluir ou reatribuir responsavel.
+- Diretoria e Outros podem selecionar agendas de supervisores e coordenadores;
+  os filtros Hoje, Semana e Mes organizam atividades por status.
+- A conclusao de atividade registra localizacao/endereco quando autorizado e
+  informa quando o usuario nao compartilhou a localizacao.
+- Renovacao preventiva da sessao Supabase evita falhas de login automatico e
+  de abertura da Agenda por JWT expirado.
+- Analise por Fornecedor corrige Pedidos e Positivacao apos devolucoes totais
+  e parciais, relaciona devolucoes a venda original e remove o termo Liquido
+  desses dois indicadores em Venda e Faturamento.
+- O consolidado Geral deixa de somar cartoes de fornecedor como fallback,
+  evitando duplicidade de clientes e pedidos, e o horario de atualizacao passa
+  a representar o conjunto consistente das fontes envolvidas.
+- Positivacao por fornecedor passa a mostrar clientes novos no mes quando o
+  periodo selecionado pertence a um unico mes e a fonte e Venda.
+- O progresso e as notificacoes da meta diaria de Positivacao passam a usar
+  apenas as positivacoes novas do mes; Financeiro, SKU e metas mensais mantem
+  suas regras atuais.
+- Preparacao iOS inclui descricoes de uso para camera, fotos e localizacao,
+  preserva Firebase/APNs e propaga 0.9.14 build 30 pelo Codemagic.
 
 Release 0.9.13+29:
 
@@ -1084,7 +1159,7 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Entrega multiplataforma atual: 0.9.13 build 29.
+- Entrega multiplataforma atual: 0.9.14 build 30.
 
 
 14. DESENVOLVIMENTO E VALIDACAO

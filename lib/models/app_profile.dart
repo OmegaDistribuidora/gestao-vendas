@@ -23,6 +23,12 @@ class AppProfile {
 
   bool get isAdmin => slug == adminSlug;
   bool get isUnassigned => slug == unassignedSlug;
+  bool get canAccessAgenda => const <String>{
+    supervisorSlug,
+    coordinatorSlug,
+    boardSlug,
+    othersSlug,
+  }.contains(slug);
 
   factory AppProfile.fromJson(Map<String, dynamic> json) {
     return AppProfile(
