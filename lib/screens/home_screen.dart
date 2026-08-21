@@ -17,6 +17,7 @@ import 'admin_screen.dart';
 import 'agenda_screen.dart';
 import 'blocked_orders_screen.dart';
 import 'change_password_screen.dart';
+import 'commitment_screen.dart';
 import 'customer_opportunities_map_screen.dart';
 import 'customers_without_purchase_screen.dart';
 import 'delinquency_screen.dart';
@@ -81,6 +82,8 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.currentUser.profileSlug == AppProfile.boardSlug ||
       widget.currentUser.profileSlug == AppProfile.othersSlug;
   bool get _showsPerformanceModule => true;
+  bool get _showsCommitmentModule =>
+      widget.currentUser.profile?.canAccessCommitment ?? false;
   bool get _showsCustomersWithoutPurchaseModule =>
       _isSeller || _isSupervisor || _isCoordinator;
   bool get _showsCustomerOpportunitiesModule => _customerOpportunitiesEnabled;
@@ -472,6 +475,16 @@ class _HomeScreenState extends State<HomeScreen> {
     ).push(MaterialPageRoute<void>(builder: (_) => const PerformanceScreen()));
   }
 
+  Future<void> _openCommitment() async {
+    await _recordModuleAccess('compromisso', 'Compromisso');
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const CommitmentScreen()));
+  }
+
   Future<void> _handlePushNavigationIntent(PushNavigationIntent intent) async {
     if (!mounted) {
       return;
@@ -611,6 +624,15 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     await _openPerformance();
+  }
+
+  Future<void> _openCommitmentFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await _openCommitment();
   }
 
   Future<void> _openReturnsFromDrawer() async {
@@ -757,6 +779,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<_HomeShortcutData> get _shortcutItems {
     final items = <_HomeShortcutData>[
+      if (_showsCommitmentModule)
+        _HomeShortcutData(
+          title: 'Compromisso',
+          icon: Icons.flag_outlined,
+          accent: const Color(0xFF263CAC),
+          onTap: _openCommitment,
+        ),
       if (_showsPerformanceModule)
         _HomeShortcutData(
           title: 'Performance',
@@ -1261,6 +1290,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         onTap: () => Navigator.of(context).pop(),
                       ),
+                      if (_showsCommitmentModule)
+                        ListTile(
+                          leading: const Icon(Icons.flag_outlined),
+                          title: const Text('Compromisso'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openCommitmentFromDrawer,
+                        ),
                       if (_showsPerformanceModule)
                         ListTile(
                           leading: const Icon(Icons.auto_graph_outlined),

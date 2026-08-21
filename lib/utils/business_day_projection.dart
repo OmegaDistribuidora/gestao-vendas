@@ -41,6 +41,53 @@ class BusinessDayProjectionSummary {
   final ProjectionPaceStatus paceStatus;
 }
 
+class BusinessDayPeriodContext {
+  const BusinessDayPeriodContext({
+    required this.startDate,
+    required this.endDate,
+    required this.totalBusinessDays,
+    required this.elapsedBusinessDays,
+    required this.completedBusinessDays,
+    required this.remainingBusinessDays,
+  });
+
+  final DateTime startDate;
+  final DateTime endDate;
+  final int totalBusinessDays;
+  final int elapsedBusinessDays;
+  final int completedBusinessDays;
+  final int remainingBusinessDays;
+
+  bool get hasElapsedBusinessDays => elapsedBusinessDays > 0;
+  bool get hasCompletedBusinessDays => completedBusinessDays > 0;
+}
+
+class BusinessDayPeriodProjectionSummary {
+  const BusinessDayPeriodProjectionSummary({
+    required this.periodContext,
+    required this.actualValue,
+    required this.projectionActualValue,
+    required this.targetValue,
+    required this.projectedValue,
+    required this.averagePerBusinessDay,
+    required this.requiredPerBusinessDay,
+    required this.actualProgressPct,
+    required this.projectedProgressPct,
+    required this.paceStatus,
+  });
+
+  final BusinessDayPeriodContext periodContext;
+  final double actualValue;
+  final double projectionActualValue;
+  final double? targetValue;
+  final double projectedValue;
+  final double averagePerBusinessDay;
+  final double? requiredPerBusinessDay;
+  final double? actualProgressPct;
+  final double? projectedProgressPct;
+  final ProjectionPaceStatus paceStatus;
+}
+
 class BusinessDayProjection {
   static const List<(int, int)> _nationalHolidays = <(int, int)>[
     (1, 1),
@@ -142,6 +189,110 @@ class BusinessDayProjection {
     return BusinessDayProjectionSummary(
       monthContext: monthContext,
       actualValue: actualValue,
+      targetValue: targetValue,
+      projectedValue: projectedValue,
+      averagePerBusinessDay: averagePerBusinessDay,
+      requiredPerBusinessDay: requiredPerBusinessDay,
+      actualProgressPct: actualProgressPct,
+      projectedProgressPct: projectedProgressPct,
+      paceStatus: paceStatus,
+    );
+  }
+
+  static BusinessDayPeriodContext buildPeriodContext({
+    required DateTime startDate,
+    required DateTime endDate,
+    DateTime? referenceDate,
+  }) {
+    final normalizedStart = _normalizeDate(startDate);
+    final normalizedEnd = _normalizeDate(endDate);
+    final normalizedReference = _normalizeDate(referenceDate ?? DateTime.now());
+    final totalBusinessDays = _countBusinessDays(
+      start: normalizedStart,
+      end: normalizedEnd,
+    );
+
+    final elapsedBusinessDays = normalizedReference.isBefore(normalizedStart)
+        ? 0
+        : _countBusinessDays(
+            start: normalizedStart,
+            end: normalizedReference.isAfter(normalizedEnd)
+                ? normalizedEnd
+                : normalizedReference,
+          );
+
+    final completedEnd = normalizedReference.subtract(const Duration(days: 1));
+    final completedBusinessDays = completedEnd.isBefore(normalizedStart)
+        ? 0
+        : _countBusinessDays(
+            start: normalizedStart,
+            end: completedEnd.isAfter(normalizedEnd)
+                ? normalizedEnd
+                : completedEnd,
+          );
+
+    final remainingBusinessDays = switch (normalizedReference) {
+      _ when normalizedReference.isBefore(normalizedStart) => totalBusinessDays,
+      _ when normalizedReference.isAfter(normalizedEnd) => 0,
+      _ =>
+        (totalBusinessDays -
+                elapsedBusinessDays +
+                (isBusinessDay(normalizedReference) ? 1 : 0))
+            .clamp(0, totalBusinessDays)
+            .toInt(),
+    };
+
+    return BusinessDayPeriodContext(
+      startDate: normalizedStart,
+      endDate: normalizedEnd,
+      totalBusinessDays: totalBusinessDays,
+      elapsedBusinessDays: elapsedBusinessDays,
+      completedBusinessDays: completedBusinessDays,
+      remainingBusinessDays: remainingBusinessDays,
+    );
+  }
+
+  static BusinessDayPeriodProjectionSummary summarizePeriod({
+    required double actualValue,
+    double? projectionActualValue,
+    required double? targetValue,
+    required DateTime startDate,
+    required DateTime endDate,
+    DateTime? referenceDate,
+  }) {
+    final periodContext = buildPeriodContext(
+      startDate: startDate,
+      endDate: endDate,
+      referenceDate: referenceDate,
+    );
+    final closedActualValue = projectionActualValue ?? actualValue;
+    final averagePerBusinessDay = periodContext.hasCompletedBusinessDays
+        ? closedActualValue / periodContext.completedBusinessDays
+        : 0.0;
+    final projectedValue = periodContext.hasCompletedBusinessDays
+        ? averagePerBusinessDay * periodContext.totalBusinessDays
+        : 0.0;
+    final requiredPerBusinessDay = _requiredPerBusinessDay(
+      actualValue: actualValue,
+      targetValue: targetValue,
+      remainingBusinessDays: periodContext.remainingBusinessDays,
+    );
+    final actualProgressPct = _progressPct(actualValue, targetValue);
+    final projectedProgressPct = _progressPct(projectedValue, targetValue);
+    final paceStatus = switch (targetValue) {
+      null => ProjectionPaceStatus.noTarget,
+      <= 0 => ProjectionPaceStatus.noTarget,
+      _ when actualValue >= targetValue => ProjectionPaceStatus.onTrack,
+      _ when !periodContext.hasCompletedBusinessDays =>
+        ProjectionPaceStatus.noTarget,
+      _ when projectedValue >= targetValue => ProjectionPaceStatus.onTrack,
+      _ => ProjectionPaceStatus.belowTarget,
+    };
+
+    return BusinessDayPeriodProjectionSummary(
+      periodContext: periodContext,
+      actualValue: actualValue,
+      projectionActualValue: closedActualValue,
       targetValue: targetValue,
       projectedValue: projectedValue,
       averagePerBusinessDay: averagePerBusinessDay,

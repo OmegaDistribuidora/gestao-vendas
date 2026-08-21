@@ -10,6 +10,7 @@ import '../models/app_user.dart';
 import '../models/blocked_orders_overview.dart';
 import '../models/customer_opportunities.dart';
 import '../models/customers_without_purchase.dart';
+import '../models/commitment_overview.dart';
 import '../models/delinquency_overview.dart';
 import '../models/home_positive_customers.dart';
 import '../models/kpi_metric_source.dart';
@@ -541,6 +542,29 @@ class AppRepository {
     }
 
     return SupplierAnalysis.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<CommitmentOverview> getCommitmentOverview({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? targetScopeProfileSlug,
+    String? targetScopeOwnerCode,
+  }) async {
+    await _ensureCurrentUserAccess();
+    final response = await _supabase.rpc(
+      'get_commitment_overview',
+      params: <String, dynamic>{
+        'target_start_date': startDate?.toIso8601String().split('T').first,
+        'target_end_date': endDate?.toIso8601String().split('T').first,
+        'target_scope_profile_slug': targetScopeProfileSlug,
+        'target_scope_owner_code': targetScopeOwnerCode,
+      },
+    );
+
+    if (response is! Map) {
+      return CommitmentOverview.empty();
+    }
+    return CommitmentOverview.fromJson(_stringKeyedMap(response));
   }
 
   Future<PerformanceOverview> getPerformanceOverview({

@@ -4,7 +4,7 @@
 
 - Nome: `Gestão de Vendas`
 - Bundle ID: `br.com.omegadistribuidora.gestaovendas`
-- Versão Flutter atual: `0.9.14+30`
+- Versão Flutter atual: `0.9.15+31`
 - Versão mínima do iOS: `15.0`
 
 O Bundle ID precisa ser idêntico no Apple Developer, App Store Connect, Firebase,
@@ -68,11 +68,12 @@ Antes do build iOS, o script `tool/prepare_ios_firebase.sh` precisa ser executad
 - A build `0.9.11 (27)` adiciona a descrição de localização exigida pela
   validação `ITMS-90683` e declara que o app utiliza somente criptografia isenta
   de documentação de exportação.
-- A próxima entrega é `0.9.14 (30)`. O Codemagic deve usar a branch/tag
-  `v0.9.14+30`, que contém `version: 0.9.14+30`; o Flutter propagará
-  automaticamente `0.9.14` para `CFBundleShortVersionString` e `30` para
+- A próxima entrega é `0.9.15 (31)`. O Codemagic deve usar a branch/tag
+  `v0.9.15+31`, que contém `version: 0.9.15+31`; o Flutter propagará
+  automaticamente `0.9.15` para `CFBundleShortVersionString` e `31` para
   `CFBundleVersion`.
-- Esta entrega adiciona câmera, biblioteca de fotos e localização à Agenda.
+- Esta entrega adiciona o módulo Compromisso; as integrações de Firebase,
+  APNs, câmera, biblioteca de fotos e localização permanecem preservadas.
   As chaves `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`,
   `NSLocationWhenInUseUsageDescription` e
   `NSLocationAlwaysAndWhenInUseUsageDescription` já estão declaradas no

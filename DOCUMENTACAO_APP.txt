@@ -2,7 +2,7 @@ DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
 Ultima atualizacao desta documentacao: 21/08/2026
-Versao atual do projeto: 0.9.14+30
+Versao atual do projeto: 0.9.15+31
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -437,6 +437,63 @@ Acoes permitidas no aplicativo:
 - Sessoes Supabase proximas da expiracao sao renovadas antes das chamadas para
   evitar falha PGRST303/JWT expired.
 
+6.13 Compromisso
+
+Objetivo e fonte:
+
+- Acompanha metas comerciais definidas para intervalos fechados, separadas da
+  meta mensal de Performance e da meta diaria da Home.
+- A fonte oficial e filial.tauxcompromisso no PostgreSQL local Omega.
+- A chave logica da fonte e perfil, codigo, data inicial e data final.
+- O realizado financeiro usa Venda Liquida. A positivacao considera somente
+  clientes novos no mes cuja primeira compra mensal ocorreu dentro do periodo
+  do compromisso e cujo saldo do periodo permaneceu positivo apos devolucoes.
+  Cada cliente e contado uma unica vez no escopo do supervisor/coordenador.
+- Os periodos de compromisso devem comecar e terminar dentro do mesmo mes.
+
+Perfis e hierarquia:
+
+- Disponivel somente para Supervisor, Coordenador, Diretoria e Outros.
+- Supervisor visualiza apenas o proprio compromisso.
+- Coordenador visualiza o proprio realizado; por enquanto, sua meta e a soma
+  dos compromissos dos supervisores vinculados no mesmo periodo. Uma meta
+  direta de coordenador e usada apenas quando o periodo nao possui metas dos
+  seus supervisores.
+- Diretoria e Outros visualizam a lista completa e podem filtrar um supervisor
+  ou coordenador, alem do periodo.
+
+Indicadores e projecao:
+
+- Exibe meta e realizado ao vivo de Financeiro e Positivacao, progresso, media
+  por dia util encerrado, necessidade diaria, tendencia ate o fim do intervalo
+  e situacao do ritmo.
+- Media e tendencia usam somente o realizado ate ontem e os dias uteis ja
+  encerrados. No primeiro dia, a tela aguarda o fechamento antes de projetar.
+- A necessidade usa o realizado ao vivo, inclusive o dia atual, e divide o
+  saldo da meta pelos dias uteis restantes, incluindo hoje quando for util.
+- Dias uteis usam a mesma regra da Performance, incluindo fins de semana,
+  feriados nacionais cadastrados e feriados estaduais do Ceara.
+- O filtro oferece todos os pares de data inicial/final existentes na fonte e
+  prioriza o periodo que contem a data atual; na ausencia dele, usa o mais
+  recente.
+
+Implementacao:
+
+- Tabelas Supabase: public.app_commitments e
+  public.app_commitment_sync_state.
+- RPC do aplicativo: get_commitment_overview.
+- RPC atomica de carga: apply_commitments_sync.
+- Script: tool/commitments_sync.py.
+- DAG: airflow/omega_commitments_sync_dag.py.
+- Modelo: lib/models/commitment_overview.dart.
+- Tela: lib/screens/commitment_screen.dart.
+- Migration inicial: 20260821110000_commitments_module.sql.
+- Ajuste de tendencia e positivacao nova:
+  20260821183000_commitment_closed_trend_new_positivation.sql.
+- Correcao da soma de metas por coordenador, protegendo a hierarquia contra
+  codigos iguais pertencentes a perfis diferentes:
+  20260821193000_fix_commitment_coordinator_target_sum.sql.
+
 
 7. FLUXO DE DADOS
 ------------------
@@ -496,6 +553,8 @@ Dados comerciais:
 - app_customer_opportunities
 - app_customer_opportunity_supplier_map
 - app_customer_recovered_opportunities
+- app_commitments
+- app_commitment_sync_state
 
 Controle de ETL:
 
@@ -525,6 +584,7 @@ security definer com validacao explicita do usuario e do escopo.
 - get_recovered_customer_opportunities
 - get_usage_report
 - record_module_access
+- get_commitment_overview
 
 Os nomes e assinaturas definitivos devem ser confirmados na migration mais
 recente, pois funcoes podem ser substituidas por migrations posteriores.
@@ -611,6 +671,10 @@ Scripts principais em tool/:
 
 - supabase_sync_common.py
   Autenticacao tecnica, staging, chamadas RPC e registro das execucoes.
+
+- commitments_sync.py
+  Le filial.tauxcompromisso, calcula um checksum canonico e somente autentica
+  no Supabase quando a fotografia completa da fonte foi alterada.
 
 
 11. DAGS DO AIRFLOW
@@ -744,6 +808,19 @@ omega_gold_performance_app_sync
   quatro anos. Elas nao fazem mais parte do caminho critico da performance do
   aplicativo e nao devem ter sua frequencia aumentada por causa da Gold.
 
+omega_commitments_sync
+
+- DAG versionada em airflow/omega_commitments_sync_dag.py e implantada em
+  /home/powerbi/airflow/dags.
+- Agenda operacional: a cada 2 minutos, das 06:00 as 23:59.
+- Consulta somente o PostgreSQL local filial.tauxcompromisso em cada ciclo.
+- Antes de abrir qualquer conexao com o Supabase, compara o SHA-256 canonico da
+  fonte com o estado protegido em
+  C:\Users\POWERBI\OneDrive - omegadistribuidora.com.br\Projetos\William\app\.state\commitments_sync.sha256.
+- Se nao houver mudanca, encerra com sucesso e registra
+  supabase_connection=false. Se houver, aplica upsert e exclusao atomicos pela
+  RPC apply_commitments_sync e so depois atualiza o checksum local.
+
 omega_customer_opportunities_prune
 
 - Agenda padrao: 07:15, 10:15, 13:15 e 16:15.
@@ -808,9 +885,31 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.14
-- versionCode / CFBundleVersion: 30
-- Release multiplataforma: 0.9.14+30
+- versionName / CFBundleShortVersionString: 0.9.15
+- versionCode / CFBundleVersion: 31
+- Release multiplataforma: 0.9.15+31
+
+Release 0.9.15+31:
+
+- Novo modulo Compromisso para Supervisor, Coordenador, Diretoria e Outros,
+  posicionado antes da Performance e indisponivel para vendedores.
+- Metas financeiras e de positivacao sao organizadas por intervalos definidos
+  em filial.tauxcompromisso, com selecao dos periodos existentes.
+- O realizado financeiro usa Venda Liquida e a positivacao considera somente
+  clientes novos no mes, com saldo positivo dentro do periodo selecionado.
+- A tela apresenta progresso, media por dia util encerrado, tendencia,
+  necessidade diaria e situacao do ritmo para Financeiro e Positivacao.
+- A tendencia desconsidera o dia atual ainda aberto; a necessidade inclui o
+  realizado ao vivo e os dias uteis restantes no compromisso.
+- Supervisor visualiza somente o proprio compromisso; Coordenador usa o
+  proprio realizado e a soma das metas dos seus supervisores; Diretoria e
+  Outros podem consultar toda a lista e filtrar por usuario.
+- A soma das metas dos coordenadores conta cada compromisso de supervisor uma
+  unica vez, mesmo quando perfis diferentes compartilham o mesmo codigo.
+- Nova carga omega_commitments_sync verifica filial.tauxcompromisso a cada
+  dois minutos e acessa o Supabase somente quando o conteudo da fonte mudou.
+- Preparacao multiplataforma propaga 0.9.15 build 31 para Android e iOS,
+  preservando Firebase, APNs, permissoes e assinatura automatica do Codemagic.
 
 Release 0.9.14+30:
 
@@ -1159,7 +1258,7 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Entrega multiplataforma atual: 0.9.14 build 30.
+- Entrega multiplataforma atual: 0.9.15 build 31.
 
 
 14. DESENVOLVIMENTO E VALIDACAO

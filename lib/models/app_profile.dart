@@ -29,6 +29,12 @@ class AppProfile {
     boardSlug,
     othersSlug,
   }.contains(slug);
+  bool get canAccessCommitment => const <String>{
+    supervisorSlug,
+    coordinatorSlug,
+    boardSlug,
+    othersSlug,
+  }.contains(slug);
 
   factory AppProfile.fromJson(Map<String, dynamic> json) {
     return AppProfile(
