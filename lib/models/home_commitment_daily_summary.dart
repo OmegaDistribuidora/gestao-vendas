@@ -6,11 +6,15 @@ class HomeCommitmentDailySummary {
   const HomeCommitmentDailySummary({
     required this.financialNeed,
     required this.positivationNeed,
+    required this.financialActualToday,
+    required this.positivationActualToday,
     this.conflictingPeriodCount = 0,
   });
 
   final double? financialNeed;
   final double? positivationNeed;
+  final double? financialActualToday;
+  final double? positivationActualToday;
   final int conflictingPeriodCount;
 
   bool get hasFinancialNeed => financialNeed != null;
@@ -53,6 +57,8 @@ class HomeCommitmentDailySummary {
       return HomeCommitmentDailySummary(
         financialNeed: null,
         positivationNeed: null,
+        financialActualToday: null,
+        positivationActualToday: null,
         conflictingPeriodCount: activePeriodValues.length,
       );
     }
@@ -85,9 +91,21 @@ class HomeCommitmentDailySummary {
       0,
       (total, item) => total + item.positivationActual,
     );
+    final financialClosedActual = visibleItems.fold<double>(
+      0,
+      (total, item) => total + item.financialClosedActual,
+    );
+    final positivationClosedActual = visibleItems.fold<double>(
+      0,
+      (total, item) => total + item.positivationClosedActual,
+    );
+    final financialActualToday = financialActual - financialClosedActual;
+    final positivationActualToday =
+        positivationActual - positivationClosedActual;
 
     final financialProjection = BusinessDayProjection.summarizePeriod(
       actualValue: financialActual,
+      projectionActualValue: financialClosedActual,
       targetValue: financialTarget > 0 ? financialTarget : null,
       startDate: startDate,
       endDate: endDate,
@@ -95,6 +113,7 @@ class HomeCommitmentDailySummary {
     );
     final positivationProjection = BusinessDayProjection.summarizePeriod(
       actualValue: positivationActual,
+      projectionActualValue: positivationClosedActual,
       targetValue: positivationTarget > 0 ? positivationTarget : null,
       startDate: startDate,
       endDate: endDate,
@@ -104,6 +123,10 @@ class HomeCommitmentDailySummary {
     return HomeCommitmentDailySummary(
       financialNeed: financialProjection.requiredPerBusinessDay,
       positivationNeed: positivationProjection.requiredPerBusinessDay,
+      financialActualToday: financialActualToday > 0 ? financialActualToday : 0,
+      positivationActualToday: positivationActualToday > 0
+          ? positivationActualToday
+          : 0,
     );
   }
 

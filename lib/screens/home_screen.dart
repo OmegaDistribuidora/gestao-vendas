@@ -1275,7 +1275,7 @@ class _HomeScreenState extends State<HomeScreen> {
         : _DailyCommitmentProgressData(
             targetLabel: '${_formatCurrency(financialCommitmentNeed)}/dia',
             progressPercent: _commitmentProgressPct(
-              actualToday: _todayAmount,
+              actualToday: commitment!.financialActualToday ?? 0,
               dailyNeed: financialCommitmentNeed,
             ),
             color: kpiFinancialColor,
@@ -1292,10 +1292,7 @@ class _HomeScreenState extends State<HomeScreen> {
             targetLabel:
                 '${_decimalFormat.format(positivationCommitmentNeed.ceil())}/dia',
             progressPercent: _commitmentProgressPct(
-              actualToday:
-                  (_homeKpis.dailyNewPositivation ??
-                          _todayPositiveCustomers.totalNewCustomers)
-                      .toDouble(),
+              actualToday: commitment!.positivationActualToday ?? 0,
               dailyNeed: positivationCommitmentNeed,
             ),
             color: kpiPositivationColor,

@@ -23,6 +23,8 @@ void main() {
     expect(summary, isNotNull);
     expect(summary!.financialNeed, closeTo(41666.6667, 0.001));
     expect(summary.positivationNeed, closeTo(33.3333, 0.001));
+    expect(summary.financialActualToday, closeTo(4628.02, 0.001));
+    expect(summary.positivationActualToday, 9);
   });
 
   test(
@@ -54,6 +56,8 @@ void main() {
       expect(summary, isNotNull);
       expect(summary!.financialNeed, closeTo(141666.6667, 0.001));
       expect(summary.positivationNeed, 100);
+      expect(summary.financialActualToday, 100000);
+      expect(summary.positivationActualToday, 100);
     },
   );
 
@@ -88,6 +92,64 @@ void main() {
       expect(summary.positivationNeed, 100);
     },
   );
+
+  test('home need ignores the current open day after the first day', () {
+    final summary = HomeCommitmentDailySummary.fromOverview(
+      overview: _overview(<CommitmentItem>[
+        _item(
+          profileSlug: AppProfile.supervisorSlug,
+          ownerCode: '20',
+          financialTarget: 250000,
+          positivationTarget: 200,
+          financialActual: 50000,
+          positivationActual: 50,
+          financialClosedActual: 25000,
+          positivationClosedActual: 20,
+        ),
+      ]),
+      viewerProfileSlug: AppProfile.supervisorSlug,
+      referenceDate: DateTime(2026, 8, 25),
+    );
+
+    expect(summary, isNotNull);
+    expect(summary!.financialNeed, closeTo(45000, 0.001));
+    expect(summary.positivationNeed, closeTo(36, 0.001));
+    expect(summary.financialActualToday, 25000);
+    expect(summary.positivationActualToday, 30);
+  });
+
+  test('board commitment progress ignores non-participating coordinators', () {
+    final summary = HomeCommitmentDailySummary.fromOverview(
+      overview: _overview(<CommitmentItem>[
+        _item(
+          profileSlug: AppProfile.coordinatorSlug,
+          ownerCode: '10',
+          financialTarget: 850000,
+          positivationTarget: 600,
+          financialActual: 140000,
+          positivationActual: 120,
+          financialClosedActual: 100000,
+          positivationClosedActual: 100,
+        ),
+        _item(
+          profileSlug: AppProfile.supervisorSlug,
+          ownerCode: '20',
+          financialTarget: 250000,
+          positivationTarget: 200,
+          financialActual: 50000,
+          positivationActual: 40,
+          financialClosedActual: 30000,
+          positivationClosedActual: 30,
+        ),
+      ]),
+      viewerProfileSlug: AppProfile.boardSlug,
+      referenceDate: DateTime(2026, 8, 25),
+    );
+
+    expect(summary, isNotNull);
+    expect(summary!.financialActualToday, 40000);
+    expect(summary.positivationActualToday, 20);
+  });
 
   test('reports overlapping commitment periods instead of choosing one', () {
     final summary = HomeCommitmentDailySummary.fromOverview(
@@ -129,6 +191,8 @@ void main() {
     expect(summary.conflictingPeriodCount, 2);
     expect(summary.financialNeed, isNull);
     expect(summary.positivationNeed, isNull);
+    expect(summary.financialActualToday, isNull);
+    expect(summary.positivationActualToday, isNull);
   });
 
   test('does not expose an old commitment as a daily home target', () {
@@ -172,6 +236,8 @@ CommitmentItem _item({
   required double positivationTarget,
   required double financialActual,
   required int positivationActual,
+  double financialClosedActual = 0,
+  int positivationClosedActual = 0,
 }) {
   return CommitmentItem(
     profileSlug: profileSlug,
@@ -181,8 +247,8 @@ CommitmentItem _item({
     positivationTarget: positivationTarget,
     financialActual: financialActual,
     positivationActual: positivationActual,
-    financialClosedActual: 0,
-    positivationClosedActual: 0,
+    financialClosedActual: financialClosedActual,
+    positivationClosedActual: positivationClosedActual,
     lastUpdatedAt: null,
   );
 }

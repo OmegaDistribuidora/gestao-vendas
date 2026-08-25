@@ -96,7 +96,7 @@ void main() {
     expect(summary.periodContext.remainingBusinessDays, 3);
     expect(summary.averagePerBusinessDay, 50);
     expect(summary.projectedValue, 250);
-    expect(summary.requiredPerBusinessDay, 50);
+    expect(summary.requiredPerBusinessDay, closeTo(66.6667, 0.001));
     expect(summary.paceStatus, ProjectionPaceStatus.belowTarget);
   });
 
@@ -131,7 +131,7 @@ void main() {
     expect(summary.periodContext.remainingBusinessDays, 1);
     expect(summary.averagePerBusinessDay, 45);
     expect(summary.projectedValue, 225);
-    expect(summary.requiredPerBusinessDay, 23);
+    expect(summary.requiredPerBusinessDay, 70);
     expect(summary.paceStatus, ProjectionPaceStatus.belowTarget);
   });
 
@@ -171,7 +171,7 @@ void main() {
     expect(summary.requiredPerBusinessDay, closeTo(41666.6667, 0.001));
   });
 
-  test('recalculates commitment need after the first business day closes', () {
+  test('uses only the first closed day in second-day commitment need', () {
     final summary = BusinessDayProjection.summarizePeriod(
       actualValue: 30000,
       projectionActualValue: 25000,
@@ -184,7 +184,23 @@ void main() {
     expect(summary.periodContext.totalBusinessDays, 6);
     expect(summary.periodContext.completedBusinessDays, 1);
     expect(summary.periodContext.remainingBusinessDays, 5);
-    expect(summary.requiredPerBusinessDay, closeTo(44000, 0.001));
+    expect(summary.requiredPerBusinessDay, closeTo(45000, 0.001));
+  });
+
+  test('uses only closed days in third-day commitment need', () {
+    final summary = BusinessDayProjection.summarizePeriod(
+      actualValue: 70000,
+      projectionActualValue: 55000,
+      targetValue: 250000,
+      startDate: DateTime(2026, 8, 24),
+      endDate: DateTime(2026, 8, 31),
+      referenceDate: DateTime(2026, 8, 26),
+    );
+
+    expect(summary.periodContext.totalBusinessDays, 6);
+    expect(summary.periodContext.completedBusinessDays, 2);
+    expect(summary.periodContext.remainingBusinessDays, 4);
+    expect(summary.requiredPerBusinessDay, closeTo(48750, 0.001));
   });
 
   test('keeps first-day commitment need fixed despite live sales', () {

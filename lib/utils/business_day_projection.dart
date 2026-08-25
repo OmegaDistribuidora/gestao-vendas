@@ -277,12 +277,14 @@ class BusinessDayProjection {
     final projectedValue = periodContext.hasProjectionBasis
         ? averagePerBusinessDay * periodContext.totalBusinessDays
         : 0.0;
-    // Enquanto nenhum dia util do compromisso foi encerrado, a necessidade
-    // precisa representar a distribuicao original da meta por todo o periodo.
-    // O realizado ao vivo do primeiro dia continua alimentando tendencia e
-    // progresso, mas so passa a recalcular a necessidade no dia seguinte.
+    // A necessidade considera somente dias encerrados. No primeiro dia, sem
+    // realizado fechado, ela representa a distribuicao original da meta por
+    // todo o periodo. O realizado ao vivo segue alimentando progresso e, no
+    // primeiro dia, tendencia, mas so entra na necessidade no dia seguinte.
     final requiredPerBusinessDay = _requiredPerBusinessDay(
-      actualValue: periodContext.hasCompletedBusinessDays ? actualValue : 0.0,
+      actualValue: periodContext.hasCompletedBusinessDays
+          ? effectiveProjectionActual
+          : 0.0,
       targetValue: targetValue,
       remainingBusinessDays: periodContext.remainingBusinessDays,
     );

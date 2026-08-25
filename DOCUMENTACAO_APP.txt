@@ -2,7 +2,7 @@ DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
 Ultima atualizacao desta documentacao: 25/08/2026
-Versao atual do projeto: 0.9.16+32
+Versao atual do projeto: 0.9.17+33
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -488,12 +488,17 @@ Indicadores e projecao:
   os dias uteis do compromisso, recalculando a tendencia a cada nova consulta.
 - No primeiro dia do compromisso, a necessidade permanece fixa em meta total
   dividida pelo total de dias uteis do periodo, sem descontar o realizado ao
-  vivo. A partir do dia seguinte, quando existe ao menos um dia util fechado,
-  a necessidade volta a usar o realizado acumulado e os dias uteis restantes.
+  vivo. A partir do dia seguinte, a necessidade desconta somente o realizado
+  dos dias encerrados ate ontem e divide o saldo pelos dias uteis restantes,
+  incluindo o dia atual. O realizado de hoje so altera essa necessidade no
+  dia seguinte. Para Positivacao, o realizado fechado continua considerando
+  exclusivamente clientes novos no mes.
 - Na Home, enquanto o compromisso vigente inclui a data atual, os cards de
   Venda e Positivacao exibem uma faixa compacta "Compromisso". A barra compara
-  o realizado bruto de hoje com a necessidade financeira do compromisso e as
-  positivacoes novas de hoje com a necessidade diaria de positivacao. Para
+  o realizado bruto de hoje exclusivamente dos participantes do compromisso
+  com a necessidade financeira correspondente, e as positivacoes novas de hoje
+  desse mesmo escopo com a necessidade diaria de positivacao. Na visao geral,
+  coordenadores sem compromisso nao entram no realizado dessas barras. Para
   Diretoria/Outros, o consolidado usa os coordenadores, sem somar novamente os
   supervisores. Para coordenadores, a linha consolidada corresponde a soma dos
   seus supervisores. Supervisores 33 e 35 nao exibem a faixa de positivacao.
@@ -922,9 +927,24 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.16
-- versionCode / CFBundleVersion: 32
-- Release multiplataforma: 0.9.16+32
+- versionName / CFBundleShortVersionString: 0.9.17
+- versionCode / CFBundleVersion: 33
+- Release multiplataforma: 0.9.17+33
+
+Release 0.9.17+33:
+
+- A necessidade diaria do Compromisso passa a descontar apenas o realizado
+  dos dias encerrados ate ontem. No primeiro dia, permanece igual a meta total
+  dividida pelos dias uteis do periodo.
+- A regra e dinamica para todos os dias, compromissos, supervisores,
+  coordenadores e para o consolidado da empresa exibido a Diretoria/Outros.
+- A barra de Compromisso na Home usa somente o realizado de hoje dos
+  coordenadores participantes, sem incluir coordenadores que nao possuem meta
+  no periodo e sem duplicar os supervisores.
+- A positivacao do compromisso continua considerando exclusivamente clientes
+  novos no mes, tanto na necessidade quanto no progresso diario da Home.
+- Preparacao multiplataforma propaga 0.9.17 build 33 para Android e iOS,
+  preservando Firebase, APNs, permissoes e assinatura automatica do Codemagic.
 
 Release 0.9.16+32:
 
@@ -1317,7 +1337,7 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Entrega multiplataforma atual: 0.9.16 build 32.
+- Entrega multiplataforma atual: 0.9.17 build 33.
 
 
 14. DESENVOLVIMENTO E VALIDACAO
