@@ -39,6 +39,16 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
     AppProfile.othersSlug,
   }.contains(_overview.viewerProfileSlug);
 
+  List<CommitmentItem> get _displayItems {
+    if (!_showsUserFilter || _selectedScopeValue != null) {
+      return _overview.items;
+    }
+    final companyTotal = CommitmentItem.companyTotalFrom(_overview.items);
+    return companyTotal == null
+        ? _overview.items
+        : <CommitmentItem>[companyTotal, ..._overview.items];
+  }
+
   @override
   void initState() {
     super.initState();
@@ -196,7 +206,7 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
                       const SizedBox(height: 12),
                       _buildPeriodSummary(),
                       const SizedBox(height: 12),
-                      if (_overview.items.isEmpty)
+                      if (_displayItems.isEmpty)
                         _buildEmptyCard(
                           icon: Icons.manage_search_outlined,
                           title: 'Nenhum usuário neste período',
@@ -204,7 +214,7 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
                               'Não há compromisso associado ao filtro selecionado.',
                         )
                       else
-                        ..._overview.items.map(
+                        ..._displayItems.map(
                           (item) => Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: _buildCommitmentCard(item),
@@ -372,9 +382,13 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
   }
 
   Widget _buildCommitmentCard(CommitmentItem item) {
+    final isCompany = item.profileSlug == CommitmentItem.companyProfileSlug;
     final role = item.profileSlug == AppProfile.coordinatorSlug
         ? 'Coordenador'
         : 'Supervisor';
+    final subtitle = isCompany
+        ? 'Soma dos coordenadores'
+        : '$role ${item.ownerCode}';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -406,7 +420,7 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '$role ${item.ownerCode}',
+                        subtitle,
                         style: const TextStyle(
                           color: Color(0xFF738098),
                           fontWeight: FontWeight.w600,
@@ -467,7 +481,10 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
       endDate: _overview.selectedEndDate!,
     );
     final progress = ((summary.actualProgressPct ?? 0) / 100).clamp(0.0, 1.0);
-    final hasProjection = summary.periodContext.hasCompletedBusinessDays;
+    final hasProjection = summary.periodContext.hasProjectionBasis;
+    final averageLabel = summary.periodContext.hasCompletedBusinessDays
+        ? 'Média fechada'
+        : 'Média atual';
     final pace = summary.paceStatus;
     final paceColor = !hasProjection && actual < target
         ? const Color(0xFF738098)
@@ -569,7 +586,7 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
                     : 'Aguardando',
               ),
               _InfoPill(
-                label: 'Média fechada',
+                label: averageLabel,
                 value: hasProjection
                     ? dailyFormatter(summary.averagePerBusinessDay)
                     : 'Aguardando',

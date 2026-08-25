@@ -1,4 +1,5 @@
 import '../utils/text_sanitizer.dart';
+import 'app_profile.dart';
 
 class CommitmentOverview {
   const CommitmentOverview({
@@ -150,6 +151,8 @@ class CommitmentScope {
 }
 
 class CommitmentItem {
+  static const String companyProfileSlug = 'empresa';
+
   const CommitmentItem({
     required this.profileSlug,
     required this.ownerCode,
@@ -173,6 +176,55 @@ class CommitmentItem {
   final double financialClosedActual;
   final int positivationClosedActual;
   final DateTime? lastUpdatedAt;
+
+  static CommitmentItem? companyTotalFrom(Iterable<CommitmentItem> items) {
+    final coordinators = items
+        .where((item) => item.profileSlug == AppProfile.coordinatorSlug)
+        .toList();
+    if (coordinators.isEmpty) {
+      return null;
+    }
+
+    DateTime? mostRecentUpdate;
+    for (final item in coordinators) {
+      final updatedAt = item.lastUpdatedAt;
+      if (updatedAt != null &&
+          (mostRecentUpdate == null || updatedAt.isAfter(mostRecentUpdate))) {
+        mostRecentUpdate = updatedAt;
+      }
+    }
+
+    return CommitmentItem(
+      profileSlug: companyProfileSlug,
+      ownerCode: '',
+      displayName: 'Ômega Distribuidora',
+      financialTarget: coordinators.fold(
+        0,
+        (total, item) => total + item.financialTarget,
+      ),
+      positivationTarget: coordinators.fold(
+        0,
+        (total, item) => total + item.positivationTarget,
+      ),
+      financialActual: coordinators.fold(
+        0,
+        (total, item) => total + item.financialActual,
+      ),
+      positivationActual: coordinators.fold(
+        0,
+        (total, item) => total + item.positivationActual,
+      ),
+      financialClosedActual: coordinators.fold(
+        0,
+        (total, item) => total + item.financialClosedActual,
+      ),
+      positivationClosedActual: coordinators.fold(
+        0,
+        (total, item) => total + item.positivationClosedActual,
+      ),
+      lastUpdatedAt: mostRecentUpdate,
+    );
+  }
 
   factory CommitmentItem.fromJson(Map<String, dynamic> json) {
     return CommitmentItem(

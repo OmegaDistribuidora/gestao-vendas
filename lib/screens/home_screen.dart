@@ -7,8 +7,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
+import '../models/commitment_overview.dart';
+import '../models/home_commitment_daily_summary.dart';
+import '../models/home_dashboard.dart';
 import '../models/home_positive_customers.dart';
-import '../models/kpi_metric_source.dart';
 import '../models/performance_overview.dart';
 import '../models/seller_home_kpis.dart';
 import '../services/app_repository.dart';
@@ -63,7 +65,12 @@ class _HomeScreenState extends State<HomeScreen> {
     totalAmount: 0,
     items: <HomePositiveCustomer>[],
   );
+  CommitmentOverview _commitmentOverview = CommitmentOverview.empty();
   PerformanceOverview _performanceOverview = PerformanceOverview.empty();
+  List<HomeScopeOption> _homeScopeOptions = const <HomeScopeOption>[];
+  String? _selectedHomeScopeValue;
+  String _homeEffectiveProfileSlug = '';
+  String _homeEffectiveOwnerCode = '';
   StreamSubscription<PushNavigationIntent>? _pushNavigationSubscription;
   Timer? _refreshTimer;
   bool _autoRefreshing = false;
@@ -91,6 +98,36 @@ class _HomeScreenState extends State<HomeScreen> {
       !_isSeller && !_isSupervisor && !_isCoordinator;
   bool get _showsAgendaModule =>
       widget.currentUser.profile?.canAccessAgenda ?? false;
+  bool get _showsHomeScopeFilter =>
+      !_isSeller &&
+      _homeScopeOptions.isNotEmpty &&
+      const <String>{
+        AppProfile.supervisorSlug,
+        AppProfile.coordinatorSlug,
+        AppProfile.boardSlug,
+        AppProfile.othersSlug,
+      }.contains(widget.currentUser.profileSlug);
+
+  HomeScopeOption? get _selectedHomeScope {
+    final selectedValue = _selectedHomeScopeValue;
+    if (selectedValue == null) {
+      return null;
+    }
+    for (final scope in _homeScopeOptions) {
+      if (scope.value == selectedValue) {
+        return scope;
+      }
+    }
+    return null;
+  }
+
+  String get _activeHomeProfileSlug => _homeEffectiveProfileSlug.isNotEmpty
+      ? _homeEffectiveProfileSlug
+      : widget.currentUser.profileSlug;
+
+  String get _activeHomeOwnerCode => _homeEffectiveOwnerCode.isNotEmpty
+      ? _homeEffectiveOwnerCode
+      : widget.currentUser.code;
 
   double get _todayAmount => _homeKpis.grossAmount;
   double get _todayVolume => _homeKpis.grossVolume;
@@ -170,7 +207,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _loadContent({bool silent = false}) async {
+  Future<void> _loadContent({
+    bool silent = false,
+    String? targetScopeProfileSlug,
+    String? targetScopeOwnerCode,
+    bool useCurrentScope = true,
+  }) async {
     if (!silent) {
       setState(() {
         _loading = true;
@@ -181,30 +223,21 @@ class _HomeScreenState extends State<HomeScreen> {
     final today = _nowInSaoPaulo();
     final start = _saoPauloDayStartUtc(today);
     final end = _saoPauloDayEndUtc(today);
+    final currentScope = useCurrentScope ? _selectedHomeScope : null;
+    final requestedProfileSlug = useCurrentScope
+        ? currentScope?.profileSlug
+        : targetScopeProfileSlug;
+    final requestedOwnerCode = useCurrentScope
+        ? currentScope?.ownerCode
+        : targetScopeOwnerCode;
 
     try {
-      final homeKpis = await _repository.getHomeKpis(
+      final dashboard = await _repository.getHomeDashboard(
         start: start,
         end: end,
-        metricSource: KpiMetricSource.venda,
+        targetScopeProfileSlug: requestedProfileSlug,
+        targetScopeOwnerCode: requestedOwnerCode,
       );
-      var todayPositiveCustomers = _todayPositiveCustomers;
-      try {
-        todayPositiveCustomers = await _repository.getHomePositiveCustomers(
-          start: start,
-          end: end,
-        );
-      } catch (_) {
-        // Mantem o ultimo resumo valido se o detalhamento falhar.
-      }
-      var performanceOverview = PerformanceOverview.empty();
-      if (_isNamedKpiProfile) {
-        try {
-          performanceOverview = await _repository.getPerformanceOverview();
-        } catch (_) {
-          performanceOverview = PerformanceOverview.empty();
-        }
-      }
       var customerOpportunitiesEnabled = false;
       try {
         customerOpportunitiesEnabled = await _repository
@@ -218,9 +251,18 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       setState(() {
-        _homeKpis = homeKpis;
-        _todayPositiveCustomers = todayPositiveCustomers;
-        _performanceOverview = performanceOverview;
+        _homeKpis = dashboard.kpis;
+        _todayPositiveCustomers = dashboard.positiveCustomers;
+        _commitmentOverview = dashboard.commitmentOverview;
+        _performanceOverview = dashboard.performanceOverview;
+        _homeScopeOptions = dashboard.availableScopes;
+        _selectedHomeScopeValue =
+            dashboard.selectedScopeProfileSlug == null ||
+                dashboard.selectedScopeOwnerCode == null
+            ? null
+            : '${dashboard.selectedScopeProfileSlug}|${dashboard.selectedScopeOwnerCode}';
+        _homeEffectiveProfileSlug = dashboard.effectiveProfileSlug;
+        _homeEffectiveOwnerCode = dashboard.effectiveOwnerCode;
         _customerOpportunitiesEnabled = customerOpportunitiesEnabled;
         _loading = false;
       });
@@ -254,10 +296,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _showTodayPositiveCustomers() async {
-    final today = _nowInSaoPaulo();
-    final start = _saoPauloDayStartUtc(today);
-    final end = _saoPauloDayEndUtc(today);
-
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -266,9 +304,8 @@ class _HomeScreenState extends State<HomeScreen> {
         return FractionallySizedBox(
           heightFactor: 0.72,
           child: FutureBuilder<HomePositiveCustomers>(
-            future: _repository.getHomePositiveCustomers(
-              start: start,
-              end: end,
+            future: Future<HomePositiveCustomers>.value(
+              _todayPositiveCustomers,
             ),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -766,6 +803,19 @@ class _HomeScreenState extends State<HomeScreen> {
     return (actualToday / dailyTarget) * 100;
   }
 
+  double? _commitmentProgressPct({
+    required double actualToday,
+    required double? dailyNeed,
+  }) {
+    if (dailyNeed == null) {
+      return null;
+    }
+    if (dailyNeed <= 0) {
+      return 100;
+    }
+    return (actualToday / dailyNeed) * 100;
+  }
+
   String get _welcomeTitle {
     final displayName = widget.currentUser.displayName?.trim();
     if (_isAdmin) {
@@ -955,6 +1005,216 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String get _activeHomeViewTitle => switch (_activeHomeProfileSlug) {
+    AppProfile.sellerSlug => 'Visão do vendedor',
+    AppProfile.supervisorSlug => 'Visão do supervisor',
+    AppProfile.coordinatorSlug => 'Visão do coordenador',
+    _ => 'Visão geral',
+  };
+
+  String get _activeHomeDisplayName {
+    final selectedScope = _selectedHomeScope;
+    if (selectedScope != null && selectedScope.displayName.isNotEmpty) {
+      return selectedScope.displayName;
+    }
+    final displayName = widget.currentUser.displayName?.trim();
+    return displayName == null || displayName.isEmpty
+        ? widget.currentUser.label
+        : displayName;
+  }
+
+  Future<void> _handleHomeScopeSelection(HomeScopeOption? scope) async {
+    if (scope?.value == _selectedHomeScopeValue) {
+      return;
+    }
+    await _loadContent(
+      targetScopeProfileSlug: scope?.profileSlug,
+      targetScopeOwnerCode: scope?.ownerCode,
+      useCurrentScope: false,
+    );
+  }
+
+  Future<void> _showHomeScopeSelector() async {
+    final selectedValue = await showModalBottomSheet<String?>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: FractionallySizedBox(
+            heightFactor: 0.72,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                  child: Text(
+                    'Selecione quem deseja filtrar',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Color(0xFFF0F2FF),
+                          foregroundColor: primaryColor,
+                          child: Icon(Icons.home_outlined),
+                        ),
+                        title: Text(
+                          const <String>{
+                                AppProfile.boardSlug,
+                                AppProfile.othersSlug,
+                              }.contains(widget.currentUser.profileSlug)
+                              ? 'Visão geral'
+                              : 'Minha visão',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: Text(
+                          widget.currentUser.displayName?.trim().isNotEmpty ==
+                                  true
+                              ? widget.currentUser.displayName!.trim()
+                              : widget.currentUser.label,
+                        ),
+                        trailing: _selectedHomeScopeValue == null
+                            ? const Icon(
+                                Icons.check_circle,
+                                color: primaryColor,
+                              )
+                            : null,
+                        onTap: () => Navigator.of(context).pop(''),
+                      ),
+                      ..._homeScopeOptions.map(
+                        (scope) => ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: const Color(0xFFF0F2FF),
+                            foregroundColor: primaryColor,
+                            child: Text(
+                              scope.profileLabel.characters.first,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            scope.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text(
+                            '${scope.profileLabel} • ${scope.ownerCode}',
+                          ),
+                          trailing: _selectedHomeScopeValue == scope.value
+                              ? const Icon(
+                                  Icons.check_circle,
+                                  color: primaryColor,
+                                )
+                              : null,
+                          onTap: () => Navigator.of(context).pop(scope.value),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || selectedValue == null) {
+      return;
+    }
+    if (selectedValue.isEmpty) {
+      await _handleHomeScopeSelection(null);
+      return;
+    }
+    for (final scope in _homeScopeOptions) {
+      if (scope.value == selectedValue) {
+        await _handleHomeScopeSelection(scope);
+        return;
+      }
+    }
+  }
+
+  Widget _buildHomeScopeFilter() {
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: _showHomeScopeSelector,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F2FF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.group_outlined,
+                  color: primaryColor,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Filtrar',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: const Color(0xFF6B7485),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _activeHomeViewTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: const Color(0xFF172554),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  _activeHomeDisplayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: const Color(0xFF172554),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Color(0xFF172554),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildKpiOverviewSection() {
     final overallItem = _overallPerformanceItem;
     final usesSkuMetric = _homeKpis.secondaryMetricType != null
@@ -1004,6 +1264,43 @@ class _HomeScreenState extends State<HomeScreen> {
       actualToday: secondaryActualToday,
       dailyTarget: _homeKpis.dailySecondaryTarget,
     );
+    final commitment = HomeCommitmentDailySummary.fromOverview(
+      overview: _commitmentOverview,
+      viewerProfileSlug: _activeHomeProfileSlug,
+      referenceDate: _nowInSaoPaulo(),
+    );
+    final financialCommitmentNeed = commitment?.financialNeed;
+    final financialCommitment = financialCommitmentNeed == null
+        ? null
+        : _DailyCommitmentProgressData(
+            targetLabel: '${_formatCurrency(financialCommitmentNeed)}/dia',
+            progressPercent: _commitmentProgressPct(
+              actualToday: _todayAmount,
+              dailyNeed: financialCommitmentNeed,
+            ),
+            color: kpiFinancialColor,
+            backgroundColor: kpiFinancialBackgroundColor,
+          );
+    final hidesPositivationCommitment =
+        _activeHomeProfileSlug == AppProfile.supervisorSlug &&
+        const <String>{'33', '35'}.contains(_activeHomeOwnerCode.trim());
+    final positivationCommitmentNeed = commitment?.positivationNeed;
+    final positivationCommitment =
+        hidesPositivationCommitment || positivationCommitmentNeed == null
+        ? null
+        : _DailyCommitmentProgressData(
+            targetLabel:
+                '${_decimalFormat.format(positivationCommitmentNeed.ceil())}/dia',
+            progressPercent: _commitmentProgressPct(
+              actualToday:
+                  (_homeKpis.dailyNewPositivation ??
+                          _todayPositiveCustomers.totalNewCustomers)
+                      .toDouble(),
+              dailyNeed: positivationCommitmentNeed,
+            ),
+            color: kpiPositivationColor,
+            backgroundColor: kpiPositivationBackgroundColor,
+          );
 
     final financialActual = _TodayMetricData(
       title: 'Venda',
@@ -1094,6 +1391,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             const SizedBox(height: 12),
+            if (commitment?.hasPeriodConflict == true) ...[
+              _CommitmentPeriodConflictBanner(
+                periodCount: commitment!.conflictingPeriodCount,
+              ),
+              const SizedBox(height: 10),
+            ],
             _GroupedTodayKpiCard(
               left: financialActual,
               right: financialTarget,
@@ -1101,6 +1404,7 @@ class _HomeScreenState extends State<HomeScreen> {
               progressColor: kpiFinancialColor,
               progressBackgroundColor: kpiFinancialBackgroundColor,
               percentFormatter: _formatPercent,
+              commitmentProgress: financialCommitment,
             ),
             const SizedBox(height: 10),
             _GroupedTodayKpiCard(
@@ -1110,6 +1414,7 @@ class _HomeScreenState extends State<HomeScreen> {
               progressColor: secondaryMetricAccent,
               progressBackgroundColor: secondaryMetricBackground,
               percentFormatter: _formatPercent,
+              commitmentProgress: usesSkuMetric ? null : positivationCommitment,
             ),
             const SizedBox(height: 10),
             _GroupedTodayKpiCard(
@@ -1186,6 +1491,10 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
         children: [
           _buildWelcomeCard(),
+          if (_showsHomeScopeFilter) ...[
+            const SizedBox(height: 10),
+            _buildHomeScopeFilter(),
+          ],
           if (_showsHomeKpis) ...[
             const SizedBox(height: 10),
             _buildKpiOverviewSection(),
@@ -1512,6 +1821,47 @@ class _TodayMetricData {
   final VoidCallback? onTap;
 }
 
+class _CommitmentPeriodConflictBanner extends StatelessWidget {
+  const _CommitmentPeriodConflictBanner({required this.periodCount});
+
+  final int periodCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7E6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFD58A)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            size: 20,
+            color: Color(0xFFD97706),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Existem $periodCount per\u00EDodos de compromisso para hoje. '
+              'Revise o cadastro para acompanhar a meta di\u00E1ria.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF92400E),
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _GroupedTodayKpiCard extends StatelessWidget {
   const _GroupedTodayKpiCard({
     required this.left,
@@ -1521,6 +1871,7 @@ class _GroupedTodayKpiCard extends StatelessWidget {
     this.progressColor,
     this.progressBackgroundColor,
     this.percentFormatter,
+    this.commitmentProgress,
   });
 
   final _TodayMetricData left;
@@ -1530,6 +1881,7 @@ class _GroupedTodayKpiCard extends StatelessWidget {
   final Color? progressColor;
   final Color? progressBackgroundColor;
   final String Function(double? value)? percentFormatter;
+  final _DailyCommitmentProgressData? commitmentProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -1634,8 +1986,111 @@ class _GroupedTodayKpiCard extends StatelessWidget {
               ],
             ),
           ],
+          if (commitmentProgress != null) ...[
+            const SizedBox(height: 12),
+            Divider(height: 1, color: const Color(0xFFE7EBF4)),
+            const SizedBox(height: 10),
+            _DailyCommitmentProgress(
+              data: commitmentProgress!,
+              percentFormatter: percentFormatter,
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _DailyCommitmentProgressData {
+  const _DailyCommitmentProgressData({
+    required this.targetLabel,
+    required this.progressPercent,
+    required this.color,
+    required this.backgroundColor,
+  });
+
+  final String targetLabel;
+  final double? progressPercent;
+  final Color color;
+  final Color backgroundColor;
+}
+
+class _DailyCommitmentProgress extends StatelessWidget {
+  const _DailyCommitmentProgress({
+    required this.data,
+    required this.percentFormatter,
+  });
+
+  final _DailyCommitmentProgressData data;
+  final String Function(double? value)? percentFormatter;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = data.progressPercent;
+    final progressValue = progress == null
+        ? 0.0
+        : (progress / 100).clamp(0.0, 1.0).toDouble();
+    final progressLabel = progress == null
+        ? '--'
+        : percentFormatter?.call(progress) ?? '${progress.toStringAsFixed(0)}%';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Compromisso:',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: const Color(0xFF66748C),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                data.targetLabel,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: data.color,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        Row(
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: progressValue,
+                  minHeight: 5,
+                  backgroundColor: data.backgroundColor,
+                  valueColor: AlwaysStoppedAnimation<Color>(data.color),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              decoration: BoxDecoration(
+                color: data.backgroundColor,
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Text(
+                progressLabel,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: data.color,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

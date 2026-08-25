@@ -12,6 +12,7 @@ import '../models/customer_opportunities.dart';
 import '../models/customers_without_purchase.dart';
 import '../models/commitment_overview.dart';
 import '../models/delinquency_overview.dart';
+import '../models/home_dashboard.dart';
 import '../models/home_positive_customers.dart';
 import '../models/kpi_metric_source.dart';
 import '../models/performance_overview.dart';
@@ -491,6 +492,30 @@ class AppRepository {
     }
 
     return SellerHomeKpis.fromJson(_stringKeyedMap(response));
+  }
+
+  Future<HomeDashboard> getHomeDashboard({
+    required DateTime start,
+    required DateTime end,
+    String? targetScopeProfileSlug,
+    String? targetScopeOwnerCode,
+  }) async {
+    await _ensureCurrentUserAccess();
+    final response = await _supabase.rpc(
+      'get_home_dashboard_v3',
+      params: <String, dynamic>{
+        'window_start': start.toUtc().toIso8601String(),
+        'window_end': end.toUtc().toIso8601String(),
+        'target_scope_profile_slug': targetScopeProfileSlug,
+        'target_scope_owner_code': targetScopeOwnerCode,
+      },
+    );
+
+    if (response is! Map) {
+      throw const RepositoryException('A Home não retornou um painel válido.');
+    }
+
+    return HomeDashboard.fromJson(_stringKeyedMap(response));
   }
 
   Future<HomePositiveCustomers> getHomePositiveCustomers({

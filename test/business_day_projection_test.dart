@@ -135,7 +135,7 @@ void main() {
     expect(summary.paceStatus, ProjectionPaceStatus.belowTarget);
   });
 
-  test('waits for a closed day before projecting a commitment', () {
+  test('projects a commitment live before the first day closes', () {
     final summary = BusinessDayProjection.summarizePeriod(
       actualValue: 40,
       projectionActualValue: 0,
@@ -146,8 +146,59 @@ void main() {
     );
 
     expect(summary.periodContext.completedBusinessDays, 0);
-    expect(summary.projectedValue, 0);
-    expect(summary.requiredPerBusinessDay, 42);
-    expect(summary.paceStatus, ProjectionPaceStatus.noTarget);
+    expect(summary.periodContext.projectionBusinessDays, 1);
+    expect(summary.projectionActualValue, 40);
+    expect(summary.averagePerBusinessDay, 40);
+    expect(summary.projectedValue, 200);
+    expect(summary.requiredPerBusinessDay, 50);
+    expect(summary.paceStatus, ProjectionPaceStatus.belowTarget);
+  });
+
+  test('recalculates the live first-day trend for the current commitment', () {
+    final summary = BusinessDayProjection.summarizePeriod(
+      actualValue: 4628.02,
+      projectionActualValue: 0,
+      targetValue: 250000,
+      startDate: DateTime(2026, 8, 24),
+      endDate: DateTime(2026, 8, 31),
+      referenceDate: DateTime(2026, 8, 24),
+    );
+
+    expect(summary.periodContext.totalBusinessDays, 6);
+    expect(summary.periodContext.completedBusinessDays, 0);
+    expect(summary.averagePerBusinessDay, closeTo(4628.02, 0.001));
+    expect(summary.projectedValue, closeTo(27768.12, 0.001));
+    expect(summary.requiredPerBusinessDay, closeTo(41666.6667, 0.001));
+  });
+
+  test('recalculates commitment need after the first business day closes', () {
+    final summary = BusinessDayProjection.summarizePeriod(
+      actualValue: 30000,
+      projectionActualValue: 25000,
+      targetValue: 250000,
+      startDate: DateTime(2026, 8, 24),
+      endDate: DateTime(2026, 8, 31),
+      referenceDate: DateTime(2026, 8, 25),
+    );
+
+    expect(summary.periodContext.totalBusinessDays, 6);
+    expect(summary.periodContext.completedBusinessDays, 1);
+    expect(summary.periodContext.remainingBusinessDays, 5);
+    expect(summary.requiredPerBusinessDay, closeTo(44000, 0.001));
+  });
+
+  test('keeps first-day commitment need fixed despite live sales', () {
+    final summary = BusinessDayProjection.summarizePeriod(
+      actualValue: 13590.23,
+      projectionActualValue: 0,
+      targetValue: 355000,
+      startDate: DateTime(2026, 8, 24),
+      endDate: DateTime(2026, 8, 31),
+      referenceDate: DateTime(2026, 8, 24),
+    );
+
+    expect(summary.periodContext.totalBusinessDays, 6);
+    expect(summary.periodContext.completedBusinessDays, 0);
+    expect(summary.requiredPerBusinessDay, closeTo(59166.6667, 0.001));
   });
 }

@@ -39,25 +39,35 @@ class SupplierAnalysis {
     final suppliersJson = json['suppliers'];
     final overallJson = json['overall'];
     final scopesJson = json['available_scopes'];
+    final viewerProfileSlug = '${json['viewer_profile_slug'] ?? ''}'.trim();
+    final availableScopes = scopesJson is List
+        ? scopesJson
+              .whereType<Map>()
+              .map(
+                (row) => SupplierAnalysisScope.fromJson(
+                  row.map((key, value) => MapEntry('$key', value)),
+                ),
+              )
+              .where(
+                (scope) => _scopeIsVisibleForViewer(
+                  viewerProfileSlug: viewerProfileSlug,
+                  scopeProfileSlug: scope.profileSlug,
+                ),
+              )
+              .toList()
+        : <SupplierAnalysisScope>[];
+    availableScopes.sort(SupplierAnalysisScope.compareByHierarchy);
+
     return SupplierAnalysis(
       metricSource: parseKpiMetricSource(json['metric_source'] as String?),
-      viewerProfileSlug: '${json['viewer_profile_slug'] ?? ''}'.trim(),
+      viewerProfileSlug: viewerProfileSlug,
       selectedScopeProfileSlug: _nullableString(
         json['selected_scope_profile_slug'],
       ),
       selectedScopeOwnerCode: _nullableString(
         json['selected_scope_owner_code'],
       ),
-      availableScopes: scopesJson is List
-          ? scopesJson
-                .whereType<Map>()
-                .map(
-                  (row) => SupplierAnalysisScope.fromJson(
-                    row.map((key, value) => MapEntry('$key', value)),
-                  ),
-                )
-                .toList()
-          : const <SupplierAnalysisScope>[],
+      availableScopes: availableScopes,
       lastUpdatedAt: _parseDate(json['last_updated_at']),
       overall: overallJson is Map
           ? SupplierAnalysisItem.fromJson(
@@ -88,6 +98,25 @@ class SupplierAnalysis {
     final text = '${value ?? ''}'.trim();
     return text.isEmpty ? null : text;
   }
+
+  static bool _scopeIsVisibleForViewer({
+    required String viewerProfileSlug,
+    required String scopeProfileSlug,
+  }) {
+    return switch (viewerProfileSlug) {
+      'supervisor' => scopeProfileSlug == 'vendedor',
+      'coordenador' => const <String>{
+        'supervisor',
+        'vendedor',
+      }.contains(scopeProfileSlug),
+      'admin' || 'diretoria' || 'outros' => const <String>{
+        'coordenador',
+        'supervisor',
+        'vendedor',
+      }.contains(scopeProfileSlug),
+      _ => false,
+    };
+  }
 }
 
 class SupplierAnalysisScope {
@@ -111,7 +140,11 @@ class SupplierAnalysisScope {
     final displayName = TextSanitizer.normalize(
       '${json['display_name'] ?? ''}'.trim(),
     );
-    final profileName = profileSlug == 'supervisor' ? 'Supervisor' : 'Vendedor';
+    final profileName = switch (profileSlug) {
+      'coordenador' => 'Coordenador',
+      'supervisor' => 'Supervisor',
+      _ => 'Vendedor',
+    };
 
     return SupplierAnalysisScope(
       profileSlug: profileSlug,
@@ -120,6 +153,33 @@ class SupplierAnalysisScope {
       label: '$profileName - $ownerCode - $displayName',
     );
   }
+
+  static int compareByHierarchy(
+    SupplierAnalysisScope left,
+    SupplierAnalysisScope right,
+  ) {
+    final profileComparison = _profileOrder(
+      left.profileSlug,
+    ).compareTo(_profileOrder(right.profileSlug));
+    if (profileComparison != 0) {
+      return profileComparison;
+    }
+
+    final nameComparison = left.displayName.toLowerCase().compareTo(
+      right.displayName.toLowerCase(),
+    );
+    if (nameComparison != 0) {
+      return nameComparison;
+    }
+    return left.ownerCode.compareTo(right.ownerCode);
+  }
+
+  static int _profileOrder(String profileSlug) => switch (profileSlug) {
+    'coordenador' => 1,
+    'supervisor' => 2,
+    'vendedor' => 3,
+    _ => 9,
+  };
 }
 
 class SupplierAnalysisItem {

@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 21/08/2026
-Versao atual do projeto: 0.9.15+31
+Ultima atualizacao desta documentacao: 25/08/2026
+Versao atual do projeto: 0.9.16+32
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -145,6 +145,15 @@ na interface nao substitui a autorizacao no backend.
 - Exibe boas-vindas, perfil e versao instalada.
 - Mostra atalhos para os modulos permitidos.
 - Apresenta indicadores comerciais conforme perfil e periodo.
+- A Home possui filtro hierarquico de visao, oculto para vendedores. Supervisor
+  pode consultar a Home dos seus vendedores; coordenador pode consultar seus
+  supervisores e vendedores; diretoria e outros podem consultar coordenadores,
+  supervisores e vendedores de toda a empresa. A opcao inicial sempre preserva
+  a visao do proprio usuario ou o consolidado geral do perfil amplo.
+- Ao trocar a visao, a Home atualiza em conjunto venda, volume, pedidos,
+  positivacao e clientes novos, produtos distintos, metas diarias, tipo da meta
+  secundaria e o compromisso vigente do usuario selecionado. A RPC
+  get_home_dashboard_v3 entrega esse conjunto de forma atomica.
 - Os valores financeiros usam as regras de venda, faturamento e devolucao
   definidas nas RPCs do Supabase.
 - No Resumo de hoje, vendedor, supervisor, coordenador, diretoria e outros
@@ -168,11 +177,12 @@ na interface nao substitui a autorizacao no backend.
   Venda/Volume/Positivacao e o total de produtos. Se o detalhe de itens ainda
   nao estiver carregado, a RPC pode usar o mix de faturamento como fallback.
 - A positivacao realizada da Home e interativa. Ao tocar no indicador, o app
-  chama get_home_positive_customers e lista codigo, nome e valor bruto total
-  comprado hoje por cliente. O escopo e o mesmo do Resumo de hoje: vendedor
-  ve somente suas vendas, supervisor sua equipe, coordenador sua estrutura e
-  perfis de visao geral veem toda a empresa. A consulta usa app_customers para
-  o nome e preserva o codigo como fallback caso a base de clientes ainda nao
+  usa o detalhamento retornado por get_home_dashboard_v3 e lista codigo, nome
+  e valor bruto total comprado hoje por cliente. O escopo e o mesmo do Resumo
+  de hoje e acompanha o filtro da Home: vendedor ve somente suas vendas,
+  supervisor sua equipe, coordenador sua estrutura e perfis de visao geral
+  veem toda a empresa. A consulta usa app_customers para o nome e preserva o
+  codigo como fallback caso a base de clientes ainda nao
   contenha o cadastro.
 - Enquanto a Home estiver aberta, seus dados sao atualizados silenciosamente
   a cada 2 minutos, sem substituir a tela por um indicador de carregamento.
@@ -206,6 +216,11 @@ na interface nao substitui a autorizacao no backend.
 - O card "Geral" usa totais deduplicados do backend. Positivacao geral nao e
   calculada pela soma das positivacoes por fornecedor, pois o mesmo cliente
   pode comprar de varios fornecedores no mesmo periodo.
+- O filtro hierarquico respeita o perfil: supervisor escolhe somente seus
+  vendedores; coordenador escolhe seus supervisores e vendedores; diretoria,
+  outros e admin escolhem qualquer coordenador, supervisor ou vendedor.
+- Na visao geral, o filtro ordena primeiro coordenadores, depois supervisores
+  e, por ultimo, vendedores. Dentro de cada grupo, ordena por nome e codigo.
 
 6.4 Devolucoes
 
@@ -468,9 +483,23 @@ Indicadores e projecao:
   por dia util encerrado, necessidade diaria, tendencia ate o fim do intervalo
   e situacao do ritmo.
 - Media e tendencia usam somente o realizado ate ontem e os dias uteis ja
-  encerrados. No primeiro dia, a tela aguarda o fechamento antes de projetar.
-- A necessidade usa o realizado ao vivo, inclusive o dia atual, e divide o
-  saldo da meta pelos dias uteis restantes, incluindo hoje quando for util.
+  encerrados quando existe ao menos um dia fechado. No primeiro dia util, a
+  tela usa o realizado ao vivo como media atual e projeta esse ritmo por todos
+  os dias uteis do compromisso, recalculando a tendencia a cada nova consulta.
+- No primeiro dia do compromisso, a necessidade permanece fixa em meta total
+  dividida pelo total de dias uteis do periodo, sem descontar o realizado ao
+  vivo. A partir do dia seguinte, quando existe ao menos um dia util fechado,
+  a necessidade volta a usar o realizado acumulado e os dias uteis restantes.
+- Na Home, enquanto o compromisso vigente inclui a data atual, os cards de
+  Venda e Positivacao exibem uma faixa compacta "Compromisso". A barra compara
+  o realizado bruto de hoje com a necessidade financeira do compromisso e as
+  positivacoes novas de hoje com a necessidade diaria de positivacao. Para
+  Diretoria/Outros, o consolidado usa os coordenadores, sem somar novamente os
+  supervisores. Para coordenadores, a linha consolidada corresponde a soma dos
+  seus supervisores. Supervisores 33 e 35 nao exibem a faixa de positivacao.
+- Apenas compromissos que incluem a data atual aparecem na Home. Se dois ou
+  mais periodos incluirem hoje, as barras de compromisso ficam ocultas e a
+  Home informa quantos periodos conflitantes precisam ter o cadastro revisado.
 - Dias uteis usam a mesma regra da Performance, incluindo fins de semana,
   feriados nacionais cadastrados e feriados estaduais do Ceara.
 - O filtro oferece todos os pares de data inicial/final existentes na fonte e
@@ -878,6 +907,14 @@ volume de staging e timeout das funcoes do Supabase.
 - A migration 20260820203000_daily_new_positivation_progress.sql passa a usar
   apenas clientes cuja primeira compra mensal ocorreu no dia no progresso e
   nas notificacoes da meta diaria de Positivacao.
+- A migration 20260825100000_supplier_analysis_scope_hierarchy.sql amplia o
+  filtro da Analise por Fornecedor: supervisor ve vendedores; coordenador ve
+  supervisores e vendedores; diretoria, outros e admin veem coordenadores,
+  supervisores e vendedores, ordenados por nivel hierarquico.
+- A migration 20260825143000_home_scope_filter.sql adiciona a RPC atomica
+  get_home_dashboard_v3, que aplica o filtro hierarquico da Home e devolve em
+  uma unica resposta KPIs, clientes positivados, metas da Performance e o
+  compromisso do escopo selecionado.
 
 
 13. VERSAO E DISTRIBUICAO
@@ -885,9 +922,31 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.15
-- versionCode / CFBundleVersion: 31
-- Release multiplataforma: 0.9.15+31
+- versionName / CFBundleShortVersionString: 0.9.16
+- versionCode / CFBundleVersion: 32
+- Release multiplataforma: 0.9.16+32
+
+Release 0.9.16+32:
+
+- O Compromisso passa a calcular media e tendencia desde o primeiro dia do
+  periodo usando o realizado ao vivo. Nesse primeiro dia, a necessidade fica
+  fixa na meta total dividida pelos dias uteis; nos dias seguintes, volta a
+  considerar o saldo e os dias restantes.
+- A Home exibe barras compactas de compromisso financeiro e de positivacao
+  quando existe um unico periodo vigente. O financeiro usa a venda bruta de
+  hoje e a positivacao usa somente clientes novos no mes.
+- A Home recebe filtro hierarquico de visao: supervisor consulta vendedores;
+  coordenador consulta supervisores e vendedores; diretoria e outros
+  consultam todos. KPIs, metas, clientes e compromisso mudam em conjunto.
+- A Analise por Fornecedor segue a mesma hierarquia, incluindo coordenadores
+  para perfis amplos e ordenando coordenadores, supervisores e vendedores.
+- Diretoria e Outros passam a ver "Omega Distribuidora" como primeiro card
+  do modulo Compromisso, consolidando metas, realizados e projecoes pela soma
+  exclusiva dos coordenadores, sem duplicar os supervisores.
+- Ajuste de estabilidade elimina chaves duplicadas nos seletores da Analise
+  por Fornecedor durante atualizacoes de filtros.
+- Preparacao multiplataforma propaga 0.9.16 build 32 para Android e iOS,
+  preservando Firebase, APNs, permissoes e assinatura automatica do Codemagic.
 
 Release 0.9.15+31:
 
@@ -1258,7 +1317,7 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Entrega multiplataforma atual: 0.9.15 build 31.
+- Entrega multiplataforma atual: 0.9.16 build 32.
 
 
 14. DESENVOLVIMENTO E VALIDACAO

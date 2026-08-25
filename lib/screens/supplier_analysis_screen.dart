@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../core/app_theme.dart';
 import '../core/supabase_config.dart';
+import '../models/app_profile.dart';
 import '../models/kpi_metric_source.dart';
 import '../models/supplier_analysis.dart';
 import '../services/app_repository.dart';
@@ -73,6 +74,15 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
     }
     return null;
   }
+
+  String get _scopeFilterLabel => switch (_analysis.viewerProfileSlug) {
+    AppProfile.supervisorSlug => 'Vendedor',
+    AppProfile.coordinatorSlug => 'Vendedor/Supervisor',
+    AppProfile.adminSlug ||
+    AppProfile.boardSlug ||
+    AppProfile.othersSlug => 'Coordenador/Supervisor/Vendedor',
+    _ => 'Vendedor/Supervisor',
+  };
 
   @override
   void initState() {
@@ -428,7 +438,9 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                             ],
                             const SizedBox(height: 14),
                             DropdownButtonFormField<String>(
-                              key: ValueKey<String?>(_selectedSupplierCode),
+                              key: ValueKey<String>(
+                                'supplier-${_selectedSupplierCode ?? 'all'}',
+                              ),
                               initialValue: _selectedSupplierCode,
                               isExpanded: true,
                               decoration: const InputDecoration(
@@ -455,12 +467,16 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                             if (_analysis.availableScopes.isNotEmpty) ...[
                               const SizedBox(height: 14),
                               DropdownButtonFormField<String>(
-                                key: ValueKey<String?>(_selectedScopeValue),
+                                key: ValueKey<String>(
+                                  'scope-${_selectedScopeValue ?? 'all'}',
+                                ),
                                 initialValue: _selectedScopeValue,
                                 isExpanded: true,
-                                decoration: const InputDecoration(
-                                  labelText: 'Vendedor/Supervisor',
-                                  prefixIcon: Icon(Icons.people_alt_outlined),
+                                decoration: InputDecoration(
+                                  labelText: _scopeFilterLabel,
+                                  prefixIcon: const Icon(
+                                    Icons.people_alt_outlined,
+                                  ),
                                 ),
                                 items: [
                                   const DropdownMenuItem<String>(

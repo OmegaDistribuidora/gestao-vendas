@@ -60,6 +60,9 @@ class BusinessDayPeriodContext {
 
   bool get hasElapsedBusinessDays => elapsedBusinessDays > 0;
   bool get hasCompletedBusinessDays => completedBusinessDays > 0;
+  int get projectionBusinessDays =>
+      hasCompletedBusinessDays ? completedBusinessDays : elapsedBusinessDays;
+  bool get hasProjectionBasis => projectionBusinessDays > 0;
 }
 
 class BusinessDayPeriodProjectionSummary {
@@ -265,15 +268,21 @@ class BusinessDayProjection {
       endDate: endDate,
       referenceDate: referenceDate,
     );
-    final closedActualValue = projectionActualValue ?? actualValue;
-    final averagePerBusinessDay = periodContext.hasCompletedBusinessDays
-        ? closedActualValue / periodContext.completedBusinessDays
+    final effectiveProjectionActual = periodContext.hasCompletedBusinessDays
+        ? projectionActualValue ?? actualValue
+        : actualValue;
+    final averagePerBusinessDay = periodContext.hasProjectionBasis
+        ? effectiveProjectionActual / periodContext.projectionBusinessDays
         : 0.0;
-    final projectedValue = periodContext.hasCompletedBusinessDays
+    final projectedValue = periodContext.hasProjectionBasis
         ? averagePerBusinessDay * periodContext.totalBusinessDays
         : 0.0;
+    // Enquanto nenhum dia util do compromisso foi encerrado, a necessidade
+    // precisa representar a distribuicao original da meta por todo o periodo.
+    // O realizado ao vivo do primeiro dia continua alimentando tendencia e
+    // progresso, mas so passa a recalcular a necessidade no dia seguinte.
     final requiredPerBusinessDay = _requiredPerBusinessDay(
-      actualValue: actualValue,
+      actualValue: periodContext.hasCompletedBusinessDays ? actualValue : 0.0,
       targetValue: targetValue,
       remainingBusinessDays: periodContext.remainingBusinessDays,
     );
@@ -283,8 +292,7 @@ class BusinessDayProjection {
       null => ProjectionPaceStatus.noTarget,
       <= 0 => ProjectionPaceStatus.noTarget,
       _ when actualValue >= targetValue => ProjectionPaceStatus.onTrack,
-      _ when !periodContext.hasCompletedBusinessDays =>
-        ProjectionPaceStatus.noTarget,
+      _ when !periodContext.hasProjectionBasis => ProjectionPaceStatus.noTarget,
       _ when projectedValue >= targetValue => ProjectionPaceStatus.onTrack,
       _ => ProjectionPaceStatus.belowTarget,
     };
@@ -292,7 +300,7 @@ class BusinessDayProjection {
     return BusinessDayPeriodProjectionSummary(
       periodContext: periodContext,
       actualValue: actualValue,
-      projectionActualValue: closedActualValue,
+      projectionActualValue: effectiveProjectionActual,
       targetValue: targetValue,
       projectedValue: projectedValue,
       averagePerBusinessDay: averagePerBusinessDay,
