@@ -46,25 +46,20 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   Timer? _refreshTimer;
   bool _autoRefreshing = false;
 
-  bool get _isSeller => _overview.profileSlug == AppProfile.sellerSlug;
-  bool get _isSupervisor => _overview.profileSlug == AppProfile.supervisorSlug;
-  bool get _isCoordinator =>
-      _overview.profileSlug == AppProfile.coordinatorSlug;
-  bool get _isNamedProfile => _isSeller || _isSupervisor || _isCoordinator;
+  bool get _isSeller => _overview.isSellerView;
+  bool get _isSupervisor => _overview.isSupervisorView;
+  bool get _isCoordinator => _overview.isCoordinatorView;
+  bool get _isNamedProfile => _overview.isNamedProfileView;
+  bool get _isBroadProfile => _overview.isBroadProfileView;
   bool get _showsMetricSourceSelector => false;
   bool get _showsScopeSelector => _scopeOptions.isNotEmpty;
   bool get _viewerIsSupervisor =>
       _overview.viewerProfileSlug == AppProfile.supervisorSlug;
   bool get _viewerIsCoordinator =>
       _overview.viewerProfileSlug == AppProfile.coordinatorSlug;
-  bool get _viewerIsSeller =>
-      _overview.viewerProfileSlug == AppProfile.sellerSlug;
-  bool get _viewerIsNamedProfile =>
-      _viewerIsSeller || _viewerIsSupervisor || _viewerIsCoordinator;
-  bool get _viewerIsBroadProfile => !_viewerIsNamedProfile;
 
   PerformanceMetric? get _sellerDelinquencyMetric {
-    if (!_viewerIsSeller) {
+    if (!_isSeller) {
       return null;
     }
     final overallItem = _overview.overallItem;
@@ -82,7 +77,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   }
 
   ({double current, double maximum})? get _prizeSummary {
-    if (!_viewerIsNamedProfile) {
+    if (!_isNamedProfile) {
       return null;
     }
 
@@ -369,6 +364,8 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
         return 'Administração';
       case AppProfile.othersSlug:
         return 'Usuário';
+      case AppProfile.managementSlug:
+        return 'Gerência';
       default:
         return 'Usuário';
     }
@@ -666,8 +663,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
           .where(
             (metric) =>
                 !(metric.key == 'delinquency' &&
-                    ((_viewerIsSeller && item.isOverall) ||
-                        _viewerIsBroadProfile)),
+                    ((_isSeller && item.isOverall) || _isBroadProfile)),
           )
           .map(_buildGoldMetricPanel)
           .toList();
@@ -700,7 +696,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
 
     final effectiveTarget =
         metric.key == 'effectiveness' &&
-            _viewerIsBroadProfile &&
+            _isBroadProfile &&
             metric.target == null
         ? 0.30
         : metric.target;
@@ -758,7 +754,7 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
         : null;
     final prizeInCents = (metric.prize * 100).round();
     final possibilityInCents = (metric.possibility * 100).round();
-    final showsPrize = _viewerIsNamedProfile && possibilityInCents > 0;
+    final showsPrize = _isNamedProfile && possibilityInCents > 0;
     final prizeHighlight = !showsPrize
         ? _PrizeHighlight.neutral
         : prizeInCents <= 0
@@ -954,12 +950,16 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
 
   Widget _buildSupplierCard(PerformanceOverviewItem item) {
     final panels = _buildMetricPanels(item);
+    final highlightsPrize =
+        _overview.isNamedProfileView && item.hasPrizePossibility;
 
     return _SupplierPerformanceCard(
+      key: ValueKey<String>('performance-supplier-${item.code}'),
       item: item,
       panels: panels,
       logoUrl: _supplierLogoUrl(item.code),
       formatPercent: _formatPercent,
+      highlightsPrize: highlightsPrize,
     );
   }
 
@@ -1124,16 +1124,19 @@ class _MetricPanelData {
 
 class _SupplierPerformanceCard extends StatefulWidget {
   const _SupplierPerformanceCard({
+    super.key,
     required this.item,
     required this.panels,
     required this.logoUrl,
     required this.formatPercent,
+    required this.highlightsPrize,
   });
 
   final PerformanceOverviewItem item;
   final List<_MetricPanelData> panels;
   final String logoUrl;
   final String Function(double? value) formatPercent;
+  final bool highlightsPrize;
 
   @override
   State<_SupplierPerformanceCard> createState() =>
@@ -1176,6 +1179,13 @@ class _SupplierPerformanceCardState extends State<_SupplierPerformanceCard> {
 
     return Card(
       clipBehavior: Clip.antiAlias,
+      color: widget.highlightsPrize ? const Color(0xFFFFFCF2) : null,
+      shape: widget.highlightsPrize
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: const BorderSide(color: Color(0xFFF2B84B), width: 1.8),
+            )
+          : null,
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
@@ -1237,6 +1247,45 @@ class _SupplierPerformanceCardState extends State<_SupplierPerformanceCard> {
                   ],
                 ),
               ),
+              if (widget.highlightsPrize) ...[
+                const SizedBox(width: 8),
+                Semantics(
+                  label: 'Fornecedor Top 5 com premiação',
+                  child: Tooltip(
+                    message: 'Fornecedor Top 5 com premiação',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFE8A3),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.monetization_on_outlined,
+                            size: 16,
+                            color: Color(0xFF9A5B00),
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            'TOP 5',
+                            style: TextStyle(
+                              color: Color(0xFF7A4800),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
           subtitle: _expanded

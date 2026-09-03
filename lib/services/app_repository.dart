@@ -502,7 +502,7 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_home_dashboard_v3',
+      'get_home_dashboard_v4',
       params: <String, dynamic>{
         'window_start': start.toUtc().toIso8601String(),
         'window_end': end.toUtc().toIso8601String(),
@@ -552,7 +552,7 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_supplier_analysis_v2',
+      'get_supplier_analysis_v3',
       params: <String, dynamic>{
         'window_start': start.toUtc().toIso8601String(),
         'window_end': end.toUtc().toIso8601String(),
@@ -577,7 +577,7 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_commitment_overview',
+      'get_commitment_overview_v2',
       params: <String, dynamic>{
         'target_start_date': startDate?.toIso8601String().split('T').first,
         'target_end_date': endDate?.toIso8601String().split('T').first,
@@ -600,7 +600,7 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_performance_overview_v2',
+      'get_performance_overview_v3',
       params: <String, dynamic>{
         'target_month_start': monthStart?.toIso8601String().split('T').first,
         'target_scope_profile_slug': targetScopeProfileSlug,
@@ -641,7 +641,7 @@ class AppRepository {
   }) async {
     await _ensureCurrentUserAccess();
     final response = await _supabase.rpc(
-      'get_delinquency_overview_v2',
+      'get_delinquency_overview_v3',
       params: <String, dynamic>{
         'target_scope_profile_slug': targetScopeProfileSlug,
         'target_scope_owner_code': targetScopeOwnerCode,

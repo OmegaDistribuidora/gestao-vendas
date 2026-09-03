@@ -80,7 +80,8 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
     AppProfile.coordinatorSlug => 'Vendedor/Supervisor',
     AppProfile.adminSlug ||
     AppProfile.boardSlug ||
-    AppProfile.othersSlug => 'Coordenador/Supervisor/Vendedor',
+    AppProfile.othersSlug ||
+    AppProfile.managementSlug => 'Coordenador/Supervisor/Vendedor',
     _ => 'Vendedor/Supervisor',
   };
 

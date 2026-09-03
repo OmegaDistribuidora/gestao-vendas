@@ -1,3 +1,4 @@
+import 'app_profile.dart';
 import 'kpi_metric_source.dart';
 
 class PerformanceOverview {
@@ -33,6 +34,13 @@ class PerformanceOverview {
   final DateTime? lastFinancialUpdatedAt;
   final DateTime? lastSkuUpdatedAt;
 
+  bool get isSellerView => profileSlug == AppProfile.sellerSlug;
+  bool get isSupervisorView => profileSlug == AppProfile.supervisorSlug;
+  bool get isCoordinatorView => profileSlug == AppProfile.coordinatorSlug;
+  bool get isNamedProfileView =>
+      isSellerView || isSupervisorView || isCoordinatorView;
+  bool get isBroadProfileView => !isNamedProfileView;
+
   PerformanceOverviewItem? get overallItem {
     for (final item in items) {
       if (item.isOverall) {
@@ -42,8 +50,17 @@ class PerformanceOverview {
     return null;
   }
 
-  List<PerformanceOverviewItem> get supplierItems =>
-      items.where((item) => !item.isOverall).toList();
+  List<PerformanceOverviewItem> get supplierItems {
+    final suppliers = items.where((item) => !item.isOverall).toList();
+    if (!isNamedProfileView) {
+      return suppliers;
+    }
+
+    return <PerformanceOverviewItem>[
+      ...suppliers.where((item) => item.hasPrizePossibility),
+      ...suppliers.where((item) => !item.hasPrizePossibility),
+    ];
+  }
 
   factory PerformanceOverview.empty() {
     return const PerformanceOverview(
@@ -235,6 +252,9 @@ class PerformanceOverviewItem {
   final List<PerformanceMetric> metrics;
 
   bool get usesGoldPerformance => metrics.isNotEmpty;
+
+  bool get hasPrizePossibility =>
+      possibilityTotal > 0 || metrics.any((metric) => metric.possibility > 0);
 
   bool get isOverall => code == '1';
   bool get usesSkuMetric => secondaryMetricType == 'sku';

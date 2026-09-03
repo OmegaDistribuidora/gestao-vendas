@@ -938,7 +938,7 @@ class _AgendaCreateTaskSheetState extends State<_AgendaCreateTaskSheet> {
   final _formKey = GlobalKey<FormState>();
   final _title = TextEditingController();
   final _description = TextEditingController();
-  DateTime? _dueAt;
+  DateTime? _dueAt = DateUtils.dateOnly(DateTime.now());
   String _priority = 'MEDIUM';
   bool _busy = false;
 

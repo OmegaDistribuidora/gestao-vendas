@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gestao_vendas/models/app_profile.dart';
 import 'package:gestao_vendas/models/delinquency_overview.dart';
 import 'package:gestao_vendas/models/supplier_analysis.dart';
 
@@ -78,11 +79,57 @@ void main() {
     expect(analysis.availableScopes.single.value, 'vendedor|311');
   });
 
-  test('board scopes are ordered as coordinators supervisors and sellers', () {
+  test('board scopes put management before the full commercial hierarchy', () {
     final analysis = SupplierAnalysis.fromJson({
       'metric_source': 'venda',
       'viewer_profile_slug': 'diretoria',
       'available_scopes': [
+        {
+          'profile_slug': 'vendedor',
+          'owner_code': '311',
+          'display_name': 'Francisco',
+        },
+        {
+          'profile_slug': 'supervisor',
+          'owner_code': '20',
+          'display_name': 'Fabio',
+        },
+        {
+          'profile_slug': 'coordenador',
+          'owner_code': '10',
+          'display_name': 'Coordenador Interior',
+        },
+        {
+          'profile_slug': AppProfile.managementSlug,
+          'owner_code': 'GER1',
+          'display_name': 'Gerencia Comercial',
+        },
+      ],
+      'suppliers': <Object?>[],
+    });
+
+    expect(analysis.availableScopes.map((scope) => scope.profileSlug), <String>[
+      AppProfile.managementSlug,
+      'coordenador',
+      'supervisor',
+      'vendedor',
+    ]);
+    expect(
+      analysis.availableScopes.first.label,
+      'Gerência - Gerencia Comercial',
+    );
+  });
+
+  test('management scopes expose coordinators supervisors and sellers', () {
+    final analysis = SupplierAnalysis.fromJson({
+      'metric_source': 'venda',
+      'viewer_profile_slug': AppProfile.managementSlug,
+      'available_scopes': [
+        {
+          'profile_slug': AppProfile.managementSlug,
+          'owner_code': 'GER2',
+          'display_name': 'Outra Gerencia',
+        },
         {
           'profile_slug': 'vendedor',
           'owner_code': '311',
@@ -107,9 +154,5 @@ void main() {
       'supervisor',
       'vendedor',
     ]);
-    expect(
-      analysis.availableScopes.first.label,
-      'Coordenador - 10 - Coordenador Interior',
-    );
   });
 }

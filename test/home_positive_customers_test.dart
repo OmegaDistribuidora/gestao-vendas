@@ -13,6 +13,8 @@ void main() {
           'client_name': 'Cliente Novo',
           'total_amount': 200,
           'is_new_in_month': true,
+          'seller_code': '3048',
+          'seller_name': 'Pedro de Jesus',
         },
         {
           'client_code': '20',
@@ -27,6 +29,10 @@ void main() {
     expect(result.totalNewCustomers, 1);
     expect(result.totalAmount, 350.5);
     expect(result.items.first.isNewInMonth, isTrue);
+    expect(result.items.first.sellerCode, '3048');
+    expect(result.items.first.sellerName, 'Pedro de Jesus');
+    expect(result.items.first.sellerLabel, '3048 - Pedro de Jesus');
     expect(result.items.last.isNewInMonth, isFalse);
+    expect(result.items.last.sellerLabel, isEmpty);
   });
 }

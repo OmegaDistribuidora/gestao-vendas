@@ -97,6 +97,7 @@ class HomeScopeOption {
   String get value => '$profileSlug|$ownerCode';
 
   String get profileLabel => switch (profileSlug) {
+    AppProfile.managementSlug => 'Gerência',
     AppProfile.coordinatorSlug => 'Coordenador',
     AppProfile.supervisorSlug => 'Supervisor',
     AppProfile.sellerSlug => 'Vendedor',

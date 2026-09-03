@@ -37,10 +37,14 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
   bool get _showsUserFilter => const <String>{
     AppProfile.boardSlug,
     AppProfile.othersSlug,
+    AppProfile.managementSlug,
   }.contains(_overview.viewerProfileSlug);
 
   List<CommitmentItem> get _displayItems {
-    if (!_showsUserFilter || _selectedScopeValue != null) {
+    final selectedManagement =
+        _selectedScope?.profileSlug == AppProfile.managementSlug;
+    if (!_showsUserFilter ||
+        (_selectedScopeValue != null && !selectedManagement)) {
       return _overview.items;
     }
     final companyTotal = CommitmentItem.companyTotalFrom(_overview.items);

@@ -380,6 +380,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    if (payload.evaluateReturnsAllProfiles === true) {
+      const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
+      const { error } = await supabase.rpc(
+        'evaluate_push_return_notifications_all_profiles',
+        {
+          target_reference_date: payload.referenceDate ?? null,
+          target_changed_since: payload.changedSince ?? null,
+        },
+      )
+
+      if (error) {
+        throw new Error(error.message)
+      }
+    }
+
     const limit = Math.max(1, Math.min(Number(payload.limit ?? 50), 200))
     return json(await processQueuedEvents(limit))
   } catch (error) {

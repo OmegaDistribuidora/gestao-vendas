@@ -28,15 +28,21 @@ SELECT
     pcmov.codusur,
     pcpedc.codsupervisor,
     pcsuperv.codgerente,
-    CASE
-        WHEN pcfornec.codfornec IN (1535, 1968) THEN 1968
-        WHEN pcfornec.codfornec IN (1443, 967) THEN 967
-        WHEN pcfornec.codfornec IN (1630, 2445) THEN 1630
-        ELSE pcfornec.codfornec
-    END AS codfornec,
+    pcfornec.codfornec AS supplier_original_code,
+    TRUNC(pcpedc.data) AS original_order_date,
     SUM(pcmov.qt * pcmov.custofin) AS custo,
     SUM(pcmov.qt * pcmov.punit)
       + SUM(pcmov.qt * NVL(pcmov.vloutros, 0)) AS faturamento,
+    SUM(
+        ROUND(
+            pcmov.qt * (
+                NVL(pcmov.punit, 0)
+                + NVL(pcmov.vloutros, 0)
+                + NVL(pcmov.vlfrete, 0)
+            ),
+            2
+        )
+    ) AS adjusted_billing_amount,
     COUNT(DISTINCT pcmov.codprod) AS mix,
     SUM(pcmov.qt / NULLIF(pcprodut.qtunitcx, 0)) AS volume,
     SUM(pcmov.qt * pcmov.punit) - SUM(pcmov.qt * pcmov.custofin) AS lucro
@@ -54,7 +60,7 @@ JOIN pcprodut
 JOIN pcfornec
     ON pcprodut.codfornec = pcfornec.codfornec
 WHERE pcmov.dtmov >= :sync_start_date
-  AND pcmov.dtmov < TRUNC(SYSDATE) + 1
+  AND pcmov.dtmov < :sync_end_exclusive
   AND pcpedc.codfilial IN (1, 3, 4)
   AND pcpedc.condvenda IN (1)
   AND pcmov.dtcancel IS NULL
@@ -66,23 +72,27 @@ GROUP BY
     pcmov.codusur,
     pcpedc.codsupervisor,
     pcsuperv.codgerente,
-    CASE
-        WHEN pcfornec.codfornec IN (1535, 1968) THEN 1968
-        WHEN pcfornec.codfornec IN (1443, 967) THEN 967
-        WHEN pcfornec.codfornec IN (1630, 2445) THEN 1630
-        ELSE pcfornec.codfornec
-    END
+    pcfornec.codfornec,
+    TRUNC(pcpedc.data)
 ORDER BY
     TRUNC(pcmov.dtmov),
     pcmov.codusur,
     pcmov.numped,
-    codfornec
+    supplier_original_code
 """
 
 
 def main() -> None:
     scope_type, sync_start_date, sync_end_date = get_sync_window()
-    rows = fetch_oracle_rows(SNAPSHOT_TYPE, ORACLE_QUERY, sync_start_date)
+    rows = fetch_oracle_rows(
+        SNAPSHOT_TYPE,
+        ORACLE_QUERY,
+        sync_start_date,
+        sync_end_date,
+        # Keep the legacy column stable for every existing consumer. The
+        # supplier analysis reads supplier_main_code for table-driven aliases.
+        storage_supplier_code="legacy",
+    )
     session = authenticate_supabase_session(require_env)
     run_id = create_financial_sync_run(
         session,
@@ -100,9 +110,14 @@ def main() -> None:
         mark_sync_run_failed(session, run_id, str(error))
         raise
 
-    dispatch_push_notifications(session)
+    dispatch_push_notifications(
+        session,
+        evaluate=True,
+        reference_date=sync_end_date.isoformat(),
+    )
 
     total_faturamento = sum(row.faturamento for row in rows)
+    total_adjusted_billing = sum(row.adjusted_billing_amount for row in rows)
     total_volume = sum(row.volume for row in rows)
     print(
         json.dumps(
@@ -117,6 +132,7 @@ def main() -> None:
                 "rows_updated": apply_result.get("rows_updated", 0),
                 "rows_deleted": apply_result.get("rows_deleted", 0),
                 "total_faturamento": round(total_faturamento, 2),
+                "total_adjusted_billing": round(total_adjusted_billing, 2),
                 "total_volume": round(total_volume, 4),
             },
             ensure_ascii=False,

@@ -38,14 +38,20 @@ SELECT
     pcmov.codusur,
     pcpedc.codsupervisor,
     pcsuperv.codgerente,
-    CASE
-        WHEN pcfornec.codfornec IN (1535, 1968) THEN 1968
-        WHEN pcfornec.codfornec IN (1443, 967) THEN 967
-        WHEN pcfornec.codfornec IN (1630, 2445) THEN 1630
-        ELSE pcfornec.codfornec
-    END AS codfornec,
+    pcfornec.codfornec AS supplier_original_code,
+    TRUNC(pcpedc.data) AS original_order_date,
     SUM(pcmov.qt * pcmov.custofin) * -1 AS custo,
     (SUM(pcmov.qt * pcmov.punit) + SUM(pcmov.qt * NVL(pcmov.vloutros, 0))) * -1 AS faturamento,
+    SUM(
+        ROUND(
+            pcmov.qt * (
+                NVL(pcmov.punit, 0)
+                + NVL(pcmov.vloutros, 0)
+                + NVL(pcmov.vlfrete, 0)
+            ),
+            2
+        )
+    ) * -1 AS adjusted_billing_amount,
     0 AS mix,
     SUM(pcmov.qt / NULLIF(pcprodut.qtunitcx, 0)) * -1 AS volume,
     (SUM(pcmov.qt * pcmov.punit) - SUM(pcmov.qt * pcmov.custofin)) * -1 AS lucro
@@ -63,7 +69,7 @@ JOIN pcprodut
 JOIN pcfornec
     ON pcprodut.codfornec = pcfornec.codfornec
 WHERE pcmov.dtmov >= :sync_start_date
-  AND pcmov.dtmov < TRUNC(SYSDATE) + 1
+  AND pcmov.dtmov < :sync_end_exclusive
   AND pcpedc.codfilial IN (1, 3, 4)
   AND pcpedc.condvenda IN (1)
   AND pcmov.dtcancel IS NULL
@@ -75,17 +81,13 @@ GROUP BY
     pcmov.codusur,
     pcpedc.codsupervisor,
     pcsuperv.codgerente,
-    CASE
-        WHEN pcfornec.codfornec IN (1535, 1968) THEN 1968
-        WHEN pcfornec.codfornec IN (1443, 967) THEN 967
-        WHEN pcfornec.codfornec IN (1630, 2445) THEN 1630
-        ELSE pcfornec.codfornec
-    END
+    pcfornec.codfornec,
+    TRUNC(pcpedc.data)
 ORDER BY
     TRUNC(pcmov.dtmov),
     pcmov.codusur,
     pcmov.numped,
-    codfornec
+    supplier_original_code
 """
 
 ORACLE_DETAIL_QUERY = """
@@ -313,6 +315,8 @@ def main() -> None:
         SNAPSHOT_TYPE,
         ORACLE_FINANCIAL_QUERY,
         sync_start_date,
+        sync_end_date,
+        storage_supplier_code="legacy",
     )
     detail_rows = fetch_return_detail_rows(sync_start_date)
     session = authenticate_supabase_session(require_env)
@@ -354,9 +358,17 @@ def main() -> None:
         mark_sync_run_failed(session, detail_run_id, str(error))
         raise
 
-    dispatch_push_notifications(session)
+    dispatch_push_notifications(
+        session,
+        evaluate=True,
+        reference_date=sync_end_date.isoformat(),
+        evaluate_returns_all_profiles=True,
+    )
 
     total_faturamento = sum(row.faturamento for row in financial_rows)
+    total_adjusted_billing = sum(
+        row.adjusted_billing_amount for row in financial_rows
+    )
     total_volume = sum(row.volume for row in financial_rows)
     print(
         json.dumps(
@@ -376,6 +388,7 @@ def main() -> None:
                 "detail_updated": detail_apply_result.get("rows_updated", 0),
                 "detail_deleted": detail_apply_result.get("rows_deleted", 0),
                 "total_faturamento": round(total_faturamento, 2),
+                "total_adjusted_billing": round(total_adjusted_billing, 2),
                 "total_volume": round(total_volume, 4),
             },
             ensure_ascii=False,

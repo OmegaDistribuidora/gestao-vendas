@@ -87,7 +87,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _isSupervisor ||
       _isCoordinator ||
       widget.currentUser.profileSlug == AppProfile.boardSlug ||
-      widget.currentUser.profileSlug == AppProfile.othersSlug;
+      widget.currentUser.profileSlug == AppProfile.othersSlug ||
+      widget.currentUser.profileSlug == AppProfile.managementSlug;
   bool get _showsPerformanceModule => true;
   bool get _showsCommitmentModule =>
       widget.currentUser.profile?.canAccessCommitment ?? false;
@@ -106,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
         AppProfile.coordinatorSlug,
         AppProfile.boardSlug,
         AppProfile.othersSlug,
+        AppProfile.managementSlug,
       }.contains(widget.currentUser.profileSlug);
 
   HomeScopeOption? get _selectedHomeScope {
@@ -450,6 +452,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 ],
                                               ],
                                             ),
+                                            if (!_isSeller &&
+                                                item
+                                                    .sellerLabel
+                                                    .isNotEmpty) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Vendedor: ${item.sellerLabel}',
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall
+                                                    ?.copyWith(
+                                                      color: const Color(
+                                                        0xFF5E6A7C,
+                                                      ),
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ),
@@ -1009,6 +1032,7 @@ class _HomeScreenState extends State<HomeScreen> {
     AppProfile.sellerSlug => 'Visão do vendedor',
     AppProfile.supervisorSlug => 'Visão do supervisor',
     AppProfile.coordinatorSlug => 'Visão do coordenador',
+    AppProfile.managementSlug => 'Vis\u00E3o da ger\u00EAncia',
     _ => 'Visão geral',
   };
 
@@ -1069,6 +1093,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           const <String>{
                                 AppProfile.boardSlug,
                                 AppProfile.othersSlug,
+                                AppProfile.managementSlug,
                               }.contains(widget.currentUser.profileSlug)
                               ? 'Visão geral'
                               : 'Minha visão',
@@ -1107,7 +1132,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                           subtitle: Text(
-                            '${scope.profileLabel} • ${scope.ownerCode}',
+                            scope.profileSlug == AppProfile.managementSlug
+                                ? scope.profileLabel
+                                : '${scope.profileLabel} • ${scope.ownerCode}',
                           ),
                           trailing: _selectedHomeScopeValue == scope.value
                               ? const Icon(

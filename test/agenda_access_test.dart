@@ -10,6 +10,7 @@ void main() {
     expect(profile(AppProfile.coordinatorSlug).canAccessAgenda, isTrue);
     expect(profile(AppProfile.boardSlug).canAccessAgenda, isTrue);
     expect(profile(AppProfile.othersSlug).canAccessAgenda, isTrue);
+    expect(profile(AppProfile.managementSlug).canAccessAgenda, isTrue);
 
     expect(profile(AppProfile.sellerSlug).canAccessAgenda, isFalse);
     expect(profile(AppProfile.adminSlug).canAccessAgenda, isFalse);

@@ -237,7 +237,11 @@ def main() -> None:
         mark_sync_run_failed(session, run_id, str(error))
         raise
 
-    dispatch_push_notifications(session)
+    dispatch_push_notifications(
+        session,
+        evaluate=True,
+        reference_date=sync_end_date.isoformat(),
+    )
 
     total_venda = sum(row.venda for row in rows)
     total_volume = sum(row.volume for row in rows)

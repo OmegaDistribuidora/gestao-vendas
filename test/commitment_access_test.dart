@@ -10,6 +10,7 @@ void main() {
     expect(profile(AppProfile.coordinatorSlug).canAccessCommitment, isTrue);
     expect(profile(AppProfile.boardSlug).canAccessCommitment, isTrue);
     expect(profile(AppProfile.othersSlug).canAccessCommitment, isTrue);
+    expect(profile(AppProfile.managementSlug).canAccessCommitment, isTrue);
 
     expect(profile(AppProfile.sellerSlug).canAccessCommitment, isFalse);
     expect(profile(AppProfile.adminSlug).canAccessCommitment, isFalse);

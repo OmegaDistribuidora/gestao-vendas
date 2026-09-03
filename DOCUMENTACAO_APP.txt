@@ -2,7 +2,7 @@ DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
 Ultima atualizacao desta documentacao: 25/08/2026
-Versao atual do projeto: 0.9.17+33
+Versao atual do projeto: 0.9.18+34
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -103,6 +103,7 @@ Perfis principais reconhecidos no app:
 - coordenador
 - diretoria
 - outros
+- gerencia
 - sem_perfil
 
 Regras gerais:
@@ -113,7 +114,16 @@ Regras gerais:
 - Coordenador visualiza o consolidado dos supervisores e vendedores ligados
   a ele, com os filtros permitidos por cada modulo.
 - Admin acessa Administracao e Relatorios.
-- Diretoria e Outros usam as regras definidas por cada RPC e modulo.
+- Diretoria e Outros mantem a visao completa da empresa. Nos modulos com
+  troca de visao, podem selecionar usuarios de Gerencia, Coordenador,
+  Supervisor e Vendedor; os usuarios de Gerencia aparecem primeiro.
+- Gerencia e um perfil amplo com recorte obrigatorio nos coordenadores 9, 10,
+  12, 13 e 14 e em seus respectivos supervisores e vendedores. O coordenador
+  7 e toda a sua hierarquia ficam fora de metas, realizados, listas, filtros,
+  detalhes, notificacoes e demais consultas acessiveis por esse perfil. O
+  recorte e aplicado pelas RPCs, nao apenas pela interface. Nos filtros de
+  troca de visao, Gerencia pode selecionar somente esses coordenadores e seus
+  supervisores e vendedores; nunca outro usuario de Gerencia.
 - O modulo Clientes sem compra e exclusivo para vendedor, supervisor e
   coordenador, inclusive com validacao no backend.
 
@@ -147,13 +157,15 @@ na interface nao substitui a autorizacao no backend.
 - Apresenta indicadores comerciais conforme perfil e periodo.
 - A Home possui filtro hierarquico de visao, oculto para vendedores. Supervisor
   pode consultar a Home dos seus vendedores; coordenador pode consultar seus
-  supervisores e vendedores; diretoria e outros podem consultar coordenadores,
-  supervisores e vendedores de toda a empresa. A opcao inicial sempre preserva
-  a visao do proprio usuario ou o consolidado geral do perfil amplo.
+  supervisores e vendedores; Gerencia pode consultar apenas a hierarquia dos
+  coordenadores 9, 10, 12, 13 e 14; diretoria e outros podem consultar primeiro
+  usuarios de Gerencia e depois coordenadores, supervisores e vendedores de
+  toda a empresa. A opcao inicial sempre preserva a visao do proprio usuario
+  ou o consolidado geral do perfil amplo.
 - Ao trocar a visao, a Home atualiza em conjunto venda, volume, pedidos,
   positivacao e clientes novos, produtos distintos, metas diarias, tipo da meta
   secundaria e o compromisso vigente do usuario selecionado. A RPC
-  get_home_dashboard_v3 entrega esse conjunto de forma atomica.
+  get_home_dashboard_v4 entrega esse conjunto de forma atomica.
 - Os valores financeiros usam as regras de venda, faturamento e devolucao
   definidas nas RPCs do Supabase.
 - No Resumo de hoje, vendedor, supervisor, coordenador, diretoria e outros
@@ -163,7 +175,15 @@ na interface nao substitui a autorizacao no backend.
   gerais do backend.
 - As metas diarias usam a mesma regra de necessidade diaria do modulo
   Performance, baseada em dias uteis restantes, metas mensais e no mes atual
-  da Home.
+  da Home. O saldo que fixa a meta do dia considera somente os dias encerrados
+  ate ontem e e liquido de devolucoes: financeiro soma venda e devolucao do
+  pedido original, Positivacao conta apenas clientes cujo saldo permanece
+  positivo e SKU conta apenas produtos cuja quantidade liquida permanece
+  positiva. Assim a meta fica estavel durante o dia e alinhada ao criterio
+  mensal da Gold.
+- O realizado exibido no Resumo de hoje permanece bruto. A mesma meta diaria
+  liquida e usada pelas notificacoes, enquanto o progresso diario financeiro,
+  de SKU e de novos clientes continua acompanhando o movimento bruto de hoje.
 - O Resumo de hoje usa cards agrupados: Venda + Meta Financeira, metrica
   principal + Meta diaria e Volume + metrica secundaria.
 - O card da meta diaria mostra o percentual do dia em uma barra de progresso,
@@ -177,13 +197,18 @@ na interface nao substitui a autorizacao no backend.
   Venda/Volume/Positivacao e o total de produtos. Se o detalhe de itens ainda
   nao estiver carregado, a RPC pode usar o mix de faturamento como fallback.
 - A positivacao realizada da Home e interativa. Ao tocar no indicador, o app
-  usa o detalhamento retornado por get_home_dashboard_v3 e lista codigo, nome
+  usa o detalhamento retornado por get_home_dashboard_v4 e lista codigo, nome
   e valor bruto total comprado hoje por cliente. O escopo e o mesmo do Resumo
   de hoje e acompanha o filtro da Home: vendedor ve somente suas vendas,
   supervisor sua equipe, coordenador sua estrutura e perfis de visao geral
   veem toda a empresa. A consulta usa app_customers para o nome e preserva o
   codigo como fallback caso a base de clientes ainda nao
   contenha o cadastro.
+- No detalhamento das positivacoes, supervisor, coordenador, Gerencia,
+  diretoria e outros tambem veem o codigo e o nome do vendedor responsavel
+  por cada cliente. A identificacao fica oculta quando o usuario autenticado
+  e vendedor. Se mais de um vendedor atender o mesmo cliente no dia, aparece
+  aquele com o maior valor vendido ao cliente no periodo.
 - Enquanto a Home estiver aberta, seus dados sao atualizados silenciosamente
   a cada 2 minutos, sem substituir a tela por um indicador de carregamento.
 
@@ -193,6 +218,11 @@ na interface nao substitui a autorizacao no backend.
 - Trabalha com vendedor, supervisor e coordenador, alem das visoes previstas
   pelo backend.
 - Possui seletor mensal e filtros hierarquicos.
+- Ao selecionar outro vendedor, supervisor ou coordenador, toda a tela passa a
+  espelhar as regras do perfil efetivo: indicadores, SKU/positivacao,
+  inadimplencia, premiacao atual e possibilidade maxima ficam identicos aos
+  exibidos no login do usuario selecionado. O filtro permanece disponivel e as
+  permissoes continuam sendo determinadas por quem realizou o login.
 - Exibe indicadores financeiros, positivacao, SKU e projecao por dias uteis.
 - Exibe a quantidade de dias uteis uma unica vez junto ao seletor mensal.
 - Mostra media por dia util e necessidade diaria para atingir a meta.
@@ -204,6 +234,11 @@ na interface nao substitui a autorizacao no backend.
   Cada combinacao fornecedor/indicador e contabilizada uma unica vez.
 - O resumo de premiacao nao e exibido para perfis sem premiacao, como
   diretoria e outros, nem quando nao existe possibilidade cadastrada.
+- Nos cards de fornecedor, possibilidade de premio maior que zero identifica
+  os fornecedores Top 5 do vendedor, supervisor ou coordenador efetivamente
+  visualizado. Esses cards aparecem primeiro e recebem borda, fundo e selo de
+  destaque. Ao trocar a visao, a classificacao e recalculada pelos dados do
+  usuario selecionado. Gerencia, Diretoria e Outros nao recebem o destaque.
 - Enquanto a tela estiver aberta, a Performance e atualizada silenciosamente
   a cada 2 minutos, preservando o mes e o escopo selecionados.
 
@@ -430,12 +465,21 @@ Perfis e escopo:
 - Supervisor e coordenador veem somente as proprias atividades.
 - Diretoria e Outros podem selecionar e consultar a agenda de supervisores e
   coordenadores.
+- Gerencia pode selecionar somente coordenadores 9, 10, 12, 13 e 14 e os
+  supervisores vinculados a eles. O recorte e validado pela API da Agenda com
+  a identidade autenticada no Supabase.
+- Diretoria e Outros continuam com a visao completa de todos os coordenadores
+  e supervisores, inclusive o coordenador 7. A consulta direta de anexos por
+  identificador tambem valida o mesmo escopo antes de entregar a foto.
 - A agenda abre no periodo Hoje e tambem oferece Semana e Mes.
 - As atividades sao agrupadas em pendentes, em andamento e concluidas.
 
 Acoes permitidas no aplicativo:
 
 - Supervisor e coordenador podem criar atividades apenas para si mesmos.
+- Ao abrir a criacao de uma atividade, o prazo ja vem preenchido com a data
+  atual tanto no aplicativo quanto no sistema web. O usuario ainda pode alterar
+  ou remover essa data antes de salvar.
 - A pasta regional e definida no backend pela hierarquia comercial: Capital
   para coordenador 12, Cariri para coordenador 13 e Interior para coordenador
   10, incluindo seus respectivos supervisores.
@@ -468,7 +512,8 @@ Objetivo e fonte:
 
 Perfis e hierarquia:
 
-- Disponivel somente para Supervisor, Coordenador, Diretoria e Outros.
+- Disponivel somente para Supervisor, Coordenador, Diretoria, Outros e
+  Gerencia.
 - Supervisor visualiza apenas o proprio compromisso.
 - Coordenador visualiza o proprio realizado; por enquanto, sua meta e a soma
   dos compromissos dos supervisores vinculados no mesmo periodo. Uma meta
@@ -476,6 +521,8 @@ Perfis e hierarquia:
   seus supervisores.
 - Diretoria e Outros visualizam a lista completa e podem filtrar um supervisor
   ou coordenador, alem do periodo.
+- Gerencia visualiza somente os compromissos dos coordenadores 9, 10, 12, 13 e
+  14 e de seus supervisores, podendo filtrar os usuarios desse recorte.
 
 Indicadores e projecao:
 
@@ -605,11 +652,12 @@ security definer com validacao explicita do usuario e do escopo.
 
 - resolve_login_context
 - get_home_kpis
-- get_supplier_analysis
-- get_performance_overview
+- get_home_dashboard_v4
+- get_supplier_analysis_v3
+- get_performance_overview_v3
 - get_return_analysis
 - get_return_order_details
-- get_delinquency_overview
+- get_delinquency_overview_v3
 - get_blocked_orders_overview
 - get_customers_without_purchase
 - get_customer_opportunities
@@ -618,7 +666,7 @@ security definer com validacao explicita do usuario e do escopo.
 - get_recovered_customer_opportunities
 - get_usage_report
 - record_module_access
-- get_commitment_overview
+- get_commitment_overview_v2
 
 Os nomes e assinaturas definitivos devem ser confirmados na migration mais
 recente, pois funcoes podem ser substituidas por migrations posteriores.
@@ -643,10 +691,17 @@ Scripts principais em tool/:
   Vendas agregadas por data, pedido, cliente, vendedor e fornecedor.
 
 - oracle_billing_sync.py
-  Faturamento usado nos indicadores financeiros.
+  Faturamento usado nos indicadores financeiros. Mantem o valor legado para
+  compatibilidade e tambem grava adjusted_billing_amount com punit,
+  vloutros, vlfrete e arredondamento por item. A Analise por Fornecedor usa o
+  valor ajustado somente quando a fonte selecionada e Faturamento.
 
 - oracle_returns_sync.py
-  Devolucoes financeiras e detalhes dos itens devolvidos.
+  Devolucoes financeiras e detalhes dos itens devolvidos. O snapshot
+  financeiro guarda snapshot_date como data de entrada e
+  original_order_date como data do pedido. O modulo Devolucoes continua
+  usando app_return_order_items.return_date e nao e afetado pelo valor
+  ajustado do faturamento.
 
 - oracle_suppliers_sync.py
   Cadastro de fornecedores.
@@ -701,7 +756,9 @@ Scripts principais em tool/:
   Nao rele dclientes nem fvendas e faz uma unica RPC de exclusao indexada.
 
 - oracle_financial_sync_common.py
-  Infraestrutura compartilhada para cargas financeiras.
+  Infraestrutura compartilhada para cargas financeiras. Consulta
+  filial.tauxfornecedor no PostgreSQL Omega, valida conflitos e grava o codigo
+  principal em supplier_main_code, mantendo codfornec para compatibilidade.
 
 - supabase_sync_common.py
   Autenticacao tecnica, staging, chamadas RPC e registro das execucoes.
@@ -920,6 +977,31 @@ volume de staging e timeout das funcoes do Supabase.
   get_home_dashboard_v3, que aplica o filtro hierarquico da Home e devolve em
   uma unica resposta KPIs, clientes positivados, metas da Performance e o
   compromisso do escopo selecionado.
+- A migration 20260831170000_management_profile_scope.sql cadastra o recorte
+  configuravel do perfil Gerencia e aplica os coordenadores 9, 10, 12, 13 e
+  14, com seus supervisores e vendedores, nas RPCs de Home, Performance,
+  Compromisso, Analise por Fornecedor, Inadimplencia, oportunidades, clientes
+  recuperados, pedidos bloqueados, filtros, Agenda e notificacoes. Diretoria e
+  Outros preservam o escopo completo existente.
+- A migration 20260903100000_manager_view_scope_selection.sql centraliza a
+  autorizacao das trocas de visao e cria RPCs versionadas para Home,
+  Performance, Analise por Fornecedor, Inadimplencia e Compromisso. Diretoria
+  e Outros podem selecionar Gerencia como primeira opcao e espelhar seu
+  recorte; Gerencia, Coordenador e Supervisor continuam limitados a sua
+  hierarquia, e Vendedor permanece sem filtro. As RPCs antigas nao foram
+  alteradas, preservando o comportamento das versoes ja publicadas do app.
+- As migrations 20260903113000 e 20260903114000 permitem que um usuario de
+  Gerencia sem codigo comercial tambem seja selecionado, usando sua chave de
+  autenticacao apenas como identificador tecnico do filtro.
+- A migration 20260902170000_supplier_billing_accuracy.sql adiciona ao fluxo
+  financeiro a data original do pedido, o valor de faturamento ajustado e o
+  codigo principal de fornecedor vindo de filial.tauxfornecedor. Somente a
+  Analise por Fornecedor em modo Faturamento usa esses novos campos; os
+  consumidores legados e o modulo Devolucoes preservam seus contratos.
+- A migration 20260903160000_home_positive_customer_seller.sql cria o
+  detalhamento v2 das positivacoes da Home com codigo e nome do vendedor e o
+  conecta somente ao dashboard v4 da nova versao. Os dashboards consumidos
+  por versoes anteriores permanecem inalterados.
 
 
 13. VERSAO E DISTRIBUICAO
@@ -927,9 +1009,34 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.17
-- versionCode / CFBundleVersion: 33
-- Release multiplataforma: 0.9.17+33
+- versionName / CFBundleShortVersionString: 0.9.18
+- versionCode / CFBundleVersion: 34
+- Release multiplataforma: 0.9.18+34
+
+Release 0.9.18+34:
+
+- Novo perfil Gerencia com recorte seguro nos coordenadores 9, 10, 12, 13 e
+  14 e em suas hierarquias, aplicado em metas, realizados, listas, Agenda,
+  notificacoes e filtros de todos os modulos compativeis.
+- Diretoria e Outros podem selecionar usuarios de Gerencia antes dos demais
+  perfis; Gerencia pode selecionar apenas coordenadores, supervisores e
+  vendedores pertencentes ao proprio recorte.
+- A Performance passa a espelhar integralmente o perfil selecionado, incluindo
+  indicadores e premiacao. Fornecedores Top 5 com possibilidade de premio
+  aparecem primeiro e recebem destaque visual para os perfis premiaveis.
+- A lista de clientes positivados hoje mostra codigo e nome do vendedor para
+  Supervisor, Coordenador, Gerencia, Diretoria e Outros, permanecendo enxuta
+  para o proprio Vendedor.
+- O faturamento da Analise por Fornecedor fica mais proximo da apuracao do
+  WinThor, usando frete, outros valores, arredondamento por item e a agregacao
+  oficial de filial.tauxfornecedor. Devolucoes continuam abatidas na data da
+  venda original somente nessa analise.
+- Metas diarias da Home usam o saldo liquido dos dias fechados, enquanto o
+  realizado do dia continua bruto. A avaliacao de notificacoes foi isolada da
+  transacao das cargas para evitar que uma falha de push reverta dados novos.
+- A criacao de atividades da Agenda abre com o prazo preenchido na data atual.
+- Preparacao multiplataforma propaga 0.9.18 build 34 para Android e iOS,
+  preservando Firebase, APNs, permissoes e assinatura automatica do Codemagic.
 
 Release 0.9.17+33:
 
@@ -1249,8 +1356,8 @@ Regras de notificacao implementadas:
 - Devolucoes novas para vendedor, supervisor e coordenador conforme o escopo
   do perfil.
 - Uma notificacao por devolucao/pedido/usuario escopado.
-- sem_perfil nao recebe push. Notificacoes de devolucao para perfis de visao
-  geral nao foram habilitadas nesta etapa.
+- sem_perfil nao recebe push. Perfis de visao geral recebem as devolucoes do
+  escopo completo da empresa.
 
 Envio pelo backend:
 
@@ -1269,8 +1376,16 @@ Envio pelo backend:
 - Nao salvar service account, private key ou server key no repositorio.
 - O endpoint aceita evaluate=true para executar evaluate_push_notifications
   antes de enviar a fila.
-- O trigger evaluate_push_notifications_after_sync avalia metas/devolucoes
-  quando jobs relevantes em etl_sync_runs mudam para applied.
+- O endpoint aceita evaluateReturnsAllProfiles=true para complementar a
+  avaliacao das devolucoes destinadas a diretoria/outros.
+- Desde a migration 20260831132000_decouple_push_evaluation_from_etl.sql, a
+  avaliacao nao roda mais em trigger de etl_sync_runs. Ela ocorre pela Edge
+  Function somente depois que a transacao da carga foi confirmada. Assim um
+  timeout de notificacao nunca reverte vendas, faturamento ou devolucoes.
+- A migration 20260831133500_cache_closed_liquid_push_targets.sql mantem um
+  cache por data/perfil/escopo do realizado liquido fechado ate ontem. Esse
+  valor e imutavel durante o dia e evita repetir as agregacoes mensais para
+  todos os destinatarios a cada ciclo de dois minutos.
 - A avaliacao cria eventos queued; o envio efetivo ao Firebase ocorre quando a
   Edge Function consome essa fila.
 - As syncs Python operacionais chamam a Edge Function ao final das cargas
@@ -1282,9 +1397,9 @@ Envio pelo backend:
 - Essa chamada e best-effort: falha ou ausencia de PUSH_SENDER_SECRET nao deve
   derrubar a carga de dados, apenas registra aviso no log.
 - O .env operacional do Airflow/OneDrive precisa conter PUSH_SENDER_SECRET.
-- Para cargas fora de etl_sync_runs, chamar evaluate_push_notifications ou a
-  Edge Function com evaluate=true ao final da rotina; em seguida, consumir a
-  fila com a Edge Function send-push-notifications.
+- Para qualquer carga relevante, confirmar primeiro a transacao comercial e
+  somente depois chamar a Edge Function com evaluate=true. A avaliacao e o
+  envio devem permanecer best-effort e nunca participar da transacao da carga.
 
 Passos para concluir a configuracao Firebase:
 
@@ -1337,7 +1452,7 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Entrega multiplataforma atual: 0.9.17 build 33.
+- Entrega multiplataforma atual: 0.9.18 build 34.
 
 
 14. DESENVOLVIMENTO E VALIDACAO

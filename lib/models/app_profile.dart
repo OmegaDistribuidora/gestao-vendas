@@ -14,6 +14,7 @@ class AppProfile {
   static const String coordinatorSlug = 'coordenador';
   static const String boardSlug = 'diretoria';
   static const String othersSlug = 'outros';
+  static const String managementSlug = 'gerencia';
   static const String unassignedSlug = 'sem_perfil';
 
   final String id;
@@ -28,12 +29,14 @@ class AppProfile {
     coordinatorSlug,
     boardSlug,
     othersSlug,
+    managementSlug,
   }.contains(slug);
   bool get canAccessCommitment => const <String>{
     supervisorSlug,
     coordinatorSlug,
     boardSlug,
     othersSlug,
+    managementSlug,
   }.contains(slug);
 
   factory AppProfile.fromJson(Map<String, dynamic> json) {

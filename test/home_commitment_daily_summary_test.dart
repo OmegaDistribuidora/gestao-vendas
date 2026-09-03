@@ -62,6 +62,40 @@ void main() {
   );
 
   test(
+    'management home consolidates its coordinator rows without duplicating supervisors',
+    () {
+      final summary = HomeCommitmentDailySummary.fromOverview(
+        overview: _overview(<CommitmentItem>[
+          _item(
+            profileSlug: AppProfile.coordinatorSlug,
+            ownerCode: '10',
+            financialTarget: 850000,
+            positivationTarget: 600,
+            financialActual: 100000,
+            positivationActual: 100,
+          ),
+          _item(
+            profileSlug: AppProfile.supervisorSlug,
+            ownerCode: '20',
+            financialTarget: 250000,
+            positivationTarget: 200,
+            financialActual: 30000,
+            positivationActual: 30,
+          ),
+        ]),
+        viewerProfileSlug: AppProfile.managementSlug,
+        referenceDate: DateTime(2026, 8, 24),
+      );
+
+      expect(summary, isNotNull);
+      expect(summary!.financialNeed, closeTo(141666.6667, 0.001));
+      expect(summary.positivationNeed, 100);
+      expect(summary.financialActualToday, 100000);
+      expect(summary.positivationActualToday, 100);
+    },
+  );
+
+  test(
     'coordinator home uses its consolidated row without adding supervisors',
     () {
       final summary = HomeCommitmentDailySummary.fromOverview(

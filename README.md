@@ -1,6 +1,7 @@
 # Gestão de Vendas
 
-Aplicativo Android em Flutter para autenticação de usuários, acompanhamento operacional e gestão administrativa integrada ao Supabase.
+Aplicativo Flutter para Android e iOS voltado à autenticação de usuários,
+acompanhamento comercial e gestão operacional integrada ao Supabase.
 
 ## Visão Geral
 
@@ -11,7 +12,7 @@ O app foi desenhado para operação remota, com Supabase como backend principal 
 - gestão administrativa
 - relatórios de uso
 - snapshots de dados operacionais consumidos na home
-- módulos permanentes como performance, devoluções e análise por fornecedor
+- módulos como Compromisso, Performance, Agenda, devoluções e análise por fornecedor
 
 O armazenamento local é usado apenas para itens de sessão e conveniência do usuário, como a preferência de lembrar login.
 
@@ -26,8 +27,11 @@ Estrutura principal:
 - `lib/models/`: modelos de domínio usados pelo app
 - `supabase/migrations/`: histórico de schema e funções SQL
 - `supabase/functions/admin-users/`: Edge Function para operações administrativas sensíveis
+- `supabase/functions/send-push-notifications/`: avaliação e envio de notificações comerciais
 - `tool/oracle_sales_sync.py`: sincronização manual ou automatizada de vendas do dia para KPIs
 - `tool/oracle_sellers_sync.py`: sincronização manual ou automatizada de vendedores vindos do Oracle
+- `tool/oracle_billing_sync.py`: faturamento e agregação oficial de fornecedores
+- `docs/IOS_CODEMAGIC_SETUP.md`: preparação e distribuição do iOS pelo Codemagic
 
 ## Fluxos Principais
 
@@ -41,18 +45,21 @@ Autorização:
 
 - administradores têm acesso à área administrativa e aos relatórios
 - usuários comuns acessam os módulos permanentes do aplicativo pelo menu lateral
+- o perfil Gerência acessa somente os coordenadores 9, 10, 12, 13 e 14 e suas hierarquias
+- diretoria e outros preservam a visão completa da empresa
 
 Home:
 
 - admin vê acesso direto à administração
-- vendedor vê KPIs do período em carrossel horizontal
-- demais usuários recebem uma mensagem de boas-vindas e acessam os módulos pelo menu lateral
+- os perfis comerciais veem os KPIs diários permitidos pelo próprio escopo
+- supervisor, coordenador, Gerência, diretoria e outros podem trocar a visão conforme a hierarquia autorizada
 
 ## Integrações Externas
 
 Os scripts em `tool/` foram pensados para execução manual ou orquestrada:
 
 - sincronização de vendas do Oracle para o Supabase
+- sincronização de faturamento, devoluções e itens dos pedidos
 - sincronização de vendedores do Oracle para o Supabase
 
 Esses scripts dependem de variáveis de ambiente para conexão e autenticação. Não há credenciais sensíveis documentadas neste repositório.
@@ -73,6 +80,7 @@ flutter pub get
 flutter analyze
 flutter test
 flutter build apk --debug
+flutter build appbundle --release
 ```
 
 ## Segurança

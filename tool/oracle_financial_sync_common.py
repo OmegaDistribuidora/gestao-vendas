@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -8,6 +9,11 @@ from pathlib import Path
 from typing import Iterable
 
 import oracledb
+
+try:
+    import psycopg
+except ImportError:  # The Airflow Windows venv still uses psycopg2.
+    import psycopg2 as psycopg
 
 from supabase_sync_common import (
     SupabaseSession,
@@ -23,6 +29,16 @@ DEFAULT_FAST_LOOKBACK_DAYS = 1
 DEFAULT_RECONCILIATION_LOOKBACK_DAYS = 30
 BATCH_SIZE = 1000
 DOTENV_PATH = Path(__file__).with_name(".env")
+POSTGRES_CREDENTIAL_FILE = Path(
+    os.getenv(
+        "APP_POSTGRES_CREDENTIAL_FILE",
+        r"C:\Users\POWERBI\Desktop\Bckup\pg_password.txt",
+    )
+)
+POWERSHELL_EXE = os.getenv(
+    "APP_POWERSHELL_EXE",
+    r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+)
 
 
 @dataclass(frozen=True)
@@ -35,7 +51,10 @@ class FinancialRow:
     codsupervisor: str
     codgerente: str
     codfornec: str
+    original_order_date: str
+    supplier_main_code: str
     faturamento: float
+    adjusted_billing_amount: float
     volume: float
     custo: float
     lucro: float
@@ -103,9 +122,105 @@ def init_oracle_client_if_available() -> None:
                 continue
 
 
+def _postgres_password() -> str:
+    configured = os.getenv("APP_POSTGRES_PASSWORD", "").strip()
+    if configured:
+        return configured
+    if os.name != "nt" or not POSTGRES_CREDENTIAL_FILE.exists():
+        raise RuntimeError("APP_POSTGRES_PASSWORD is required on this host.")
+
+    credential_path = str(POSTGRES_CREDENTIAL_FILE).replace("'", "''")
+    command = (
+        f"$credential = Get-Content -LiteralPath '{credential_path}' | "
+        "Select-Object -First 1; "
+        "$secure = ConvertTo-SecureString -String $credential; "
+        "$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure); "
+        "try { "
+        "$plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($pointer); "
+        "[Console]::Out.Write($plain) "
+        "} finally { "
+        "[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) "
+        "}"
+    )
+    result = subprocess.run(
+        [
+            POWERSHELL_EXE,
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            command,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    password = result.stdout.strip()
+    if result.returncode != 0 or not password:
+        raise RuntimeError("Unable to read the encrypted PostgreSQL credential.")
+    return password
+
+
+def fetch_supplier_code_map() -> dict[str, str]:
+    """Read the authoritative supplier aliases from the local Omega database."""
+
+    with psycopg.connect(
+        host=os.getenv("APP_POSTGRES_HOST", "192.168.1.14"),
+        port=int(os.getenv("APP_POSTGRES_PORT", "5432")),
+        dbname=os.getenv("APP_POSTGRES_DB", "Omega"),
+        user=os.getenv("APP_POSTGRES_USER", "PwBi"),
+        password=_postgres_password(),
+    ) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                select codfornec_orig, codfornec_princ
+                from filial.tauxfornecedor
+                where codfornec_orig is not null
+                  and codfornec_princ is not null
+                order by codfornec_orig
+                """
+            )
+            mapping: dict[str, str] = {}
+            for original_code, main_code in cursor:
+                original = normalize_text(original_code)
+                main = normalize_text(main_code)
+                previous = mapping.get(original)
+                if previous is not None and previous != main:
+                    raise RuntimeError(
+                        "Conflicting supplier mapping in filial.tauxfornecedor: "
+                        f"{original} -> {previous}/{main}."
+                    )
+                mapping[original] = main
+
+    if not mapping:
+        raise RuntimeError("filial.tauxfornecedor returned no valid mappings.")
+    return mapping
+
+
+def _legacy_supplier_code(original_code: str) -> str:
+    """Preserve the old code for consumers that still use the legacy column."""
+
+    if original_code in {"1535", "1968"}:
+        return "1968"
+    if original_code in {"1443", "967"}:
+        return "967"
+    if original_code in {"1630", "2445"}:
+        return "1630"
+    return original_code
+
+
 def authenticate_supabase() -> tuple[str, str]:
     session = authenticate_supabase_session(require_env)
     return session.url, session.access_token
+
+
+def get_supabase_api_key() -> str:
+    return (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        or require_env("SUPABASE_PUBLISHABLE_KEY")
+    )
 
 
 def get_sync_scope() -> str:
@@ -157,7 +272,13 @@ def fetch_oracle_rows(
     snapshot_type: str,
     query: str,
     sync_start_date: date,
+    sync_end_date: date | None = None,
+    *,
+    storage_supplier_code: str = "legacy",
 ) -> list[FinancialRow]:
+    if storage_supplier_code not in {"legacy", "main"}:
+        raise ValueError("storage_supplier_code must be 'legacy' or 'main'.")
+
     oracle_user = require_env("ORACLE_USER")
     oracle_password = require_env("ORACLE_PASSWORD")
     oracle_dsn = require_env("ORACLE_DSN")
@@ -173,13 +294,22 @@ def fetch_oracle_rows(
         "+00:00",
         "Z",
     )
+    end_exclusive = (sync_end_date or date.today()) + timedelta(days=1)
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 query,
                 sync_start_date=datetime.combine(sync_start_date, datetime.min.time()),
+                sync_end_exclusive=datetime.combine(
+                    end_exclusive,
+                    datetime.min.time(),
+                ),
             )
-            rows: list[FinancialRow] = []
+            supplier_mapping = fetch_supplier_code_map()
+            aggregated: dict[tuple[str, str, str, str, str, str], FinancialRow] = {}
+            supplier_by_storage_key: dict[
+                tuple[str, str, str, str, str], str
+            ] = {}
             for (
                 numped,
                 snapshot_date,
@@ -187,32 +317,103 @@ def fetch_oracle_rows(
                 codusur,
                 codsupervisor,
                 codgerente,
-                codfornec,
+                supplier_original_code,
+                original_order_date,
                 custo,
                 faturamento,
+                adjusted_billing_amount,
                 mix,
                 volume,
                 lucro,
             ) in cursor:
-                rows.append(
-                    FinancialRow(
-                        snapshot_type=snapshot_type,
-                        snapshot_date=snapshot_date.strftime("%Y-%m-%d"),
-                        numped=normalize_text(numped),
-                        codcli=normalize_text(codcli),
-                        codusur=normalize_text(codusur),
-                        codsupervisor=normalize_text(codsupervisor),
-                        codgerente=normalize_text(codgerente),
-                        codfornec=normalize_text(codfornec),
-                        custo=to_float(custo),
-                        faturamento=to_float(faturamento),
-                        mix=to_float(mix),
-                        volume=to_float(volume),
-                        lucro=to_float(lucro),
-                        imported_at=imported_at,
-                    )
+                original_supplier = normalize_text(supplier_original_code)
+                main_supplier = supplier_mapping.get(
+                    original_supplier,
+                    original_supplier,
                 )
-            return rows
+                stored_supplier = (
+                    main_supplier
+                    if storage_supplier_code == "main"
+                    else _legacy_supplier_code(original_supplier)
+                )
+                row = FinancialRow(
+                    snapshot_type=snapshot_type,
+                    snapshot_date=snapshot_date.strftime("%Y-%m-%d"),
+                    numped=normalize_text(numped),
+                    codcli=normalize_text(codcli),
+                    codusur=normalize_text(codusur),
+                    codsupervisor=normalize_text(codsupervisor),
+                    codgerente=normalize_text(codgerente),
+                    codfornec=stored_supplier,
+                    original_order_date=original_order_date.strftime("%Y-%m-%d"),
+                    supplier_main_code=main_supplier,
+                    custo=to_float(custo),
+                    faturamento=to_float(faturamento),
+                    adjusted_billing_amount=to_float(adjusted_billing_amount),
+                    mix=to_float(mix),
+                    volume=to_float(volume),
+                    lucro=to_float(lucro),
+                    imported_at=imported_at,
+                )
+                storage_key = (
+                    row.snapshot_date,
+                    row.numped,
+                    row.codcli,
+                    row.codusur,
+                    row.codfornec,
+                )
+                previous_main = supplier_by_storage_key.get(storage_key)
+                if previous_main is not None and previous_main != main_supplier:
+                    raise RuntimeError(
+                        "Supplier mapping conflicts with the legacy financial key "
+                        f"for order {row.numped}: {previous_main}/{main_supplier}."
+                    )
+                supplier_by_storage_key[storage_key] = main_supplier
+                key = (
+                    row.snapshot_date,
+                    row.numped,
+                    row.codcli,
+                    row.codusur,
+                    row.codfornec,
+                    row.supplier_main_code,
+                )
+                existing = aggregated.get(key)
+                if existing is None:
+                    aggregated[key] = row
+                    continue
+
+                if (
+                    existing.codsupervisor != row.codsupervisor
+                    or existing.codgerente != row.codgerente
+                    or existing.original_order_date != row.original_order_date
+                ):
+                    raise RuntimeError(
+                        "Inconsistent financial grouping for order "
+                        f"{row.numped} and supplier {row.codfornec}."
+                    )
+                aggregated[key] = FinancialRow(
+                    snapshot_type=row.snapshot_type,
+                    snapshot_date=row.snapshot_date,
+                    numped=row.numped,
+                    codcli=row.codcli,
+                    codusur=row.codusur,
+                    codsupervisor=row.codsupervisor,
+                    codgerente=row.codgerente,
+                    codfornec=row.codfornec,
+                    original_order_date=row.original_order_date,
+                    supplier_main_code=row.supplier_main_code,
+                    custo=existing.custo + row.custo,
+                    faturamento=existing.faturamento + row.faturamento,
+                    adjusted_billing_amount=(
+                        existing.adjusted_billing_amount
+                        + row.adjusted_billing_amount
+                    ),
+                    mix=existing.mix + row.mix,
+                    volume=existing.volume + row.volume,
+                    lucro=existing.lucro + row.lucro,
+                    imported_at=row.imported_at,
+                )
+            return list(aggregated.values())
     finally:
         connection.close()
 
@@ -264,7 +465,10 @@ def stage_financial_rows(
             "codsupervisor": row.codsupervisor,
             "codgerente": row.codgerente,
             "codfornec": row.codfornec,
+            "original_order_date": row.original_order_date,
+            "supplier_main_code": row.supplier_main_code,
             "faturamento": row.faturamento,
+            "adjusted_billing_amount": row.adjusted_billing_amount,
             "volume": row.volume,
             "custo": row.custo,
             "lucro": row.lucro,

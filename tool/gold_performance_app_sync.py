@@ -192,12 +192,11 @@ def main() -> None:
             pass
         raise
 
-    notification_evaluation = invoke_rpc(
+    notification_evaluation = dispatch_push_notifications(
         session,
-        "evaluate_push_notifications_after_gold_sync",
-        {"target_reference_date": date.today().isoformat()},
+        evaluate=True,
+        reference_date=date.today().isoformat(),
     )
-    dispatch_push_notifications(session)
 
     print(
         json.dumps(

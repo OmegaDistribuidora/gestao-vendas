@@ -217,6 +217,8 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
         return 'Diretoria';
       case AppProfile.othersSlug:
         return 'Usuario';
+      case AppProfile.managementSlug:
+        return 'Gerencia';
       default:
         return 'Perfil';
     }

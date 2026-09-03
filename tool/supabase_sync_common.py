@@ -90,6 +90,10 @@ def dispatch_push_notifications(
     session: SupabaseSession,
     *,
     limit: int = 100,
+    evaluate: bool = False,
+    reference_date: str | None = None,
+    changed_since: str | None = None,
+    evaluate_returns_all_profiles: bool = False,
 ) -> dict[str, object] | None:
     """Consume queued push notifications through the Supabase Edge Function.
 
@@ -112,6 +116,16 @@ def dispatch_push_notifications(
         )
         return None
 
+    payload: dict[str, object] = {"limit": limit}
+    if evaluate:
+        payload["evaluate"] = True
+        if reference_date:
+            payload["referenceDate"] = reference_date
+        if changed_since:
+            payload["changedSince"] = changed_since
+    if evaluate_returns_all_profiles:
+        payload["evaluateReturnsAllProfiles"] = True
+
     response = requests.post(
         f"{session.url}/functions/v1/send-push-notifications",
         headers={
@@ -119,7 +133,7 @@ def dispatch_push_notifications(
             "Content-Type": "application/json",
             "User-Agent": "omega-sync/etl-v2",
         },
-        data=json.dumps({"limit": limit}),
+        data=json.dumps(payload),
         timeout=60,
     )
     if not response.ok:

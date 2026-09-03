@@ -1,4 +1,5 @@
 import '../utils/text_sanitizer.dart';
+import 'app_profile.dart';
 import 'kpi_metric_source.dart';
 
 class SupplierAnalysis {
@@ -109,7 +110,13 @@ class SupplierAnalysis {
         'supervisor',
         'vendedor',
       }.contains(scopeProfileSlug),
-      'admin' || 'diretoria' || 'outros' => const <String>{
+      'diretoria' || 'outros' => const <String>{
+        'gerencia',
+        'coordenador',
+        'supervisor',
+        'vendedor',
+      }.contains(scopeProfileSlug),
+      'admin' || 'gerencia' => const <String>{
         'coordenador',
         'supervisor',
         'vendedor',
@@ -141,6 +148,7 @@ class SupplierAnalysisScope {
       '${json['display_name'] ?? ''}'.trim(),
     );
     final profileName = switch (profileSlug) {
+      AppProfile.managementSlug => 'Gerência',
       'coordenador' => 'Coordenador',
       'supervisor' => 'Supervisor',
       _ => 'Vendedor',
@@ -150,7 +158,9 @@ class SupplierAnalysisScope {
       profileSlug: profileSlug,
       ownerCode: ownerCode,
       displayName: displayName,
-      label: '$profileName - $ownerCode - $displayName',
+      label: profileSlug == AppProfile.managementSlug
+          ? '$profileName - $displayName'
+          : '$profileName - $ownerCode - $displayName',
     );
   }
 
@@ -175,6 +185,7 @@ class SupplierAnalysisScope {
   }
 
   static int _profileOrder(String profileSlug) => switch (profileSlug) {
+    AppProfile.managementSlug => 0,
     'coordenador' => 1,
     'supervisor' => 2,
     'vendedor' => 3,

@@ -39,12 +39,26 @@ class HomePositiveCustomer {
     required this.clientName,
     required this.totalAmount,
     required this.isNewInMonth,
+    required this.sellerCode,
+    required this.sellerName,
   });
 
   final String clientCode;
   final String clientName;
   final double totalAmount;
   final bool isNewInMonth;
+  final String sellerCode;
+  final String sellerName;
+
+  String get sellerLabel {
+    if (sellerCode.isEmpty) {
+      return sellerName;
+    }
+    if (sellerName.isEmpty || sellerName == sellerCode) {
+      return sellerCode;
+    }
+    return '$sellerCode - $sellerName';
+  }
 
   factory HomePositiveCustomer.fromJson(Map<String, dynamic> json) {
     return HomePositiveCustomer(
@@ -54,6 +68,10 @@ class HomePositiveCustomer {
       ),
       totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
       isNewInMonth: json['is_new_in_month'] == true,
+      sellerCode: '${json['seller_code'] ?? ''}'.trim(),
+      sellerName: TextSanitizer.normalize(
+        '${json['seller_name'] ?? ''}'.trim(),
+      ),
     );
   }
 }

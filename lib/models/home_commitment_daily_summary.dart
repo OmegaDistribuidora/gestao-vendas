@@ -149,7 +149,8 @@ class HomeCommitmentDailySummary {
     }
 
     if (viewerProfileSlug != AppProfile.boardSlug &&
-        viewerProfileSlug != AppProfile.othersSlug) {
+        viewerProfileSlug != AppProfile.othersSlug &&
+        viewerProfileSlug != AppProfile.managementSlug) {
       return items;
     }
 
