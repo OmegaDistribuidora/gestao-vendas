@@ -708,6 +708,16 @@ Scripts principais em tool/:
 
 - oracle_sellers_sync.py
   Usuarios vendedores e sua hierarquia.
+  A identidade comercial e o codigo do vendedor. Quando outra pessoa assume
+  um codigo existente, a sincronizacao preserva o auth_user_id e todo o
+  historico daquele codigo, atualiza nome, CPF e hierarquia e redefine a senha
+  inicial para os tres primeiros digitos do novo CPF (duplicados internamente
+  para atender ao minimo de seis caracteres do provedor de autenticacao).
+  O CPF nao e usado para migrar uma conta entre codigos. Se estiver ligado a
+  um codigo que saiu do lote ativo, o vinculo de CPF anterior e liberado e o
+  cadastro antigo e desativado, sem mover vendas, pagamentos ou historico.
+  A Edge Function admin-users aceita tanto uma sessao de administrador quanto
+  a chave tecnica service_role usada exclusivamente pela DAG.
 
 - oracle_performance_sku_sync.py
   SKU mensal por perfil e fornecedor.

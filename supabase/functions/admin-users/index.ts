@@ -223,11 +223,35 @@ function json(body: unknown, init?: ResponseInit) {
   })
 }
 
+function isServiceRoleJwt(token: string) {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) {
+      return false
+    }
+
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+    const payload = JSON.parse(atob(padded)) as Record<string, unknown>
+    return payload.role === 'service_role'
+  } catch (_) {
+    return false
+  }
+}
+
 async function requireAdmin(req: Request) {
   const authorization = req.headers.get('Authorization') ?? ''
 
   if (!authorization) {
     throw new Error('Authorization ausente.')
+  }
+
+  const bearerToken = authorization.replace(/^Bearer\s+/i, '').trim()
+  if (
+    bearerToken &&
+    (bearerToken === supabaseServiceRoleKey || isServiceRoleJwt(bearerToken))
+  ) {
+    return
   }
 
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -494,9 +518,39 @@ async function syncSellerUsers(
   for (const seller of sellers) {
     const normalizedCpf = sanitizeDigits(seller.cpf)
     const technicalEmail = technicalEmailFromProfileCode('vendedor', seller.code)
-    // Prefer the active Oracle code when stale duplicate accounts share the same CPF.
-    const existing =
-      existingUsersByCode.get(seller.code) ?? existingUsersByCpf.get(normalizedCpf)
+    // The commercial identity belongs to the seller code, not to the CPF.
+    // When a different person assumes an existing code, keep that code's
+    // auth_user_id and history while refreshing only its current identity.
+    const existing = existingUsersByCode.get(seller.code)
+
+    const cpfOwner = existingUsersByCpf.get(normalizedCpf)
+    if (
+      cpfOwner &&
+      String(cpfOwner.auth_user_id) !== String(existing?.auth_user_id ?? '')
+    ) {
+      const cpfOwnerId = String(cpfOwner.auth_user_id)
+      const cpfOwnerCode = String(cpfOwner.code ?? '').trim()
+
+      if (activeCodeSet.has(cpfOwnerCode)) {
+        throw new Error(
+          `CPF duplicado nos códigos ativos ${cpfOwnerCode} e ${seller.code}. ` +
+            'Bloqueie no Oracle o código que não está mais em uso.',
+        )
+      }
+
+      // CPF is a credential attribute, not an account identity. Releasing it
+      // from a code no longer present in Oracle does not move any history.
+      const { error: releaseCpfError } = await adminClient
+        .from('app_users')
+        .update({ cpf: null, is_active: false })
+        .eq('auth_user_id', cpfOwnerId)
+
+      if (releaseCpfError) {
+        throw new Error(releaseCpfError.message)
+      }
+
+      existingUsersByCpf.delete(normalizedCpf)
+    }
 
     if (existing) {
       const userId = String(existing.auth_user_id)
@@ -532,7 +586,7 @@ async function syncSellerUsers(
         existing.technical_email,
         technicalEmail,
       )
-      const identityChanged = codeChanged || nameChanged
+      const identityChanged = codeChanged || nameChanged || cpfChanged
       const authChanged =
         identityChanged || technicalEmailChanged
       const appUserChanged =
