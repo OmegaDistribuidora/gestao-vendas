@@ -218,12 +218,10 @@ async function processQueuedEvents(limit: number) {
   const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)
   const { accessToken, projectId } = await getGoogleAccessToken()
 
-  const { data: events, error: eventsError } = await supabase
-    .from('app_push_notification_events')
-    .select('id, recipient_user_id, title, body, data, attempts')
-    .eq('status', 'queued')
-    .order('created_at', { ascending: true })
-    .limit(limit)
+  const { data: events, error: eventsError } = await supabase.rpc(
+    'claim_app_push_notification_events',
+    { target_limit: limit },
+  )
 
   if (eventsError) {
     throw new Error(eventsError.message)
@@ -235,16 +233,6 @@ async function processQueuedEvents(limit: number) {
 
   for (const rawEvent of events ?? []) {
     const event = rawEvent as PushEvent
-    await supabase
-      .from('app_push_notification_events')
-      .update({
-        status: 'sending',
-        attempts: Number(event.attempts ?? 0) + 1,
-        last_error: null,
-      })
-      .eq('id', event.id)
-      .eq('status', 'queued')
-
     const { data: tokens, error: tokensError } = await supabase
       .from('app_push_tokens')
       .select('id, fcm_token, token_hash')
@@ -258,6 +246,7 @@ async function processQueuedEvents(limit: number) {
         .from('app_push_notification_events')
         .update({ status: 'failed', last_error: tokensError.message })
         .eq('id', event.id)
+        .eq('status', 'sending')
       continue
     }
 
@@ -270,6 +259,7 @@ async function processQueuedEvents(limit: number) {
           last_error: 'Nenhum token ativo para o destinatario.',
         })
         .eq('id', event.id)
+        .eq('status', 'sending')
       continue
     }
 
@@ -327,6 +317,7 @@ async function processQueuedEvents(limit: number) {
           last_error: eventErrors[0] ?? null,
         })
         .eq('id', event.id)
+        .eq('status', 'sending')
     } else {
       failed += 1
       await supabase
@@ -336,6 +327,7 @@ async function processQueuedEvents(limit: number) {
           last_error: eventErrors.join('\n').slice(0, 4000),
         })
         .eq('id', event.id)
+        .eq('status', 'sending')
     }
   }
 
