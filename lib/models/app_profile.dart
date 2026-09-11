@@ -38,6 +38,14 @@ class AppProfile {
     othersSlug,
     managementSlug,
   }.contains(slug);
+  bool get canAccessRoutingAnalysis => const <String>{
+    sellerSlug,
+    supervisorSlug,
+    coordinatorSlug,
+    boardSlug,
+    othersSlug,
+    managementSlug,
+  }.contains(slug);
 
   factory AppProfile.fromJson(Map<String, dynamic> json) {
     return AppProfile(

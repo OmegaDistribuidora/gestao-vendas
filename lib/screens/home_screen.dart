@@ -14,7 +14,10 @@ import '../models/home_positive_customers.dart';
 import '../models/performance_overview.dart';
 import '../models/seller_home_kpis.dart';
 import '../services/app_repository.dart';
+import '../services/daily_routing_service.dart';
+import '../widgets/daily_routing_card.dart';
 import '../services/push_notification_service.dart';
+import '../services/routing_analysis_service.dart';
 import 'admin_screen.dart';
 import 'agenda_screen.dart';
 import 'blocked_orders_screen.dart';
@@ -27,6 +30,7 @@ import 'performance_screen.dart';
 import 'recovered_customers_screen.dart';
 import 'reports_screen.dart';
 import 'returns_screen.dart';
+import 'routing_analysis_screen.dart';
 import 'supplier_analysis_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -74,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
   StreamSubscription<PushNavigationIntent>? _pushNavigationSubscription;
   Timer? _refreshTimer;
   bool _autoRefreshing = false;
+  int _routingRevision = 0;
 
   bool get _isAdmin => widget.currentUser.isAdmin;
   bool get _isSeller => widget.currentUser.profileSlug == AppProfile.sellerSlug;
@@ -99,6 +104,9 @@ class _HomeScreenState extends State<HomeScreen> {
       !_isSeller && !_isSupervisor && !_isCoordinator;
   bool get _showsAgendaModule =>
       widget.currentUser.profile?.canAccessAgenda ?? false;
+  bool get _showsRoutingAnalysisModule =>
+      RoutingAnalysisService.enabled &&
+      (widget.currentUser.profile?.canAccessRoutingAnalysis ?? false);
   bool get _showsHomeScopeFilter =>
       !_isSeller &&
       _homeScopeOptions.isNotEmpty &&
@@ -254,6 +262,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _homeKpis = dashboard.kpis;
+        _routingRevision++;
         _todayPositiveCustomers = dashboard.positiveCustomers;
         _commitmentOverview = dashboard.commitmentOverview;
         _performanceOverview = dashboard.performanceOverview;
@@ -638,6 +647,16 @@ class _HomeScreenState extends State<HomeScreen> {
     ).push(MaterialPageRoute<void>(builder: (_) => const AgendaScreen()));
   }
 
+  Future<void> _openRoutingAnalysis() async {
+    await _recordModuleAccess('roteirizacao', 'Roteirização');
+    if (!mounted) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const RoutingAnalysisScreen()),
+    );
+  }
+
   Future<void> _openChangePassword() async {
     await _recordModuleAccess('trocar_senha', 'Trocar senha');
     if (!mounted) {
@@ -758,6 +777,15 @@ class _HomeScreenState extends State<HomeScreen> {
     await _openAgenda();
   }
 
+  Future<void> _openRoutingAnalysisFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) {
+      return;
+    }
+    await _openRoutingAnalysis();
+  }
+
   Future<void> _openChangePasswordFromDrawer() async {
     Navigator.of(context).pop();
     await Future<void>.delayed(const Duration(milliseconds: 120));
@@ -865,6 +893,13 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.auto_graph_rounded,
           accent: const Color(0xFF4B61FF),
           onTap: _openPerformance,
+        ),
+      if (_showsRoutingAnalysisModule)
+        _HomeShortcutData(
+          title: 'Roteirização',
+          icon: Icons.route_outlined,
+          accent: const Color(0xFF3455C5),
+          onTap: _openRoutingAnalysis,
         ),
       _HomeShortcutData(
         title: 'Fornecedor',
@@ -1441,6 +1476,13 @@ class _HomeScreenState extends State<HomeScreen> {
               commitmentProgress: usesSkuMetric ? null : positivationCommitment,
             ),
             const SizedBox(height: 10),
+            if (DailyRoutingService.enabled && !usesSkuMetric)
+              DailyRoutingCard(
+                day: DateFormat('yyyy-MM-dd').format(_nowInSaoPaulo()),
+                revision: _routingRevision,
+                profile: _selectedHomeScope?.profileSlug,
+                code: _selectedHomeScope?.ownerCode,
+              ),
             _GroupedTodayKpiCard(
               left: volumeMetric,
               right: otherMetric,
@@ -1640,6 +1682,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           onTap: _openPerformanceFromDrawer,
+                        ),
+                      if (_showsRoutingAnalysisModule)
+                        ListTile(
+                          leading: const Icon(Icons.route_outlined),
+                          title: const Text('Roteirização'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openRoutingAnalysisFromDrawer,
                         ),
                       ListTile(
                         leading: const Icon(Icons.storefront_outlined),

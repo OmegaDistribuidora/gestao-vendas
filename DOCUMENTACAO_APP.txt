@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 25/08/2026
-Versao atual do projeto: 0.9.18+34
+Ultima atualizacao desta documentacao: 11/09/2026
+Versao atual do projeto: 0.9.19+35
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -685,6 +685,10 @@ Locais dos scripts:
   incorporados ao Git. Antes de alterar ou implantar um script, comparar os
   dois locais e definir qual versao deve prevalecer.
 
+Desde 0.9.19+35, a efetividade diaria aparece na Home e o modulo Roteirizacao
+permite analisar o roteiro completo por data. Regras, origem, escopos,
+seguranca e frequencia estao documentados em docs/efetividade_diaria_home.md.
+
 Scripts principais em tool/:
 
 - oracle_sales_sync.py
@@ -776,6 +780,13 @@ Scripts principais em tool/:
 - commitments_sync.py
   Le filial.tauxcompromisso, calcula um checksum canonico e somente autentica
   no Supabase quando a fotografia completa da fonte foi alterada.
+
+- daily_routing_sync.py
+  Le somente o dia atual de filial."fRoteiro", enriquece com a fonte curta
+  gold_src.fvendas, enderecos e hierarquia e publica um snapshot compacto no
+  Supabase. O hash
+  ignora horarios de carga e evita conexao com o Supabase quando roteiro,
+  atendimento, pedidos e valores permanecem iguais.
 
 
 11. DAGS DO AIRFLOW
@@ -922,6 +933,27 @@ omega_commitments_sync
   supabase_connection=false. Se houver, aplica upsert e exclusao atomicos pela
   RPC apply_commitments_sync e so depois atualiza o checksum local.
 
+omega_daily_routing_sync
+
+- DAG versionada em airflow/omega_daily_routing_sync_dag.py e implantada em
+  /home/powerbi/airflow/dags.
+- Agenda operacional: a cada 2 minutos, das 06:00 as 23:59.
+- Consulta apenas o snapshot do dia em filial."fRoteiro" e a fonte curta
+  gold_src.fvendas, atualizada diretamente do Oracle pela gold_performance.
+- A fRoteiro e reconstruida atomicamente pela DAG
+  solicitacoes_trade_atualizar_froteiro, atualmente a cada 10 minutos e
+  somente quando suas fontes mudam. Uma alteracao de roteirizacao feita pela
+  equipe chega ao app depois dessa reconstrucao e do proximo ciclo de 2 minutos.
+- Novas vendas ja presentes em gold_src.fvendas entram no proximo ciclo de
+  2 minutos, sem depender da carga historica filial.fvendas nem de nova
+  reconstrucao da fRoteiro. A DAG roda nos minutos impares, normalmente um
+  minuto depois da carga Oracle da Gold.
+- O snapshot possui validacao de completude, rejeicao de hierarquia ambigua e
+  chave unica vendedor + cliente + data. A versao anterior permanece intacta
+  caso a fonte, o PostgreSQL local ou o Supabase falhem.
+- O checksum considera apenas os dados apresentados. Mudancas de horario sem
+  mudanca comercial nao geram upload nem custo desnecessario no Supabase.
+
 omega_customer_opportunities_prune
 
 - Agenda padrao: 07:15, 10:15, 13:15 e 16:15.
@@ -1019,9 +1051,26 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.18
-- versionCode / CFBundleVersion: 34
-- Release multiplataforma: 0.9.18+34
+- versionName / CFBundleShortVersionString: 0.9.19
+- versionCode / CFBundleVersion: 35
+- Release multiplataforma: 0.9.19+35
+
+Release 0.9.19+35:
+
+- Novo modulo Roteirizacao logo abaixo de Performance, com data, resumo da
+  equipe, efetividade por vendedor, lista de clientes, endereco, valor vendido
+  e mapa de pontos para a visao individual de vendedor.
+- Efetividade de hoje adicionada a Home abaixo da positivacao, usando clientes
+  do roteiro com compra dividido pelos clientes programados no dia.
+- Vendedor ve somente o proprio roteiro; Supervisor, Coordenador, Gerencia,
+  Diretoria e Outros respeitam os filtros e recortes hierarquicos existentes.
+- Redes e supervisores 33/35 permanecem sem o indicador de roteirizacao.
+- Sincronizacao compacta e atomica a cada 2 minutos, com envio ao Supabase
+  somente quando os dados efetivamente mudam.
+- Entrega inclui a protecao atomica contra notificacoes push duplicadas e a
+  regra de troca de titular por codigo de vendedor sem migrar historico.
+- Preparacao multiplataforma propaga 0.9.19 build 35 para Android e iOS,
+  preservando Firebase, APNs, permissoes e assinatura do Codemagic.
 
 Release 0.9.18+34:
 
@@ -1462,10 +1511,42 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Entrega multiplataforma atual: 0.9.18 build 34.
+- Entrega multiplataforma atual: 0.9.19 build 35.
 
 
-14. DESENVOLVIMENTO E VALIDACAO
+14. MODULO ROTEIRIZACAO
+-----------------------
+
+- Objetivo: analisar os clientes programados e atendidos em uma data.
+- Fonte oficial: filial."fRoteiro", enriquecida por filial.dcliente e pela
+  fonte operacional curta gold_src.fvendas para compra/valor vendido no dia.
+  Essa fonte vem diretamente do Oracle a cada 2 minutos; nao e a tabela final
+  gold.performance e nao muda as regras mensais da Performance.
+- O aplicativo nunca baixa a fRoteiro completa. A API devolve somente a data
+  e o escopo autorizados.
+- Vendedor ve apenas o proprio roteiro. Supervisor, coordenador, Gerencia,
+  Diretoria e Outros usam os filtros hierarquicos ja existentes.
+- Visoes agregadas mostram resumo por vendedor. Lista detalhada e mapa ficam
+  disponiveis apenas quando a visao efetiva e de um vendedor.
+- O mapa usa FlutterMap/OpenStreetMap, marcadores agrupados e detalhes ao tocar.
+- Quilometragem, otimizacao e tracado entre clientes nao fazem parte desta
+  primeira entrega.
+- APIs: get_home_daily_routing e get_routing_analysis.
+- Tabela Supabase: app_daily_routing_snapshots, sem leitura direta por anon ou
+  authenticated. O acesso ocorre somente pelas RPCs com validacao de auth.uid,
+  hierarquia e troca de visao autorizada.
+- Migrations aplicadas: 20260910120000_home_daily_routing.sql,
+  20260911120000_routing_analysis_module.sql e
+  20260911123000_routing_production_hardening.sql.
+- DAG de producao: omega_daily_routing_sync, a cada 2 minutos das 06:00 as
+  23:59, max_active_runs=1 e duas tentativas adicionais em falha.
+- A tela do modulo atualiza silenciosamente a cada 2 minutos, alem do gesto de
+  puxar e do botao Atualizar. A Home consulta junto ao seu ciclo de 2 minutos.
+- O emulador ainda pode usar DAILY_ROUTING_PREVIEW_URL e PostgreSQL isolado;
+  builds release consultam somente as RPCs oficiais do Supabase.
+
+
+15. DESENVOLVIMENTO E VALIDACAO
 -------------------------------
 
 Antes de entregar uma alteracao:
@@ -1486,7 +1567,7 @@ Emulador usado no desenvolvimento:
 - Identificador comum quando iniciado: emulator-5554
 
 
-15. SEGURANCA E INFORMACOES SENSIVEIS
+16. SEGURANCA E INFORMACOES SENSIVEIS
 --------------------------------------
 
 Esta documentacao nao contem credenciais.
@@ -1503,7 +1584,7 @@ Regras obrigatorias:
 - Conferir arquivos staged antes de cada commit.
 
 
-16. MODELO PARA DOCUMENTAR NOVOS MODULOS
+17. MODELO PARA DOCUMENTAR NOVOS MODULOS
 ----------------------------------------
 
 Ao adicionar um novo modulo, registrar:
@@ -1531,7 +1612,7 @@ Testes de interface:
 Observacoes de seguranca:
 
 
-17. OBSERVACOES PARA MANUTENCAO FUTURA
+18. OBSERVACOES PARA MANUTENCAO FUTURA
 ---------------------------------------
 
 - O AppRepository e o ponto principal para integrar uma nova RPC ao Flutter.
