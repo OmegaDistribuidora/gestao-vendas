@@ -55,7 +55,7 @@ LEFT JOIN pcsuperv
     ON pcusuari.codsupervisor = pcsuperv.codsupervisor
 WHERE pcprest.dtvenc BETWEEN TO_DATE(EXTRACT(YEAR FROM SYSDATE) - 5 || '-01-01', 'YYYY-MM-DD')
   AND TO_DATE(EXTRACT(YEAR FROM SYSDATE) || '-12-31', 'YYYY-MM-DD')
-  AND pcprest.codcob NOT IN ('BNF')
+  AND UPPER(TRIM(COALESCE(pcprest.codcob, ''))) NOT IN ('BNF', 'PERD', 'PER2')
   AND pcprest.dtpag IS NULL
 ORDER BY pcprest.dtvenc DESC
 """

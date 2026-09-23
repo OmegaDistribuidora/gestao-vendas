@@ -7,6 +7,7 @@ import '../models/app_profile.dart';
 import '../models/kpi_metric_source.dart';
 import '../models/supplier_analysis.dart';
 import '../services/app_repository.dart';
+import '../widgets/searchable_user_scope_field.dart';
 
 enum _SupplierPeriodPreset {
   today,
@@ -467,33 +468,30 @@ class _SupplierAnalysisScreenState extends State<SupplierAnalysisScreen> {
                             ),
                             if (_analysis.availableScopes.isNotEmpty) ...[
                               const SizedBox(height: 14),
-                              DropdownButtonFormField<String>(
+                              SearchableUserScopeField(
                                 key: ValueKey<String>(
                                   'scope-${_selectedScopeValue ?? 'all'}',
                                 ),
-                                initialValue: _selectedScopeValue,
-                                isExpanded: true,
-                                decoration: InputDecoration(
-                                  labelText: _scopeFilterLabel,
-                                  prefixIcon: const Icon(
-                                    Icons.people_alt_outlined,
-                                  ),
-                                ),
-                                items: [
-                                  const DropdownMenuItem<String>(
-                                    value: null,
-                                    child: Text('Todos'),
-                                  ),
-                                  ..._analysis.availableScopes.map(
-                                    (scope) => DropdownMenuItem<String>(
-                                      value: scope.value,
-                                      child: Text(
-                                        scope.label,
-                                        overflow: TextOverflow.ellipsis,
+                                selectedValue: _selectedScopeValue,
+                                labelText: _scopeFilterLabel,
+                                allLabel: 'Todos',
+                                options: _analysis.availableScopes
+                                    .map(
+                                      (scope) => SearchableUserScopeOption(
+                                        value: scope.value,
+                                        title: scope.displayName,
+                                        subtitle:
+                                            '${scope.profileSlug == AppProfile.managementSlug
+                                                ? 'Gerência'
+                                                : scope.profileSlug == AppProfile.coordinatorSlug
+                                                ? 'Coordenador'
+                                                : scope.profileSlug == AppProfile.supervisorSlug
+                                                ? 'Supervisor'
+                                                : 'Vendedor'} • ${scope.ownerCode}',
+                                        code: scope.ownerCode,
                                       ),
-                                    ),
-                                  ),
-                                ],
+                                    )
+                                    .toList(growable: false),
                                 onChanged: _handleScopeChanged,
                               ),
                             ],

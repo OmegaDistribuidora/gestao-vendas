@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 11/09/2026
-Versao atual do projeto: 0.9.19+35
+Ultima atualizacao desta documentacao: 23/09/2026
+Versao atual do projeto: 0.9.20+36
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -904,6 +904,9 @@ omega_gold_performance_app_sync
 - Agenda operacional: a cada 2 minutos, das 06:00 as 23:59.
 - Aguarda a execucao correspondente de gold_performance e depois replica o
   resultado para app_gold_performance no Supabase.
+- O sensor aguarda por ate 300 segundos, em modo reschedule, para absorver
+  atrasos ocasionais da fila do executor sem marcar a sincronizacao como falha.
+  O agendamento permanece a cada 2 minutos.
 - A replica usa etl_stg_gold_performance e a RPC
   apply_gold_performance_sync. Os lotes sao preparados no staging e a
   reconciliacao (upsert + exclusao de linhas ausentes) ocorre em uma unica
@@ -1051,9 +1054,29 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.19
-- versionCode / CFBundleVersion: 35
-- Release multiplataforma: 0.9.19+35
+- versionName / CFBundleShortVersionString: 0.9.20
+- versionCode / CFBundleVersion: 36
+- Release multiplataforma: 0.9.20+36
+
+Release 0.9.20+36:
+
+- Filtros hierarquicos com busca por nome ou codigo de usuario nos modulos
+  compativeis.
+- Supervisores e coordenadores podem editar apenas as proprias atividades da
+  Agenda, sem permissao para visualizar ou excluir atividades de terceiros.
+- Clientes sem compra liberado para Diretoria, Outros e Gerencia mediante a
+  selecao obrigatoria de pelo menos um coordenador.
+- Inadimplencia passa a excluir os codigos de cobranca PERD e PER2 tanto da
+  exibicao quanto dos calculos.
+- Roteirizacao permite consultar um dia ou um periodo de ate 31 dias, mantendo
+  o detalhamento por vendedor, clientes e mapa.
+- Compromisso inclui o desempenho de roteirizacao no periodo selecionado para
+  usuarios que possuam roteiro, sem alterar os indicadores financeiro e de
+  positivacao.
+- Otimizacoes de carregamento da Home e do Compromisso preservam os dados e a
+  experiencia das versoes anteriores.
+- Preparacao multiplataforma propaga 0.9.20 build 36 para Android e iOS,
+  preservando Firebase, APNs, permissoes e assinatura do Codemagic.
 
 Release 0.9.19+35:
 
@@ -1511,13 +1534,14 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Entrega multiplataforma atual: 0.9.19 build 35.
+- Entrega multiplataforma atual: 0.9.20 build 36.
 
 
 14. MODULO ROTEIRIZACAO
 -----------------------
 
-- Objetivo: analisar os clientes programados e atendidos em uma data.
+- Objetivo: analisar os clientes programados e atendidos em um dia ou em um
+  periodo de ate 31 dias.
 - Fonte oficial: filial."fRoteiro", enriquecida por filial.dcliente e pela
   fonte operacional curta gold_src.fvendas para compra/valor vendido no dia.
   Essa fonte vem diretamente do Oracle a cada 2 minutos; nao e a tabela final
@@ -1528,10 +1552,18 @@ build/app/outputs/bundle/release/app-release.aab
   Diretoria e Outros usam os filtros hierarquicos ja existentes.
 - Visoes agregadas mostram resumo por vendedor. Lista detalhada e mapa ficam
   disponiveis apenas quando a visao efetiva e de um vendedor.
+- No modo Periodo, cada visita programada continua sendo uma ocorrencia por
+  dia. Se o mesmo cliente estiver no roteiro em tres datas, conta como tres
+  atendimentos planejados. Dias ainda sem captura sao informados na tela e
+  nunca sao substituidos silenciosamente por dados de outro filtro.
+- O modulo Compromisso agrega a roteirizacao exatamente entre as datas do
+  compromisso. O bloco e exibido por supervisor/coordenador somente quando
+  existe ao menos uma visita planejada no periodo.
 - O mapa usa FlutterMap/OpenStreetMap, marcadores agrupados e detalhes ao tocar.
 - Quilometragem, otimizacao e tracado entre clientes nao fazem parte desta
   primeira entrega.
-- APIs: get_home_daily_routing e get_routing_analysis.
+- APIs: get_home_daily_routing, get_routing_analysis e
+  get_routing_analysis_period.
 - Tabela Supabase: app_daily_routing_snapshots, sem leitura direta por anon ou
   authenticated. O acesso ocorre somente pelas RPCs com validacao de auth.uid,
   hierarquia e troca de visao autorizada.

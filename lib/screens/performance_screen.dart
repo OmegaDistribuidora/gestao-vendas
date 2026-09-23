@@ -11,6 +11,7 @@ import '../models/kpi_metric_source.dart';
 import '../models/performance_overview.dart';
 import '../services/app_repository.dart';
 import '../utils/business_day_projection.dart';
+import '../widgets/searchable_user_scope_field.dart';
 
 class PerformanceScreen extends StatefulWidget {
   const PerformanceScreen({super.key});
@@ -499,30 +500,24 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
             ),
             const SizedBox(height: 16),
             if (_showsScopeSelector) ...[
-              DropdownButtonFormField<String?>(
+              SearchableUserScopeField(
                 key: ValueKey<String?>(_selectedScopeValue),
-                initialValue: _scopeValueExists(_overview, _selectedScopeValue)
+                selectedValue: _scopeValueExists(_overview, _selectedScopeValue)
                     ? _selectedScopeValue
                     : null,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: _scopeSelectorLabel(),
-                  prefixIcon: const Icon(Icons.account_tree_outlined),
-                ),
-                items: <DropdownMenuItem<String?>>[
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: _dropdownLabel(_allScopesLabel()),
-                  ),
-                  ..._scopeOptions.map(
-                    (scope) => DropdownMenuItem<String?>(
-                      value: scope.value,
-                      child: _dropdownLabel(
-                        '${_profileLabel(scope.profileSlug)} • ${scope.label}',
+                labelText: _scopeSelectorLabel(),
+                allLabel: _allScopesLabel(),
+                options: _scopeOptions
+                    .map(
+                      (scope) => SearchableUserScopeOption(
+                        value: scope.value,
+                        title: scope.displayName,
+                        subtitle:
+                            '${_profileLabel(scope.profileSlug)} • ${scope.ownerCode}',
+                        code: scope.ownerCode,
                       ),
-                    ),
-                  ),
-                ],
+                    )
+                    .toList(growable: false),
                 onChanged: _handleScopeChanged,
               ),
               const SizedBox(height: 14),

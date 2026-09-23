@@ -11,7 +11,7 @@ import os
 import subprocess
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -82,14 +82,18 @@ def bootstrap():
         """)
         c.execute((ROOT/'supabase/migrations/20260911120000_routing_analysis_module.sql').read_text(encoding='utf-8'))
         c.execute((ROOT/'supabase/migrations/20260911123000_routing_production_hardening.sql').read_text(encoding='utf-8'))
+        c.execute((ROOT/'supabase/migrations/20260923150000_routing_period_analysis.sql').read_text(encoding='utf-8'))
 
 
-def refresh_source(day=None):
+def refresh_source(day=None, allow_missing=False):
     day_key = str(day or datetime.now().date())
     with LOCK:
         if time.monotonic() - LAST_FETCH.get(day_key, 0) < 120:
             return
-        snapshot = fetch_snapshot(day)
+        snapshot = fetch_snapshot(day, allow_empty=allow_missing)
+        if not snapshot['sellers']:
+            LAST_FETCH[day_key] = time.monotonic()
+            return
         with local_connection() as c:
             c.execute('select public.app_apply_daily_routing_snapshot(%s)', (Jsonb(snapshot),))
         LAST_FETCH[day_key] = time.monotonic()
@@ -150,7 +154,17 @@ class Handler(BaseHTTPRequestHandler):
             owner = owners[0]
             profiles = api_get('/rest/v1/app_profiles?select=id,slug,name&id=eq.'+owner['profile_id'], admin_headers)
             allowed = api_get('/rest/v1/app_profile_coordinator_scopes?select=profile_slug,coordinator_code', admin_headers)
-            refresh_source(payload['target_date'])
+            if self.path == '/routing':
+                refresh_source(payload['target_date'])
+            else:
+                start = datetime.fromisoformat(payload['target_start_date']).date()
+                end = datetime.fromisoformat(payload['target_end_date']).date()
+                if end < start or (end - start).days >= 31:
+                    raise ValueError('Periodo invalido.')
+                day = start
+                while day <= end:
+                    refresh_source(day.isoformat(), allow_missing=True)
+                    day += timedelta(days=1)
             with local_connection() as c:
                 c.execute('insert into app_profiles(id,slug,name) values(%s,%s,%s) '
                           'on conflict(id) do update set slug=excluded.slug,name=excluded.name',
@@ -171,8 +185,10 @@ class Handler(BaseHTTPRequestHandler):
                         (payload['target_date'],payload.get('include_details',False),payload.get('item_filter','all'),
                          payload.get('page_offset',0),payload.get('page_size',100),payload.get('expected_snapshot_id'))).fetchone()[0]
                 else:
-                    result = c.execute('select public.get_routing_analysis(%s,null,null)',
-                                       (payload['target_date'],)).fetchone()[0]
+                    result = c.execute(
+                        'select public.get_routing_analysis_period(%s,%s,null,null)',
+                        (payload['target_start_date'],payload['target_end_date'])
+                    ).fetchone()[0]
             if self.path == '/route-analysis':
                 scope_response = requests.post(
                     URL+'/rest/v1/rpc/app_view_scope_options', headers=user_headers,

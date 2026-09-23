@@ -8,6 +8,7 @@ import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/app_user.dart';
 import '../models/commitment_overview.dart';
+import '../models/customers_without_purchase.dart';
 import '../models/home_commitment_daily_summary.dart';
 import '../models/home_dashboard.dart';
 import '../models/home_positive_customers.dart';
@@ -98,7 +99,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _showsCommitmentModule =>
       widget.currentUser.profile?.canAccessCommitment ?? false;
   bool get _showsCustomersWithoutPurchaseModule =>
-      _isSeller || _isSupervisor || _isCoordinator;
+      _isSeller || _isSupervisor || _isCoordinator || _isBroadKpiProfile;
+  bool get _isBroadKpiProfile => const <String>{
+    AppProfile.boardSlug,
+    AppProfile.othersSlug,
+    AppProfile.managementSlug,
+  }.contains(widget.currentUser.profileSlug);
   bool get _showsCustomerOpportunitiesModule => _customerOpportunitiesEnabled;
   bool get _showsRecoveredCustomersModule =>
       !_isSeller && !_isSupervisor && !_isCoordinator;
@@ -610,7 +616,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => const CustomersWithoutPurchaseScreen(),
+        builder: (_) => CustomersWithoutPurchaseScreen(
+          viewerProfileSlug: widget.currentUser.profileSlug,
+          initialCoordinatorScopes: _homeScopeOptions
+              .where((scope) => scope.profileSlug == AppProfile.coordinatorSlug)
+              .map(
+                (scope) => CustomerScopeOption(
+                  profileSlug: scope.profileSlug,
+                  ownerCode: scope.ownerCode,
+                  displayName: scope.displayName,
+                  label: scope.label,
+                ),
+              )
+              .toList(growable: false),
+        ),
       ),
     );
   }
@@ -1094,98 +1113,143 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _showHomeScopeSelector() async {
+    var query = '';
     final selectedValue = await showModalBottomSheet<String?>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) {
-        return SafeArea(
-          child: FractionallySizedBox(
-            heightFactor: 0.72,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                  child: Text(
-                    'Selecione quem deseja filtrar',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: ListView(
-                    children: [
-                      ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Color(0xFFF0F2FF),
-                          foregroundColor: primaryColor,
-                          child: Icon(Icons.home_outlined),
-                        ),
-                        title: Text(
-                          const <String>{
-                                AppProfile.boardSlug,
-                                AppProfile.othersSlug,
-                                AppProfile.managementSlug,
-                              }.contains(widget.currentUser.profileSlug)
-                              ? 'Visão geral'
-                              : 'Minha visão',
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        subtitle: Text(
-                          widget.currentUser.displayName?.trim().isNotEmpty ==
-                                  true
-                              ? widget.currentUser.displayName!.trim()
-                              : widget.currentUser.label,
-                        ),
-                        trailing: _selectedHomeScopeValue == null
-                            ? const Icon(
-                                Icons.check_circle,
-                                color: primaryColor,
-                              )
-                            : null,
-                        onTap: () => Navigator.of(context).pop(''),
-                      ),
-                      ..._homeScopeOptions.map(
-                        (scope) => ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: const Color(0xFFF0F2FF),
-                            foregroundColor: primaryColor,
-                            child: Text(
-                              scope.profileLabel.characters.first,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                              ),
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final normalized = query.trim().toLowerCase();
+            final filteredScopes = _homeScopeOptions
+                .where(
+                  (scope) =>
+                      normalized.isEmpty ||
+                      scope.displayName.toLowerCase().contains(normalized) ||
+                      scope.ownerCode.toLowerCase().contains(normalized) ||
+                      scope.label.toLowerCase().contains(normalized) ||
+                      scope.profileLabel.toLowerCase().contains(normalized),
+                )
+                .toList(growable: false);
+            return SafeArea(
+              child: FractionallySizedBox(
+                heightFactor: 0.82,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Selecione quem deseja filtrar',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            onChanged: (value) =>
+                                setSheetState(() => query = value),
+                            decoration: const InputDecoration(
+                              hintText: 'Buscar por nome ou código',
+                              prefixIcon: Icon(Icons.search_rounded),
                             ),
                           ),
-                          title: Text(
-                            scope.displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          subtitle: Text(
-                            scope.profileSlug == AppProfile.managementSlug
-                                ? scope.profileLabel
-                                : '${scope.profileLabel} • ${scope.ownerCode}',
-                          ),
-                          trailing: _selectedHomeScopeValue == scope.value
-                              ? const Icon(
-                                  Icons.check_circle,
-                                  color: primaryColor,
-                                )
-                              : null,
-                          onTap: () => Navigator.of(context).pop(scope.value),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const Divider(height: 1),
+                    Expanded(
+                      child: filteredScopes.isEmpty && normalized.isNotEmpty
+                          ? const Center(
+                              child: Text('Nenhum usuário encontrado.'),
+                            )
+                          : ListView(
+                              children: [
+                                if (normalized.isEmpty)
+                                  ListTile(
+                                    leading: const CircleAvatar(
+                                      backgroundColor: Color(0xFFF0F2FF),
+                                      foregroundColor: primaryColor,
+                                      child: Icon(Icons.home_outlined),
+                                    ),
+                                    title: Text(
+                                      const <String>{
+                                            AppProfile.boardSlug,
+                                            AppProfile.othersSlug,
+                                            AppProfile.managementSlug,
+                                          }.contains(
+                                            widget.currentUser.profileSlug,
+                                          )
+                                          ? 'Visão geral'
+                                          : 'Minha visão',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      widget.currentUser.displayName
+                                                  ?.trim()
+                                                  .isNotEmpty ==
+                                              true
+                                          ? widget.currentUser.displayName!
+                                                .trim()
+                                          : widget.currentUser.label,
+                                    ),
+                                    trailing: _selectedHomeScopeValue == null
+                                        ? const Icon(
+                                            Icons.check_circle,
+                                            color: primaryColor,
+                                          )
+                                        : null,
+                                    onTap: () => Navigator.of(context).pop(''),
+                                  ),
+                                for (final scope in filteredScopes)
+                                  ListTile(
+                                    leading: CircleAvatar(
+                                      backgroundColor: const Color(0xFFF0F2FF),
+                                      foregroundColor: primaryColor,
+                                      child: Text(
+                                        scope.profileLabel.characters.first,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                    title: Text(
+                                      scope.displayName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      scope.profileSlug ==
+                                              AppProfile.managementSlug
+                                          ? scope.profileLabel
+                                          : '${scope.profileLabel} • ${scope.ownerCode}',
+                                    ),
+                                    trailing:
+                                        _selectedHomeScopeValue == scope.value
+                                        ? const Icon(
+                                            Icons.check_circle,
+                                            color: primaryColor,
+                                          )
+                                        : null,
+                                    onTap: () =>
+                                        Navigator.of(context).pop(scope.value),
+                                  ),
+                              ],
+                            ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

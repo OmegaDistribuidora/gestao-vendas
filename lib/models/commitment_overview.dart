@@ -164,6 +164,13 @@ class CommitmentItem {
     required this.financialClosedActual,
     required this.positivationClosedActual,
     required this.lastUpdatedAt,
+    this.routingPlanned,
+    this.routingPurchased,
+    this.routingPercent,
+    this.routingSaleAmount,
+    this.routingRequestedDays,
+    this.routingAvailableDays,
+    this.routingUpdatedAt,
   });
 
   final String profileSlug;
@@ -176,6 +183,15 @@ class CommitmentItem {
   final double financialClosedActual;
   final int positivationClosedActual;
   final DateTime? lastUpdatedAt;
+  final int? routingPlanned;
+  final int? routingPurchased;
+  final double? routingPercent;
+  final double? routingSaleAmount;
+  final int? routingRequestedDays;
+  final int? routingAvailableDays;
+  final DateTime? routingUpdatedAt;
+
+  bool get hasRouting => (routingPlanned ?? 0) > 0;
 
   static CommitmentItem? companyTotalFrom(Iterable<CommitmentItem> items) {
     final coordinators = items
@@ -186,13 +202,35 @@ class CommitmentItem {
     }
 
     DateTime? mostRecentUpdate;
+    DateTime? mostRecentRoutingUpdate;
+    var hasRouting = false;
     for (final item in coordinators) {
       final updatedAt = item.lastUpdatedAt;
       if (updatedAt != null &&
           (mostRecentUpdate == null || updatedAt.isAfter(mostRecentUpdate))) {
         mostRecentUpdate = updatedAt;
       }
+      final routingUpdatedAt = item.routingUpdatedAt;
+      if (routingUpdatedAt != null &&
+          (mostRecentRoutingUpdate == null ||
+              routingUpdatedAt.isAfter(mostRecentRoutingUpdate))) {
+        mostRecentRoutingUpdate = routingUpdatedAt;
+      }
+      hasRouting = hasRouting || item.hasRouting;
     }
+
+    final routingPlanned = hasRouting
+        ? coordinators.fold<int>(
+            0,
+            (total, item) => total + (item.routingPlanned ?? 0),
+          )
+        : null;
+    final routingPurchased = hasRouting
+        ? coordinators.fold<int>(
+            0,
+            (total, item) => total + (item.routingPurchased ?? 0),
+          )
+        : null;
 
     return CommitmentItem(
       profileSlug: companyProfileSlug,
@@ -223,6 +261,34 @@ class CommitmentItem {
         (total, item) => total + item.positivationClosedActual,
       ),
       lastUpdatedAt: mostRecentUpdate,
+      routingPlanned: routingPlanned,
+      routingPurchased: routingPurchased,
+      routingPercent: routingPlanned == null || routingPlanned == 0
+          ? null
+          : routingPurchased! * 100 / routingPlanned,
+      routingSaleAmount: hasRouting
+          ? coordinators.fold<double>(
+              0,
+              (total, item) => total + (item.routingSaleAmount ?? 0),
+            )
+          : null,
+      routingRequestedDays: hasRouting
+          ? coordinators
+                .map((item) => item.routingRequestedDays ?? 0)
+                .fold<int>(
+                  0,
+                  (largest, value) => value > largest ? value : largest,
+                )
+          : null,
+      routingAvailableDays: hasRouting
+          ? coordinators
+                .map((item) => item.routingAvailableDays ?? 0)
+                .fold<int>(
+                  0,
+                  (largest, value) => value > largest ? value : largest,
+                )
+          : null,
+      routingUpdatedAt: mostRecentRoutingUpdate,
     );
   }
 
@@ -247,11 +313,32 @@ class CommitmentItem {
           (json['positivation_actual'] as num?)?.toInt() ??
           0,
       lastUpdatedAt: _parseDateTime(json['last_updated_at']),
+      routingPlanned: _nullableInt(json['routing_planned']),
+      routingPurchased: _nullableInt(json['routing_purchased']),
+      routingPercent: _nullableDouble(json['routing_percent']),
+      routingSaleAmount: _nullableDouble(json['routing_sale_amount']),
+      routingRequestedDays: _nullableInt(json['routing_requested_days']),
+      routingAvailableDays: _nullableInt(json['routing_available_days']),
+      routingUpdatedAt: _parseDateTime(json['routing_updated_at']),
     );
   }
 
   static DateTime? _parseDateTime(Object? value) {
     final text = '${value ?? ''}'.trim();
     return text.isEmpty ? null : DateTime.tryParse(text)?.toLocal();
+  }
+
+  static int? _nullableInt(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    return value is num ? value.toInt() : int.tryParse('$value');
+  }
+
+  static double? _nullableDouble(Object? value) {
+    if (value == null) {
+      return null;
+    }
+    return value is num ? value.toDouble() : double.tryParse('$value');
   }
 }

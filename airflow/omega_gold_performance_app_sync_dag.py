@@ -111,7 +111,7 @@ with DAG(
         failed_states=["failed", "upstream_failed"],
         mode="reschedule",
         poke_interval=5,
-        timeout=90,
+        timeout=300,
     )
 
     sync_gold_performance = PythonOperator(

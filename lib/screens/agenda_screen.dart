@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../models/agenda_task.dart';
 import '../services/agenda_service.dart';
+import '../widgets/searchable_user_scope_field.dart';
 
 class AgendaScreen extends StatefulWidget {
   const AgendaScreen({super.key});
@@ -387,27 +388,28 @@ class _AgendaHeader extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           if (canSelectOwner) ...[
-            DropdownButtonFormField<int>(
-              initialValue: user.id,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Supervisor ou Coordenador',
-                prefixIcon: Icon(Icons.manage_accounts_outlined),
-              ),
-              items: owners
+            SearchableUserScopeField(
+              selectedValue: '${user.id}',
+              labelText: 'Supervisor ou Coordenador',
+              allLabel: 'Selecione uma agenda',
+              allowAll: false,
+              title: 'Selecione uma agenda',
+              options: owners
                   .map(
-                    (owner) => DropdownMenuItem<int>(
-                      value: owner.id,
-                      child: Text(
-                        '${owner.code} · ${owner.displayName}',
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    (owner) => SearchableUserScopeOption(
+                      value: '${owner.id}',
+                      title: owner.displayName,
+                      subtitle:
+                          '${owner.role == 'COORDINATOR' ? 'Coordenador' : 'Supervisor'} • ${owner.code}',
+                      code: owner.code,
                     ),
                   )
                   .toList(growable: false),
-              onChanged: (id) {
-                if (id == null) return;
-                onOwnerChanged(owners.firstWhere((owner) => owner.id == id));
+              onChanged: (value) {
+                if (value == null) return;
+                onOwnerChanged(
+                  owners.firstWhere((owner) => '${owner.id}' == value),
+                );
               },
             ),
             const SizedBox(height: 14),
@@ -634,6 +636,20 @@ class _AgendaTaskSheetState extends State<_AgendaTaskSheet> {
   final ImagePicker _picker = ImagePicker();
   bool _busy = false;
 
+  Future<void> _editTask() async {
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) =>
+          _AgendaCreateTaskSheet(service: widget.service, task: widget.task),
+    );
+    if (changed == true && mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
   Future<void> _run(Future<void> Function() action, String success) async {
     setState(() => _busy = true);
     try {
@@ -849,6 +865,17 @@ class _AgendaTaskSheetState extends State<_AgendaTaskSheet> {
                     ),
                   ],
                   const SizedBox(height: 22),
+                  if (!widget.readOnly) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _editTask,
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Editar atividade'),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   if (!widget.readOnly && !task.isDone) ...[
                     Row(
                       children: [
@@ -926,9 +953,10 @@ class _AgendaTaskSheetState extends State<_AgendaTaskSheet> {
 }
 
 class _AgendaCreateTaskSheet extends StatefulWidget {
-  const _AgendaCreateTaskSheet({required this.service});
+  const _AgendaCreateTaskSheet({required this.service, this.task});
 
   final AgendaService service;
+  final AgendaTask? task;
 
   @override
   State<_AgendaCreateTaskSheet> createState() => _AgendaCreateTaskSheetState();
@@ -936,11 +964,25 @@ class _AgendaCreateTaskSheet extends StatefulWidget {
 
 class _AgendaCreateTaskSheetState extends State<_AgendaCreateTaskSheet> {
   final _formKey = GlobalKey<FormState>();
-  final _title = TextEditingController();
-  final _description = TextEditingController();
-  DateTime? _dueAt = DateUtils.dateOnly(DateTime.now());
-  String _priority = 'MEDIUM';
+  late final TextEditingController _title;
+  late final TextEditingController _description;
+  late DateTime? _dueAt;
+  late String _priority;
   bool _busy = false;
+
+  bool get _isEditing => widget.task != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final task = widget.task;
+    _title = TextEditingController(text: task?.title ?? '');
+    _description = TextEditingController(text: task?.description ?? '');
+    _dueAt = task == null
+        ? DateUtils.dateOnly(DateTime.now())
+        : task.dueAt?.toLocal();
+    _priority = task?.priority ?? 'MEDIUM';
+  }
 
   @override
   void dispose() {
@@ -964,19 +1006,36 @@ class _AgendaCreateTaskSheetState extends State<_AgendaCreateTaskSheet> {
     if (_busy || _formKey.currentState?.validate() != true) return;
     setState(() => _busy = true);
     try {
-      await widget.service.createTask(
-        title: _title.text,
-        description: _description.text.trim().isEmpty
-            ? null
-            : _description.text,
-        dueAt: _dueAt,
-        priority: _priority,
-      );
+      final description = _description.text.trim().isEmpty
+          ? null
+          : _description.text;
+      if (_isEditing) {
+        await widget.service.updateTask(
+          taskId: widget.task!.id,
+          title: _title.text,
+          description: description,
+          dueAt: _dueAt,
+          priority: _priority,
+        );
+      } else {
+        await widget.service.createTask(
+          title: _title.text,
+          description: description,
+          dueAt: _dueAt,
+          priority: _priority,
+        );
+      }
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.of(context).pop(true);
       messenger.showSnackBar(
-        const SnackBar(content: Text('Atividade criada na sua agenda.')),
+        SnackBar(
+          content: Text(
+            _isEditing
+                ? 'Atividade atualizada.'
+                : 'Atividade criada na sua agenda.',
+          ),
+        ),
       );
     } on AgendaServiceException catch (error) {
       if (!mounted) return;
@@ -989,7 +1048,7 @@ class _AgendaCreateTaskSheetState extends State<_AgendaCreateTaskSheet> {
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Não foi possível criar a atividade.'),
+          content: Text('Não foi possível salvar a atividade.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -1028,15 +1087,17 @@ class _AgendaCreateTaskSheetState extends State<_AgendaCreateTaskSheet> {
                 ),
               ),
               Text(
-                'Nova atividade',
+                _isEditing ? 'Editar atividade' : 'Nova atividade',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
                 ),
               ),
               const SizedBox(height: 5),
-              const Text(
-                'Ela será atribuída somente a você e arquivada automaticamente na pasta da sua região.',
-                style: TextStyle(color: Color(0xFF71809D), height: 1.35),
+              Text(
+                _isEditing
+                    ? 'Você pode alterar os dados desta atividade, mas não pode excluí-la.'
+                    : 'Ela será atribuída somente a você e arquivada automaticamente na pasta da sua região.',
+                style: const TextStyle(color: Color(0xFF71809D), height: 1.35),
               ),
               const SizedBox(height: 18),
               TextFormField(
@@ -1116,8 +1177,18 @@ class _AgendaCreateTaskSheetState extends State<_AgendaCreateTaskSheet> {
                               dimension: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.add_task_rounded),
-                      label: Text(_busy ? 'Criando...' : 'Criar atividade'),
+                          : Icon(
+                              _isEditing
+                                  ? Icons.save_outlined
+                                  : Icons.add_task_rounded,
+                            ),
+                      label: Text(
+                        _busy
+                            ? 'Salvando...'
+                            : _isEditing
+                            ? 'Salvar alterações'
+                            : 'Criar atividade',
+                      ),
                     ),
                   ),
                 ],

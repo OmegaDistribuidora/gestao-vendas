@@ -52,6 +52,13 @@ class DailyRoutingSQLTest(unittest.TestCase):
             "select get_routing_analysis(date '2001-01-01',null,null)"
         ).fetchone()[0]
 
+    def read_period_analysis(self, key, start='2001-01-01', end='2001-01-01'):
+        self.c.execute("select set_config('request.jwt.claim.sub',%s,true)",(self.users[key],))
+        return self.c.execute(
+            'select get_routing_analysis_period(%s,%s,null,null)',
+            (start,end)
+        ).fetchone()[0]
+
     def test_scopes_and_weighted_totals(self):
         self.assertEqual(self.read('vendedor1')['percent'],50)
         self.assertEqual(self.read('supervisor20')['planned'],2)
@@ -112,6 +119,44 @@ class DailyRoutingSQLTest(unittest.TestCase):
         self.assertEqual(self.read_analysis('gerencia')['planned'],3)
         self.assertEqual(self.read_analysis('diretoria')['planned'],4)
         self.assertEqual(self.read_analysis('outros')['planned'],4)
+
+    def test_period_analysis_counts_each_scheduled_day(self):
+        second = dict(self.snapshot)
+        second['reference_date'] = '2001-01-02'
+        second['source_updated_at'] = '2001-01-02T10:00:00Z'
+        second['snapshot_id'] = 'unit-test-2'
+        self.c.execute(
+            'select app_apply_daily_routing_snapshot(%s)',
+            (Jsonb(second),)
+        )
+
+        result = self.read_period_analysis(
+            'supervisor20',
+            '2001-01-01',
+            '2001-01-02'
+        )
+        self.assertEqual((result['planned'],result['purchased']),(4,2))
+        self.assertEqual((result['available_days'],result['requested_days']),(2,2))
+
+        seller = self.read_period_analysis(
+            'vendedor1',
+            '2001-01-01',
+            '2001-01-02'
+        )
+        self.assertEqual(len(seller['items']),4)
+        self.assertEqual(
+            [item['reference_date'] for item in seller['items']],
+            ['2001-01-01','2001-01-01','2001-01-02','2001-01-02']
+        )
+
+    def test_routing_performance_batch_omits_scopes_without_routes(self):
+        result = self.c.execute(
+            "select get_routing_performance_by_scope(date '2001-01-01',date '2001-01-01')"
+        ).fetchone()[0]
+        self.assertEqual(result['supervisor|20']['routing_planned'],2)
+        self.assertEqual(result['coordenador|10']['routing_planned'],3)
+        self.assertNotIn('supervisor|33',result)
+        self.assertNotIn('supervisor|35',result)
 
 
 if __name__ == '__main__':

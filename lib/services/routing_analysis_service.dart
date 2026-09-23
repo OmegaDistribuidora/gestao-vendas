@@ -16,7 +16,8 @@ class RoutingAnalysisService {
   );
 
   Future<RoutingAnalysis> load({
-    required DateTime date,
+    required DateTime startDate,
+    required DateTime endDate,
     String? targetScopeProfileSlug,
     String? targetScopeOwnerCode,
   }) async {
@@ -26,7 +27,8 @@ class RoutingAnalysisService {
     }
 
     final params = <String, dynamic>{
-      'target_date': _dateText(date),
+      'target_start_date': _dateText(startDate),
+      'target_end_date': _dateText(endDate),
       'target_scope_profile_slug': targetScopeProfileSlug,
       'target_scope_owner_code': targetScopeOwnerCode,
     };
@@ -55,7 +57,7 @@ class RoutingAnalysisService {
       responseData = jsonDecode(response.body);
     } else {
       responseData = await client
-          .rpc('get_routing_analysis', params: params)
+          .rpc('get_routing_analysis_period', params: params)
           .timeout(const Duration(seconds: 30));
     }
 

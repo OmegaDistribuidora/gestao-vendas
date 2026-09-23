@@ -4,7 +4,7 @@
 
 - Nome: `Gestão de Vendas`
 - Bundle ID: `br.com.omegadistribuidora.gestaovendas`
-- Versão Flutter atual: `0.9.19+35`
+- Versão Flutter atual: `0.9.20+36`
 - Versão mínima do iOS: `15.0`
 
 O Bundle ID precisa ser idêntico no Apple Developer, App Store Connect, Firebase,
@@ -68,12 +68,13 @@ Antes do build iOS, o script `tool/prepare_ios_firebase.sh` precisa ser executad
 - A build `0.9.11 (27)` adiciona a descrição de localização exigida pela
   validação `ITMS-90683` e declara que o app utiliza somente criptografia isenta
   de documentação de exportação.
-- A entrega atual é `0.9.19 (35)`. O Codemagic deve usar a branch/tag
-  `v0.9.19+35`, que contém `version: 0.9.19+35`; o Flutter propagará
-  automaticamente `0.9.19` para `CFBundleShortVersionString` e `35` para
+- A entrega atual é `0.9.20 (36)`. O Codemagic deve usar a branch/tag
+  `v0.9.20+36`, que contém `version: 0.9.20+36`; o Flutter propagará
+  automaticamente `0.9.20` para `CFBundleShortVersionString` e `36` para
   `CFBundleVersion`.
-- Esta entrega adiciona a efetividade diária na Home e o módulo
-  Roteirização com filtros hierárquicos, lista de clientes e mapa; as
+- Esta entrega adiciona busca aos filtros hierárquicos, edição própria na
+  Agenda, consulta de Roteirização por período e o desempenho de roteirização
+  no Compromisso; as
   integrações de Firebase,
   APNs, câmera, biblioteca de fotos e localização permanecem preservadas.
   As chaves `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`,

@@ -3,6 +3,11 @@ class RoutingAnalysis {
     required this.available,
     required this.applicable,
     required this.referenceDate,
+    required this.startDate,
+    required this.endDate,
+    required this.requestedDays,
+    required this.availableDays,
+    required this.missingDates,
     required this.effectiveProfileSlug,
     required this.effectiveOwnerCode,
     required this.effectiveDisplayName,
@@ -24,6 +29,11 @@ class RoutingAnalysis {
   final bool available;
   final bool applicable;
   final DateTime referenceDate;
+  final DateTime startDate;
+  final DateTime endDate;
+  final int requestedDays;
+  final int availableDays;
+  final List<DateTime> missingDates;
   final String effectiveProfileSlug;
   final String effectiveOwnerCode;
   final String effectiveDisplayName;
@@ -43,13 +53,27 @@ class RoutingAnalysis {
 
   int get pending => planned - purchased;
   bool get isSellerView => effectiveProfileSlug == 'vendedor';
+  bool get isPeriod => startDate != endDate;
+  bool get hasIncompletePeriod => availableDays < requestedDays;
 
   factory RoutingAnalysis.fromJson(Map<String, dynamic> json) {
     final parsedDate = DateTime.tryParse('${json['reference_date'] ?? ''}');
+    final parsedStartDate = DateTime.tryParse('${json['start_date'] ?? ''}');
+    final parsedEndDate = DateTime.tryParse('${json['end_date'] ?? ''}');
+    final fallbackDate = parsedDate ?? DateTime.now();
     return RoutingAnalysis(
       available: json['available'] == true,
       applicable: json['applicable'] != false,
-      referenceDate: parsedDate ?? DateTime.now(),
+      referenceDate: fallbackDate,
+      startDate: parsedStartDate ?? fallbackDate,
+      endDate: parsedEndDate ?? parsedStartDate ?? fallbackDate,
+      requestedDays: _integer(json['requested_days']) > 0
+          ? _integer(json['requested_days'])
+          : 1,
+      availableDays: json.containsKey('available_days')
+          ? _integer(json['available_days'])
+          : (json['available'] == true ? 1 : 0),
+      missingDates: _dates(json['missing_dates']),
       effectiveProfileSlug: '${json['effective_profile_slug'] ?? ''}',
       effectiveOwnerCode: '${json['effective_owner_code'] ?? ''}',
       effectiveDisplayName: '${json['effective_display_name'] ?? ''}',
@@ -153,6 +177,7 @@ class RoutingCustomer {
     required this.orderCount,
     required this.routeCode,
     required this.routeSequence,
+    this.referenceDate,
     this.latitude,
     this.longitude,
   });
@@ -169,6 +194,7 @@ class RoutingCustomer {
   final int orderCount;
   final String routeCode;
   final int routeSequence;
+  final DateTime? referenceDate;
   final double? latitude;
   final double? longitude;
 
@@ -204,9 +230,20 @@ class RoutingCustomer {
         orderCount: _integer(json['order_count']),
         routeCode: '${json['route_code'] ?? ''}',
         routeSequence: _integer(json['route_sequence']),
+        referenceDate: DateTime.tryParse('${json['reference_date'] ?? ''}'),
         latitude: _nullableDecimal(json['latitude']),
         longitude: _nullableDecimal(json['longitude']),
       );
+}
+
+List<DateTime> _dates(Object? value) {
+  if (value is! List) {
+    return const <DateTime>[];
+  }
+  return value
+      .map((item) => DateTime.tryParse('$item'))
+      .whereType<DateTime>()
+      .toList(growable: false);
 }
 
 List<Map<String, dynamic>> _maps(Object? value) {

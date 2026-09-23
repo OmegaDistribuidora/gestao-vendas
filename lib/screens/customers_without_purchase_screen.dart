@@ -5,9 +5,17 @@ import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/customers_without_purchase.dart';
 import '../services/app_repository.dart';
+import '../widgets/searchable_user_scope_field.dart';
 
 class CustomersWithoutPurchaseScreen extends StatefulWidget {
-  const CustomersWithoutPurchaseScreen({super.key});
+  const CustomersWithoutPurchaseScreen({
+    super.key,
+    this.viewerProfileSlug = '',
+    this.initialCoordinatorScopes = const <CustomerScopeOption>[],
+  });
+
+  final String viewerProfileSlug;
+  final List<CustomerScopeOption> initialCoordinatorScopes;
 
   @override
   State<CustomersWithoutPurchaseScreen> createState() =>
@@ -49,13 +57,23 @@ class _CustomersWithoutPurchaseScreenState
       _overview.viewerProfileSlug == AppProfile.supervisorSlug;
   bool get _viewerIsCoordinator =>
       _overview.viewerProfileSlug == AppProfile.coordinatorSlug;
+  bool get _requiresCoordinatorSelection => const <String>{
+    AppProfile.boardSlug,
+    AppProfile.othersSlug,
+    AppProfile.managementSlug,
+  }.contains(widget.viewerProfileSlug);
   bool get _showsScopeSelector => _scopeOptions.isNotEmpty;
   bool get _showsSupplierSelector => _supplierOptions.isNotEmpty;
+  bool get _awaitingCoordinator =>
+      _requiresCoordinatorSelection && _selectedScope == null;
 
   List<CustomerScopeOption> get _scopeOptions {
     final seenValues = <String>{};
     final options = <CustomerScopeOption>[];
-    for (final scope in _overview.availableScopes) {
+    final source = _overview.availableScopes.isNotEmpty
+        ? _overview.availableScopes
+        : widget.initialCoordinatorScopes;
+    for (final scope in source) {
       if (seenValues.add(scope.value)) {
         options.add(scope);
       }
@@ -152,7 +170,11 @@ class _CustomersWithoutPurchaseScreenState
   @override
   void initState() {
     super.initState();
-    _loadOverview();
+    if (_requiresCoordinatorSelection) {
+      _loading = false;
+    } else {
+      _loadOverview();
+    }
   }
 
   @override
@@ -182,6 +204,22 @@ class _CustomersWithoutPurchaseScreenState
     String? targetScopeProfileSlug,
     String? targetScopeOwnerCode,
   }) async {
+    final requestedProfileSlug =
+        targetScopeProfileSlug ?? _selectedScope?.profileSlug;
+    final requestedOwnerCode =
+        targetScopeOwnerCode ?? _selectedScope?.ownerCode;
+    if (_requiresCoordinatorSelection &&
+        (requestedProfileSlug != AppProfile.coordinatorSlug ||
+            requestedOwnerCode == null ||
+            requestedOwnerCode.isEmpty)) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _errorMessage = null;
+        });
+      }
+      return;
+    }
     setState(() {
       _loading = true;
       _errorMessage = null;
@@ -191,8 +229,8 @@ class _CustomersWithoutPurchaseScreenState
       final overview = await _repository.getCustomersWithoutPurchase(
         start: _periodStart,
         end: _periodEnd,
-        targetScopeProfileSlug: targetScopeProfileSlug,
-        targetScopeOwnerCode: targetScopeOwnerCode,
+        targetScopeProfileSlug: requestedProfileSlug,
+        targetScopeOwnerCode: requestedOwnerCode,
         targetSupplierCode: _selectedSupplierCode,
       );
       if (!mounted) {
@@ -208,9 +246,11 @@ class _CustomersWithoutPurchaseScreenState
           .toSet();
       setState(() {
         _overview = overview;
-        _selectedScopeValue = _scopeValueExists(overview, nextScopeValue)
-            ? nextScopeValue
-            : null;
+        _selectedScopeValue = _requiresCoordinatorSelection
+            ? (nextScopeValue ?? _selectedScopeValue)
+            : (_scopeValueExists(overview, nextScopeValue)
+                  ? nextScopeValue
+                  : null);
         _selectedSupplierCode =
             overview.availableSuppliers.any(
               (supplier) => supplier.code == _selectedSupplierCode,
@@ -247,6 +287,9 @@ class _CustomersWithoutPurchaseScreenState
     setState(() {
       _selectedMonthStart = DateTime(parsed.year, parsed.month, 1);
     });
+    if (_requiresCoordinatorSelection && _selectedScope == null) {
+      return;
+    }
     await _reloadCurrentOverview();
   }
 
@@ -297,11 +340,16 @@ class _CustomersWithoutPurchaseScreenState
   }
 
   Future<void> _handleScopeChanged(String? value) async {
-    if (value == _selectedScopeValue) {
+    if (value == _selectedScopeValue ||
+        (_requiresCoordinatorSelection && value == null)) {
       return;
     }
 
     final selectedScope = _scopeFromValue(value);
+    if (value != null && selectedScope == null) {
+      return;
+    }
+    setState(() => _selectedScopeValue = value);
     await _loadOverview(
       targetScopeProfileSlug: selectedScope?.profileSlug,
       targetScopeOwnerCode: selectedScope?.ownerCode,
@@ -353,6 +401,9 @@ class _CustomersWithoutPurchaseScreenState
   }
 
   String _scopeSelectorLabel() {
+    if (_requiresCoordinatorSelection) {
+      return 'Coordenador obrigatório';
+    }
     if (_viewerIsSupervisor) {
       return 'Filtrar vendedor';
     }
@@ -363,6 +414,9 @@ class _CustomersWithoutPurchaseScreenState
   }
 
   String _allScopesLabel() {
+    if (_requiresCoordinatorSelection) {
+      return 'Selecione um coordenador';
+    }
     if (_viewerIsSupervisor) {
       return 'Todos os vendedores';
     }
@@ -558,27 +612,34 @@ class _CustomersWithoutPurchaseScreenState
             ),
             if (_showsScopeSelector) ...[
               const SizedBox(height: 12),
-              DropdownButtonFormField<String?>(
-                initialValue: _scopeValueExists(_overview, _selectedScopeValue)
+              SearchableUserScopeField(
+                selectedValue:
+                    _scopeOptions.any(
+                      (scope) => scope.value == _selectedScopeValue,
+                    )
                     ? _selectedScopeValue
                     : null,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: _scopeSelectorLabel(),
-                  prefixIcon: const Icon(Icons.account_tree_outlined),
-                ),
-                items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text(_allScopesLabel()),
-                  ),
-                  ..._scopeOptions.map(
-                    (scope) => DropdownMenuItem<String?>(
-                      value: scope.value,
-                      child: Text(scope.label),
-                    ),
-                  ),
-                ],
+                labelText: _scopeSelectorLabel(),
+                allLabel: _allScopesLabel(),
+                allowAll: !_requiresCoordinatorSelection,
+                title: _requiresCoordinatorSelection
+                    ? 'Selecione um coordenador'
+                    : 'Selecione quem deseja filtrar',
+                options: _scopeOptions
+                    .map(
+                      (scope) => SearchableUserScopeOption(
+                        value: scope.value,
+                        title: scope.displayName,
+                        subtitle:
+                            '${scope.profileSlug == AppProfile.coordinatorSlug
+                                ? 'Coordenador'
+                                : scope.profileSlug == AppProfile.supervisorSlug
+                                ? 'Supervisor'
+                                : 'Vendedor'} • ${scope.ownerCode}',
+                        code: scope.ownerCode,
+                      ),
+                    )
+                    .toList(growable: false),
                 onChanged: _handleScopeChanged,
               ),
             ],
@@ -937,7 +998,7 @@ class _CustomersWithoutPurchaseScreenState
         title: const Text('Clientes sem compra'),
         actions: [
           IconButton(
-            onPressed: _reloadCurrentOverview,
+            onPressed: _awaitingCoordinator ? null : _reloadCurrentOverview,
             icon: const Icon(Icons.refresh),
             tooltip: 'Atualizar',
           ),
@@ -967,56 +1028,82 @@ class _CustomersWithoutPurchaseScreenState
                   padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
                   children: [
                     _buildFiltersCard(),
-                    const SizedBox(height: 12),
-                    _buildSummaryCard(),
-                    const SizedBox(height: 12),
-                    _buildLastUpdateCard(),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _searchController,
-                      decoration: const InputDecoration(
-                        labelText:
-                            'Buscar por cliente, fantasia, CNPJ ou vendedor',
-                        prefixIcon: Icon(Icons.search),
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          _searchTerm = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Clientes',
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        Text(
-                          '${_filteredCustomers.length} cliente(s)',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: const Color(0xFF5E6A7C)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    if (_filteredCustomers.isEmpty)
+                    if (_awaitingCoordinator) ...[
+                      const SizedBox(height: 12),
                       const Card(
                         child: Padding(
                           padding: EdgeInsets.all(20),
-                          child: Text('Nenhum cliente sem compra encontrado.'),
-                        ),
-                      )
-                    else
-                      ..._filteredCustomers.map(
-                        (customer) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _buildCustomerCard(customer),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.info_outline_rounded,
+                                color: primaryColor,
+                              ),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Selecione um coordenador para carregar os clientes sem compra.',
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
+                    ] else ...[
+                      const SizedBox(height: 12),
+                      _buildSummaryCard(),
+                      const SizedBox(height: 12),
+                      _buildLastUpdateCard(),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _searchController,
+                        decoration: const InputDecoration(
+                          labelText:
+                              'Buscar por cliente, fantasia, CNPJ ou vendedor',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: (value) {
+                          setState(() {
+                            _searchTerm = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Clientes',
+                              style: Theme.of(context).textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          Text(
+                            '${_filteredCustomers.length} cliente(s)',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFF5E6A7C)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (_filteredCustomers.isEmpty)
+                        const Card(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Text(
+                              'Nenhum cliente sem compra encontrado.',
+                            ),
+                          ),
+                        )
+                      else
+                        ..._filteredCustomers.map(
+                          (customer) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildCustomerCard(customer),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
         ),

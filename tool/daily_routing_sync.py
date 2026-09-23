@@ -31,7 +31,7 @@ STATE_FILE = Path(
 )
 
 
-def fetch_snapshot(day=None):
+def fetch_snapshot(day=None, allow_empty=False):
     day = day or datetime.now(ZoneInfo('America/Sao_Paulo')).date()
     with psycopg.connect(
         host=POSTGRES_HOST, port=POSTGRES_PORT, dbname=POSTGRES_DB,
@@ -58,7 +58,7 @@ def fetch_snapshot(day=None):
                 'snapshot preservado.'
             )
         result = connection.execute(SQL.read_text(encoding='utf-8'), {'day': day}).fetchone()[0]
-    if not result['sellers'] or not result['source_updated_at']:
+    if not result['source_updated_at'] or (not result['sellers'] and not allow_empty):
         raise RuntimeError('Fonte de roteiro/hierarquia indisponivel; snapshot preservado.')
     signature_payload = {
         key: value

@@ -22,13 +22,16 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
   final RoutingAnalysisService _service = RoutingAnalysisService();
   final MapController _mapController = MapController();
   final DateFormat _dateFormat = DateFormat("EEEE, dd 'de' MMMM", 'pt_BR');
+  final DateFormat _shortDateFormat = DateFormat('dd/MM/yyyy', 'pt_BR');
   final DateFormat _timeFormat = DateFormat('HH:mm');
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'pt_BR',
     symbol: 'R\$',
   );
 
-  DateTime _selectedDate = _day(DateTime.now());
+  DateTime _selectedStartDate = _day(DateTime.now());
+  DateTime _selectedEndDate = _day(DateTime.now());
+  _RoutingDateMode _dateMode = _RoutingDateMode.day;
   RoutingAnalysis? _analysis;
   String? _selectedScopeValue;
   bool _loading = true;
@@ -67,6 +70,18 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
     return null;
   }
 
+  bool get _analysisMatchesSelection {
+    final analysis = _analysis;
+    if (analysis == null ||
+        _day(analysis.startDate) != _selectedStartDate ||
+        _day(analysis.endDate) != _selectedEndDate) {
+      return false;
+    }
+    final scope = _selectedScope;
+    return analysis.selectedScopeProfileSlug == scope?.profileSlug &&
+        analysis.selectedScopeOwnerCode == scope?.ownerCode;
+  }
+
   Future<void> _load({bool silent = false}) async {
     if (silent && (_loading || _silentLoading)) {
       return;
@@ -83,7 +98,8 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
     final scope = _selectedScope;
     try {
       final result = await _service.load(
-        date: _selectedDate,
+        startDate: _selectedStartDate,
+        endDate: _selectedEndDate,
         targetScopeProfileSlug: scope?.profileSlug,
         targetScopeOwnerCode: scope?.ownerCode,
       );
@@ -114,7 +130,9 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
       }
       setState(() {
         _loading = false;
-        _errorMessage = 'Não foi possível carregar a roteirização.\n$error';
+        _errorMessage = error is RoutingAnalysisException
+            ? error.message
+            : 'Não foi possível carregar a roteirização. Tente novamente.';
       });
     } finally {
       _silentLoading = false;
@@ -122,28 +140,97 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
   }
 
   Future<void> _selectDate() async {
+    if (_dateMode == _RoutingDateMode.period) {
+      final selected = await showDateRangePicker(
+        context: context,
+        initialDateRange: DateTimeRange(
+          start: _selectedStartDate,
+          end: _selectedEndDate,
+        ),
+        firstDate: DateTime(2026, 6),
+        lastDate: DateTime(2030, 12, 31),
+        helpText: 'Selecione o período do roteiro',
+        cancelText: 'Cancelar',
+        confirmText: 'Selecionar',
+        saveText: 'Selecionar',
+      );
+      if (selected == null) {
+        return;
+      }
+      final start = _day(selected.start);
+      final end = _day(selected.end);
+      if (end.difference(start).inDays >= 31) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Selecione um período de no máximo 31 dias.'),
+            ),
+          );
+        }
+        return;
+      }
+      if (start == _selectedStartDate && end == _selectedEndDate) {
+        return;
+      }
+      setState(() {
+        _selectedStartDate = start;
+        _selectedEndDate = end;
+        _view = _RoutingView.list;
+      });
+      await _load();
+      return;
+    }
+
     final selected = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
+      initialDate: _selectedStartDate,
       firstDate: DateTime(2026, 6),
       lastDate: DateTime(2030, 12, 31),
       helpText: 'Selecione o dia do roteiro',
       cancelText: 'Cancelar',
       confirmText: 'Selecionar',
     );
-    if (selected == null || _day(selected) == _selectedDate) {
+    if (selected == null || _day(selected) == _selectedStartDate) {
       return;
     }
     setState(() {
-      _selectedDate = _day(selected);
+      _selectedStartDate = _day(selected);
+      _selectedEndDate = _selectedStartDate;
       _view = _RoutingView.list;
     });
     await _load();
   }
 
   Future<void> _moveDate(int days) async {
+    final rangeDays =
+        _selectedEndDate.difference(_selectedStartDate).inDays + 1;
+    final offset = _dateMode == _RoutingDateMode.period
+        ? days * rangeDays
+        : days;
     setState(() {
-      _selectedDate = _day(_selectedDate.add(Duration(days: days)));
+      _selectedStartDate = _day(_selectedStartDate.add(Duration(days: offset)));
+      _selectedEndDate = _day(_selectedEndDate.add(Duration(days: offset)));
+      _view = _RoutingView.list;
+    });
+    await _load();
+  }
+
+  Future<void> _changeDateMode(_RoutingDateMode mode) async {
+    if (mode == _dateMode) {
+      return;
+    }
+    setState(() {
+      _dateMode = mode;
+      if (mode == _RoutingDateMode.day) {
+        _selectedStartDate = _selectedEndDate;
+      } else {
+        _selectedStartDate = _day(
+          _selectedEndDate.subtract(const Duration(days: 6)),
+        );
+      }
+      _selectedEndDate = mode == _RoutingDateMode.day
+          ? _selectedStartDate
+          : _selectedEndDate;
       _view = _RoutingView.list;
     });
     await _load();
@@ -262,10 +349,10 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading && _analysis == null) {
+    if (_loading && !_analysisMatchesSelection) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_errorMessage != null && _analysis == null) {
+    if (_errorMessage != null && !_analysisMatchesSelection) {
       return _RoutingError(message: _errorMessage!, onRetry: _load);
     }
 
@@ -281,14 +368,22 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
             _RoutingEmpty(
               icon: Icons.event_busy_outlined,
               title: 'Dados ainda não disponíveis',
-              message: 'Ainda não há uma captura do roteiro para esta data.',
+              message: analysis.isPeriod
+                  ? 'Ainda não há capturas do roteiro para este período.'
+                  : 'Ainda não há uma captura do roteiro para esta data.',
             )
           else if (!analysis.applicable || analysis.planned == 0)
             _RoutingEmpty(
               icon: Icons.route_outlined,
-              title: 'Sem roteiro para esta data',
+              title: analysis.isPeriod
+                  ? 'Sem roteiro para este período'
+                  : 'Sem roteiro para esta data',
               message: analysis.isSellerView
-                  ? 'O vendedor selecionado não possui clientes programados neste dia.'
+                  ? analysis.isPeriod
+                        ? 'O vendedor selecionado não possui clientes programados neste período.'
+                        : 'O vendedor selecionado não possui clientes programados neste dia.'
+                  : analysis.isPeriod
+                  ? 'Não existem clientes roteirizados neste escopo para o período selecionado.'
                   : 'Não existem clientes roteirizados neste escopo para o dia selecionado.',
             )
           else ...[
@@ -305,7 +400,10 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
   }
 
   Widget _buildFilters(RoutingAnalysis analysis) {
-    final dateLabel = _capitalize(_dateFormat.format(_selectedDate));
+    final dateLabel = _dateMode == _RoutingDateMode.day
+        ? _capitalize(_dateFormat.format(_selectedStartDate))
+        : '${_shortDateFormat.format(_selectedStartDate)} a '
+              '${_shortDateFormat.format(_selectedEndDate)}';
     final scope = _selectedScope;
     return Card(
       child: Padding(
@@ -334,10 +432,42 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
             const SizedBox(height: 14),
             Row(
               children: [
+                const SizedBox(width: 48),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SegmentedButton<_RoutingDateMode>(
+                    segments: const [
+                      ButtonSegment<_RoutingDateMode>(
+                        value: _RoutingDateMode.day,
+                        icon: Icon(Icons.today_outlined),
+                        label: Text('Dia'),
+                      ),
+                      ButtonSegment<_RoutingDateMode>(
+                        value: _RoutingDateMode.period,
+                        icon: Icon(Icons.date_range_outlined),
+                        label: Text('Período'),
+                      ),
+                    ],
+                    selected: {_dateMode},
+                    showSelectedIcon: false,
+                    onSelectionChanged: _loading
+                        ? null
+                        : (selection) => _changeDateMode(selection.first),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const SizedBox(width: 48),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
                 IconButton.outlined(
                   onPressed: () => _moveDate(-1),
                   icon: const Icon(Icons.chevron_left_rounded),
-                  tooltip: 'Dia anterior',
+                  tooltip: _dateMode == _RoutingDateMode.day
+                      ? 'Dia anterior'
+                      : 'Período anterior',
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -354,7 +484,9 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
                 IconButton.outlined(
                   onPressed: () => _moveDate(1),
                   icon: const Icon(Icons.chevron_right_rounded),
-                  tooltip: 'Próximo dia',
+                  tooltip: _dateMode == _RoutingDateMode.day
+                      ? 'Próximo dia'
+                      : 'Próximo período',
                 ),
               ],
             ),
@@ -456,6 +588,41 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
                 ),
               ],
             ),
+            if (analysis.isPeriod && analysis.hasIncompletePeriod) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF5E5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      color: Color(0xFFE77A00),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Dados disponíveis em ${analysis.availableDays} de '
+                        '${analysis.requestedDays} dias do período.',
+                        style: const TextStyle(
+                          color: Color(0xFF915000),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
@@ -557,6 +724,7 @@ class _RoutingAnalysisScreenState extends State<RoutingAnalysisScreen> {
           _RoutingCustomerCard(
             customer: customer,
             currencyFormat: _currencyFormat,
+            showDate: analysis.isPeriod,
             onTap: () => _showCustomer(customer),
           ),
           const SizedBox(height: 10),
@@ -835,10 +1003,12 @@ class _RoutingCustomerCard extends StatelessWidget {
   const _RoutingCustomerCard({
     required this.customer,
     required this.currencyFormat,
+    required this.showDate,
     required this.onTap,
   });
   final RoutingCustomer customer;
   final NumberFormat currencyFormat;
+  final bool showDate;
   final VoidCallback onTap;
 
   @override
@@ -874,6 +1044,20 @@ class _RoutingCustomerCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (showDate && customer.referenceDate != null) ...[
+                      Text(
+                        DateFormat(
+                          "EEEE, dd/MM",
+                          'pt_BR',
+                        ).format(customer.referenceDate!),
+                        style: const TextStyle(
+                          color: primaryColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                     Text(
                       '${customer.code} • ${customer.name}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
@@ -987,6 +1171,14 @@ class _RoutingCustomerSheet extends StatelessWidget {
                     'Rota ${customer.routeCode}'
                     '${customer.routeSequence > 0 ? ' • Sequência ${customer.routeSequence}' : ''}',
               ),
+            if (customer.referenceDate != null)
+              _DetailLine(
+                icon: Icons.calendar_today_outlined,
+                text: DateFormat(
+                  "EEEE, dd 'de' MMMM 'de' yyyy",
+                  'pt_BR',
+                ).format(customer.referenceDate!),
+              ),
             _DetailLine(
               icon: customer.purchased
                   ? Icons.check_circle_outline_rounded
@@ -1004,6 +1196,8 @@ class _RoutingCustomerSheet extends StatelessWidget {
     );
   }
 }
+
+enum _RoutingDateMode { day, period }
 
 class _DetailLine extends StatelessWidget {
   const _DetailLine({required this.icon, required this.text, this.color});

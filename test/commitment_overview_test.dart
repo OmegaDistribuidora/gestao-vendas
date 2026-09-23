@@ -68,6 +68,35 @@ void main() {
 
     expect(total, isNull);
   });
+
+  test(
+    'routing is parsed only when the commitment item has planned visits',
+    () {
+      final withRouting = CommitmentItem.fromJson(<String, dynamic>{
+        'profile_slug': 'supervisor',
+        'owner_code': '20',
+        'display_name': 'Supervisor 20',
+        'routing_planned': 18,
+        'routing_purchased': 9,
+        'routing_percent': 50,
+        'routing_sale_amount': 1250.50,
+        'routing_requested_days': 6,
+        'routing_available_days': 5,
+      });
+      final withoutRouting = CommitmentItem.fromJson(<String, dynamic>{
+        'profile_slug': 'supervisor',
+        'owner_code': '33',
+        'display_name': 'Supervisor 33',
+      });
+
+      expect(withRouting.hasRouting, isTrue);
+      expect(withRouting.routingPlanned, 18);
+      expect(withRouting.routingPurchased, 9);
+      expect(withRouting.routingPercent, 50);
+      expect(withoutRouting.hasRouting, isFalse);
+      expect(withoutRouting.routingPlanned, isNull);
+    },
+  );
 }
 
 CommitmentItem _item({

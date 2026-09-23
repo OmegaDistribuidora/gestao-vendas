@@ -6,6 +6,7 @@ import '../core/app_theme.dart';
 import '../models/app_profile.dart';
 import '../models/delinquency_overview.dart';
 import '../services/app_repository.dart';
+import '../widgets/searchable_user_scope_field.dart';
 
 class DelinquencyScreen extends StatefulWidget {
   const DelinquencyScreen({super.key});
@@ -328,10 +329,6 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
     return _formatCurrency(value);
   }
 
-  Widget _dropdownLabel(String text) {
-    return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);
-  }
-
   String _formatDate(DateTime? value) {
     if (value == null) {
       return '--';
@@ -400,30 +397,24 @@ class _DelinquencyScreenState extends State<DelinquencyScreen> {
             ),
             if (_showsScopeSelector) ...[
               const SizedBox(height: 18),
-              DropdownButtonFormField<String?>(
+              SearchableUserScopeField(
                 key: ValueKey<String?>(_selectedScopeValue),
-                initialValue: _scopeValueExists(_overview, _selectedScopeValue)
+                selectedValue: _scopeValueExists(_overview, _selectedScopeValue)
                     ? _selectedScopeValue
                     : null,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: _scopeSelectorLabel(),
-                  prefixIcon: const Icon(Icons.account_tree_outlined),
-                ),
-                items: <DropdownMenuItem<String?>>[
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: _dropdownLabel(_allScopesLabel()),
-                  ),
-                  ..._scopeOptions.map(
-                    (scope) => DropdownMenuItem<String?>(
-                      value: scope.value,
-                      child: _dropdownLabel(
-                        '${_profileLabel(scope.profileSlug)} - ${scope.label}',
+                labelText: _scopeSelectorLabel(),
+                allLabel: _allScopesLabel(),
+                options: _scopeOptions
+                    .map(
+                      (scope) => SearchableUserScopeOption(
+                        value: scope.value,
+                        title: scope.displayName,
+                        subtitle:
+                            '${_profileLabel(scope.profileSlug)} • ${scope.ownerCode}',
+                        code: scope.ownerCode,
                       ),
-                    ),
-                  ),
-                ],
+                    )
+                    .toList(growable: false),
                 onChanged: _handleScopeChanged,
               ),
             ],

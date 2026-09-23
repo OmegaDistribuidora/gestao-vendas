@@ -56,6 +56,26 @@ class AgendaService {
     _decode(response);
   }
 
+  Future<void> updateTask({
+    required int taskId,
+    required String title,
+    String? description,
+    DateTime? dueAt,
+    required String priority,
+  }) async {
+    final response = await _client.patch(
+      Uri.parse('$_baseUrl/api/mobile/agenda/tasks/$taskId'),
+      headers: await _headers(json: true),
+      body: jsonEncode(<String, dynamic>{
+        'title': title.trim(),
+        'description': description?.trim(),
+        'dueAt': dueAt?.toUtc().toIso8601String(),
+        'priority': priority,
+      }),
+    );
+    _decode(response);
+  }
+
   Future<void> updateStatus(
     int taskId,
     String status, {

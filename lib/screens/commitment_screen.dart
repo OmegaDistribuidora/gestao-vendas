@@ -6,6 +6,7 @@ import '../models/app_profile.dart';
 import '../models/commitment_overview.dart';
 import '../services/app_repository.dart';
 import '../utils/business_day_projection.dart';
+import '../widgets/searchable_user_scope_field.dart';
 
 class CommitmentScreen extends StatefulWidget {
   const CommitmentScreen({super.key});
@@ -318,27 +319,28 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
             ),
             if (_showsUserFilter) ...[
               const SizedBox(height: 12),
-              DropdownButtonFormField<String?>(
+              SearchableUserScopeField(
                 key: ValueKey('scope-$_selectedScopeValue'),
-                initialValue: _selectedScopeValue,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Supervisor ou coordenador',
-                  prefixIcon: Icon(Icons.manage_accounts_outlined),
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('Todos'),
-                  ),
-                  ..._overview.availableScopes.map(
-                    (scope) => DropdownMenuItem<String?>(
-                      value: scope.value,
-                      child: Text(scope.label, overflow: TextOverflow.ellipsis),
-                    ),
-                  ),
-                ],
-                onChanged: _loading ? null : _changeScope,
+                selectedValue: _selectedScopeValue,
+                labelText: 'Supervisor ou coordenador',
+                allLabel: 'Todos',
+                enabled: !_loading,
+                options: _overview.availableScopes
+                    .map(
+                      (scope) => SearchableUserScopeOption(
+                        value: scope.value,
+                        title: scope.displayName,
+                        subtitle:
+                            '${scope.profileSlug == AppProfile.managementSlug
+                                ? 'Gerência'
+                                : scope.profileSlug == AppProfile.coordinatorSlug
+                                ? 'Coordenador'
+                                : 'Supervisor'} • ${scope.ownerCode}',
+                        code: scope.ownerCode,
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: _changeScope,
               ),
             ],
           ],
@@ -460,8 +462,115 @@ class _CommitmentScreenState extends State<CommitmentScreen> {
               dailyFormatter: (value) =>
                   '${_integerFormat.format(value.ceil())}/dia',
             ),
+            if (item.hasRouting) ...[
+              const SizedBox(height: 12),
+              _buildRoutingPerformance(item),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildRoutingPerformance(CommitmentItem item) {
+    final planned = item.routingPlanned ?? 0;
+    final purchased = item.routingPurchased ?? 0;
+    final percent = item.routingPercent;
+    final availableDays = item.routingAvailableDays ?? 0;
+    final requestedDays = item.routingRequestedDays ?? 0;
+    final incomplete = requestedDays > 0 && availableDays < requestedDays;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F6FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFDCE2FF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8ECFF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.route_rounded, color: primaryColor),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Desempenho de roteirização',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                ),
+              ),
+              Text(
+                percent == null ? '--' : '${_percentFormat.format(percent)}%',
+                style: const TextStyle(
+                  color: primaryColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricValue(
+                  label: 'A atender',
+                  value: _integerFormat.format(planned),
+                ),
+              ),
+              Container(width: 1, height: 36, color: const Color(0xFFDCE2FF)),
+              Expanded(
+                child: _MetricValue(
+                  label: 'Com venda',
+                  value: _integerFormat.format(purchased),
+                  alignEnd: true,
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Venda nos clientes do roteiro',
+                  style: TextStyle(
+                    color: Color(0xFF64718A),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                _currencyFormat.format(item.routingSaleAmount ?? 0),
+                style: const TextStyle(
+                  color: kpiFinancialColor,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          if (incomplete) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Dados disponíveis em $availableDays de $requestedDays dias do período.',
+              style: const TextStyle(
+                color: Color(0xFF915000),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
