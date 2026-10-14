@@ -277,6 +277,9 @@ na interface nao substitui a autorizacao no backend.
   vencimentos de outubro de 2024 ate setembro de 2026.
 - Um titulo passa a afetar a Performance somente no mes seguinte ao
   vencimento e permanece ate ser pago ou sair da janela de 24 meses.
+- A Gold nao limita os titulos pela data de inicio do vendedor. Todo titulo
+  atribuido ao codigo do vendedor entra quando atende a janela de vencimento
+  e as demais regras de inadimplencia.
 - O backend limita o acesso ao escopo do usuario autenticado.
 
 6.6 Pedidos Bloqueados
