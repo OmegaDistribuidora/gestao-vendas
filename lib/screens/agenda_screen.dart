@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -27,8 +26,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
   AgendaUser? _selectedOwner;
   String? _error;
   bool _loading = true;
-  bool _locationPreparationStarted = false;
-  AgendaCompletionLocation? _preparedCompletionLocation;
 
   @override
   void initState() {
@@ -54,10 +51,6 @@ class _AgendaScreenState extends State<AgendaScreen> {
         _overview = overview;
         if (overview.canSelectOwner) _selectedOwner = overview.user;
       });
-      if (overview.canEdit && !_locationPreparationStarted) {
-        _locationPreparationStarted = true;
-        unawaited(_prepareCompletionLocation());
-      }
     } on AgendaServiceException catch (error) {
       if (!mounted) return;
       setState(() => _error = error.message);
@@ -122,21 +115,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
     if (changed == true) await _load();
   }
 
-  Future<void> _prepareCompletionLocation() async {
-    _preparedCompletionLocation = await _captureCompletionLocation(
-      requestPermission: true,
-    );
-  }
-
   Future<AgendaCompletionLocation> _completionLocationForSubmit() async {
-    final latest = await _captureCompletionLocation(requestPermission: false);
-    if (latest.shared) {
-      _preparedCompletionLocation = latest;
-      return latest;
-    }
-    return _preparedCompletionLocation?.shared == true
-        ? _preparedCompletionLocation!
-        : latest;
+    return _captureCompletionLocation(requestPermission: true);
   }
 
   Future<AgendaCompletionLocation> _captureCompletionLocation({

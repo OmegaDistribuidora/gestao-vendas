@@ -59,24 +59,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
   bool get _viewerIsCoordinator =>
       _overview.viewerProfileSlug == AppProfile.coordinatorSlug;
 
-  PerformanceMetric? get _sellerDelinquencyMetric {
-    if (!_isSeller) {
-      return null;
-    }
-    final overallItem = _overview.overallItem;
-    if (overallItem == null || !overallItem.usesGoldPerformance) {
-      return null;
-    }
-    for (final metric in overallItem.metrics) {
-      if (metric.key == 'delinquency' &&
-          metric.actual != null &&
-          metric.target != null) {
-        return metric;
-      }
-    }
-    return null;
-  }
-
   ({double current, double maximum})? get _prizeSummary {
     if (!_isNamedProfile) {
       return null;
@@ -617,32 +599,6 @@ class _PerformanceScreenState extends State<PerformanceScreen> {
                       ),
                     ),
                   ],
-                ),
-              ),
-            ],
-            if (_sellerDelinquencyMetric case final metric?) ...[
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 11,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF8E8),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFF5D98B)),
-                ),
-                child: Text(
-                  'Sua inadimplência está em '
-                  '${_formatPercent(metric.actual! * 100)}. Você deve ficar '
-                  'abaixo de ${_formatPercent(metric.target! * 100)} para não '
-                  'ter parte de sua premiação retida.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF7C5A05),
-                    fontWeight: FontWeight.w700,
-                    height: 1.35,
-                  ),
                 ),
               ),
             ],
