@@ -736,6 +736,7 @@ class _AgendaTaskSheetState extends State<_AgendaTaskSheet> {
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
+    final bottomSafeInset = MediaQuery.viewPaddingOf(context).bottom;
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.92,
@@ -758,7 +759,7 @@ class _AgendaTaskSheetState extends State<_AgendaTaskSheet> {
           ),
           Flexible(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 28 + bottomSafeInset),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1037,12 +1038,13 @@ class _AgendaCreateTaskSheetState extends State<_AgendaCreateTaskSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
     return Container(
       padding: EdgeInsets.fromLTRB(
         20,
         12,
         20,
-        20 + MediaQuery.viewInsetsOf(context).bottom,
+        20 + mediaQuery.viewInsets.bottom + mediaQuery.viewPadding.bottom,
       ),
       decoration: const BoxDecoration(
         color: Color(0xFFF8FAFE),
