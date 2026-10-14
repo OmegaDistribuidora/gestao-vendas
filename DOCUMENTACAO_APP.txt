@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 23/09/2026
-Versao atual do projeto: 0.9.20+36
+Ultima atualizacao desta documentacao: 14/10/2026
+Versao atual do projeto: 0.9.21+37
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -22,7 +22,7 @@ WinThor por scripts Python e carregados no Supabase.
 2. TECNOLOGIAS PRINCIPAIS
 -------------------------
 
-- Flutter e Dart para o aplicativo Android.
+- Flutter e Dart para os aplicativos Android e iOS.
 - Material Design para a interface.
 - Supabase Auth para autenticacao.
 - Supabase PostgreSQL para dados, regras, RLS e RPCs.
@@ -124,8 +124,10 @@ Regras gerais:
   recorte e aplicado pelas RPCs, nao apenas pela interface. Nos filtros de
   troca de visao, Gerencia pode selecionar somente esses coordenadores e seus
   supervisores e vendedores; nunca outro usuario de Gerencia.
-- O modulo Clientes sem compra e exclusivo para vendedor, supervisor e
-  coordenador, inclusive com validacao no backend.
+- O modulo Clientes sem compra atende vendedor, supervisor e coordenador.
+  Gerencia, Diretoria e Outros tambem podem consultar o modulo, mas precisam
+  selecionar ao menos um coordenador antes da carga para evitar uma consulta
+  desnecessaria de toda a empresa.
 
 As regras de escopo devem sempre ser validadas no Supabase. Esconder um item
 na interface nao substitui a autorizacao no backend.
@@ -268,6 +270,13 @@ na interface nao substitui a autorizacao no backend.
 - Exibe titulos e clientes inadimplentes conforme hierarquia.
 - Permite filtro por vendedor ou supervisor quando aplicavel.
 - Agrupa dados por cliente, pedido e demais identificadores financeiros.
+- Exclui titulos com codigo de cobranca PERD ou PER2 da exibicao e dos
+  calculos.
+- Considera uma janela movel de 24 meses completos anteriores ao mes de
+  referencia. Para a Performance de outubro de 2026, por exemplo, entram
+  vencimentos de outubro de 2024 ate setembro de 2026.
+- Um titulo passa a afetar a Performance somente no mes seguinte ao
+  vencimento e permanece ate ser pago ou sair da janela de 24 meses.
 - O backend limita o acesso ao escopo do usuario autenticado.
 
 6.6 Pedidos Bloqueados
@@ -281,7 +290,10 @@ na interface nao substitui a autorizacao no backend.
 
 Disponibilidade:
 
-- Somente vendedor, supervisor e coordenador.
+- Vendedor, supervisor e coordenador acessam diretamente conforme a propria
+  carteira/hierarquia.
+- Gerencia, Diretoria e Outros precisam selecionar ao menos um coordenador
+  antes de consultar os dados.
 
 Regra de carteira:
 
@@ -462,7 +474,10 @@ Objetivo e integracao:
 Perfis e escopo:
 
 - Vendedor nao acessa o modulo.
-- Supervisor e coordenador veem somente as proprias atividades.
+- Supervisor ve somente as proprias atividades.
+- Coordenador inicia na propria agenda e pode filtrar as agendas dos
+  supervisores diretamente vinculados a ele. Nao pode consultar atividades de
+  outros coordenadores nem de supervisores fora da sua hierarquia.
 - Diretoria e Outros podem selecionar e consultar a agenda de supervisores e
   coordenadores.
 - Gerencia pode selecionar somente coordenadores 9, 10, 12, 13 e 14 e os
@@ -477,20 +492,26 @@ Perfis e escopo:
 Acoes permitidas no aplicativo:
 
 - Supervisor e coordenador podem criar atividades apenas para si mesmos.
+- Supervisor e coordenador podem editar somente as proprias atividades; ao
+  consultar a agenda de outra pessoa, a visualizacao e somente leitura.
+- Supervisor e coordenador nao podem excluir atividades.
 - Ao abrir a criacao de uma atividade, o prazo ja vem preenchido com a data
   atual tanto no aplicativo quanto no sistema web. O usuario ainda pode alterar
   ou remover essa data antes de salvar.
 - A pasta regional e definida no backend pela hierarquia comercial: Capital
   para coordenador 12, Cariri para coordenador 13 e Interior para coordenador
   10, incluindo seus respectivos supervisores.
-- Nao e permitido excluir, reatribuir responsavel ou editar livremente uma
-  atividade pelo aplicativo.
+- Nao e permitido reatribuir o responsavel pelo aplicativo.
 - E permitido iniciar/concluir, adicionar observacao e anexar foto pela
   camera ou biblioteca, alem de visualizar anexos existentes.
-- Ao concluir, o aplicativo tenta registrar coordenadas e endereco. Se a
+- Ao concluir, e somente nesse momento, o aplicativo solicita a localizacao e
+  tenta registrar coordenadas e endereco. Se a
   permissao nao for concedida, registra que a localizacao nao foi
   compartilhada. A localizacao fica visivel somente para perfis autorizados
   no sistema web da Agenda.
+- As folhas de visualizacao, criacao e edicao respeitam a area segura inferior
+  do Android e do iOS, mantendo as acoes acima da navegacao do sistema e do
+  indicador Home, inclusive quando o teclado esta aberto.
 - A API e consultada ao abrir, alterar periodo/responsavel, atualizar a tela ou
   concluir uma acao; nao existe polling continuo em segundo plano.
 - Sessoes Supabase proximas da expiracao sao renovadas antes das chamadas para
@@ -1054,9 +1075,23 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.20
-- versionCode / CFBundleVersion: 36
-- Release multiplataforma: 0.9.20+36
+- versionName / CFBundleShortVersionString: 0.9.21
+- versionCode / CFBundleVersion: 37
+- Release multiplataforma: 0.9.21+37
+
+Release 0.9.21+37:
+
+- Coordenador volta a filtrar a agenda dos supervisores vinculados, mantendo
+  as agendas de terceiros somente para leitura.
+- A Agenda solicita localizacao apenas ao concluir uma atividade, evitando
+  trabalho desnecessario durante a abertura do modulo.
+- Formularios e acoes inferiores da Agenda respeitam as areas seguras do
+  Android e do iOS, sem ficar sob os controles de navegacao do aparelho.
+- Inadimplencia passa a considerar somente os 24 meses completos anteriores
+  ao mes de referencia, preservando a regra de comecar a afetar a Performance
+  no mes seguinte ao vencimento.
+- Removido da Performance o aviso textual de retencao por inadimplencia, sem
+  alterar os indicadores e calculos aplicaveis.
 
 Release 0.9.20+36:
 
@@ -1534,7 +1569,7 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Entrega multiplataforma atual: 0.9.20 build 36.
+- Entrega multiplataforma atual: 0.9.21 build 37.
 
 
 14. MODULO ROTEIRIZACAO
