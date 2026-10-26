@@ -1,8 +1,8 @@
 DOCUMENTACAO DO APP - GESTAO DE VENDAS
 ======================================
 
-Ultima atualizacao desta documentacao: 14/10/2026
-Versao atual do projeto: 0.9.21+37
+Ultima atualizacao desta documentacao: 26/10/2026
+Versao atual do projeto: 0.9.22+38
 Pacote Android: br.com.omegadistribuidora.gestao_vendas
 
 
@@ -1078,9 +1078,21 @@ volume de staging e timeout das funcoes do Supabase.
 
 Versao preparada para Android e iOS:
 
-- versionName / CFBundleShortVersionString: 0.9.21
-- versionCode / CFBundleVersion: 37
-- Release multiplataforma: 0.9.21+37
+- versionName / CFBundleShortVersionString: 0.9.22
+- versionCode / CFBundleVersion: 38
+- Release multiplataforma: 0.9.22+38
+
+Release 0.9.22+38:
+
+- Novo modulo Coach Mercado para registrar a presenca de secoes de produtos
+  por cliente, com consulta dos dados comerciais, historico de visitas,
+  localizacao obrigatoria e envio offline com tentativa automatica posterior.
+- A permissao do Coach Mercado e consultada na API e protegida tambem nos
+  endpoints. Nesta entrega somente Diretoria visualiza e utiliza o modulo.
+- Os perfis autorizados podem ser ampliados futuramente na configuracao da API,
+  sem exigir uma nova versao do aplicativo.
+- Exibicao dos vendedores e supervisores vinculados ao cliente, percentual das
+  respostas e detalhamento dos registros anteriores.
 
 Release 0.9.21+37:
 
@@ -1572,7 +1584,7 @@ build/app/outputs/bundle/release/app-release.aab
   utiliza somente criptografia isenta para comunicacao segura, autenticacao e
   armazenamento fornecidos pelo sistema/runtime e servicos integrados.
 - Procedimento detalhado: docs/IOS_CODEMAGIC_SETUP.md.
-- Entrega multiplataforma atual: 0.9.21 build 37.
+- Entrega multiplataforma atual: 0.9.22 build 38.
 
 
 14. MODULO ROTEIRIZACAO
@@ -1614,6 +1626,57 @@ build/app/outputs/bundle/release/app-release.aab
   puxar e do botao Atualizar. A Home consulta junto ao seu ciclo de 2 minutos.
 - O emulador ainda pode usar DAILY_ROUTING_PREVIEW_URL e PostgreSQL isolado;
   builds release consultam somente as RPCs oficiais do Supabase.
+
+
+14.1 MODULO COACH MERCADO
+-------------------------
+
+- Objetivo: registrar a presenca ou ausencia de secoes de produtos no cliente.
+- Acesso inicial: somente o perfil Diretoria. A Home consulta GET
+  /v1/coach-mercado/acesso ao abrir e a cada dois minutos. Em falha, o app usa
+  o padrao seguro: Diretoria permanece habilitada e os demais perfis ficam sem
+  o atalho.
+- A API valida a mesma permissao em todos os endpoints do modulo. Os perfis
+  autorizados sao definidos em COACH_MARKET_ALLOWED_PROFILES, separados por
+  virgula. O valor inicial e diretoria. Para uma liberacao futura sem nova
+  versao do app, configurar, por exemplo,
+  diretoria,supervisor,coordenador e reiniciar a API.
+- Primeira configuracao: fornecedor Bombril (codigo 117), com 11 secoes fixas.
+  As secoes ficam centralizadas em coach_market.dart para facilitar inclusoes
+  e remocoes futuras.
+- O cliente e consultado pelo codigo na API Omega. Nome, cidade, bairro,
+  endereco e ultima compra sempre vem da API e nunca e digitado pelo usuario.
+- A consulta tambem retorna os dois vendedores do cliente e os respectivos
+  supervisores, conforme dcliente, dvendedor e dsupervisor no Omega.
+- Antes de iniciar um novo preenchimento, a tela mostra ate 20 registros
+  anteriores do cliente. Cada registro abre os detalhes das 11 respostas,
+  percentual de Sim, usuario, data, hora e localizacao do preenchimento.
+- O botao Novo abre o formulario. O cabecalho do fornecedor usa a logo da
+  Bombril e calcula dinamicamente o percentual de respostas Sim ja marcadas.
+- Respostas Sim usam confirmacao verde; respostas Nao usam um X vermelho.
+- Se a API estiver temporariamente indisponivel, o usuario ainda responde as
+  secoes. O formulario fica protegido no aparelho e, antes do reenvio, o app
+  consulta os dados oficiais do cliente na API.
+- Todas as secoes exigem resposta explicita Sim ou Nao.
+- A localizacao atual e obrigatoria no envio. Sao persistidos latitude,
+  longitude, precisao, horario e endereco aproximado quando disponivel.
+- Falhas transitorias de envio geram uma fila criptografada no aparelho. O app
+  tenta reenviar a cada 20 segundos enquanto a Home de um perfil autorizado
+  estiver aberta. O UUID do formulario impede duplicidade no banco.
+- API local: GET /v1/coach-mercado/acesso,
+  GET /v1/coach-mercado/clientes/{codigo} e
+  POST /v1/coach-mercado/respostas.
+- Banco local: filial.coachmercado, uma linha por secao respondida.
+- Imagens desta etapa: assets locais em assets/coach_mercado/bombril, para
+  manter o formulario utilizavel sem internet. Evolucao prevista: Supabase
+  Storage com configuracao remota e cache local.
+- A URL padrao de producao e https://apiomega.williamfmarinho.com.br.
+- Configuracao de teste do emulador: COACH_MARKET_API_URL deve apontar para
+  http://10.0.2.2:8787. HTTP local e aceito somente pelo manifest debug.
+- Builds release recusam enderecos locais/HTTP e usam a URL HTTPS de producao,
+  evitando publicar por engano uma compilacao configurada para o emulador.
+- Arquivos principais: coach_market_screen.dart, coach_market_service.dart,
+  coach_market.dart e app/coach_market.py no repositorio da API.
 
 
 15. DESENVOLVIMENTO E VALIDACAO

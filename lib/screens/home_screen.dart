@@ -15,6 +15,7 @@ import '../models/home_positive_customers.dart';
 import '../models/performance_overview.dart';
 import '../models/seller_home_kpis.dart';
 import '../services/app_repository.dart';
+import '../services/coach_market_service.dart';
 import '../services/daily_routing_service.dart';
 import '../widgets/daily_routing_card.dart';
 import '../services/push_notification_service.dart';
@@ -23,6 +24,7 @@ import 'admin_screen.dart';
 import 'agenda_screen.dart';
 import 'blocked_orders_screen.dart';
 import 'change_password_screen.dart';
+import 'coach_market_screen.dart';
 import 'commitment_screen.dart';
 import 'customer_opportunities_map_screen.dart';
 import 'customers_without_purchase_screen.dart';
@@ -63,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _errorMessage;
   String _appVersionLabel = 'Vers\u00E3o 0.9.12+28';
   bool _customerOpportunitiesEnabled = false;
+  bool _coachMarketEnabled = false;
   SellerHomeKpis _homeKpis = SellerHomeKpis.empty();
   HomePositiveCustomers _todayPositiveCustomers = const HomePositiveCustomers(
     totalClients: 0,
@@ -110,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
       !_isSeller && !_isSupervisor && !_isCoordinator;
   bool get _showsAgendaModule =>
       widget.currentUser.profile?.canAccessAgenda ?? false;
+  bool get _showsCoachMarketModule => _coachMarketEnabled;
   bool get _showsRoutingAnalysisModule =>
       RoutingAnalysisService.enabled &&
       (widget.currentUser.profile?.canAccessRoutingAnalysis ?? false);
@@ -160,6 +164,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _coachMarketEnabled =
+        widget.currentUser.profile?.canAccessCoachMarket ?? false;
     _pushNavigationSubscription = PushNotificationService
         .instance
         .navigationIntents
@@ -174,6 +180,10 @@ class _HomeScreenState extends State<HomeScreen> {
     _recordModuleAccess('home', 'In\u00EDcio');
     _loadAppVersion();
     _loadContent();
+    unawaited(_refreshCoachMarketAccess());
+    if (_showsCoachMarketModule) {
+      CoachMarketService.instance.startAutoRetry();
+    }
     _refreshTimer = Timer.periodic(
       const Duration(minutes: 2),
       (_) => unawaited(_autoRefresh()),
@@ -184,6 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _pushNavigationSubscription?.cancel();
+    CoachMarketService.instance.stopAutoRetry();
     super.dispose();
   }
 
@@ -194,8 +205,31 @@ class _HomeScreenState extends State<HomeScreen> {
     _autoRefreshing = true;
     try {
       await _loadContent(silent: true);
+      await _refreshCoachMarketAccess();
     } finally {
       _autoRefreshing = false;
+    }
+  }
+
+  Future<void> _refreshCoachMarketAccess() async {
+    final fallback = widget.currentUser.profile?.canAccessCoachMarket ?? false;
+    var enabled = fallback;
+    try {
+      enabled = await CoachMarketService.instance.canAccess();
+    } catch (_) {
+      // Falha fechada para os demais perfis; a Diretoria preserva o acesso
+      // offline para que formularios possam continuar entrando na fila local.
+      enabled = fallback;
+    }
+    if (!mounted) return;
+
+    if (_coachMarketEnabled != enabled) {
+      setState(() => _coachMarketEnabled = enabled);
+    }
+    if (enabled) {
+      CoachMarketService.instance.startAutoRetry();
+    } else {
+      CoachMarketService.instance.stopAutoRetry();
     }
   }
 
@@ -666,6 +700,14 @@ class _HomeScreenState extends State<HomeScreen> {
     ).push(MaterialPageRoute<void>(builder: (_) => const AgendaScreen()));
   }
 
+  Future<void> _openCoachMarket() async {
+    await _recordModuleAccess('coach_mercado', 'Coach Mercado');
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const CoachMarketScreen()));
+  }
+
   Future<void> _openRoutingAnalysis() async {
     await _recordModuleAccess('roteirizacao', 'Roteirização');
     if (!mounted) {
@@ -794,6 +836,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     await _openAgenda();
+  }
+
+  Future<void> _openCoachMarketFromDrawer() async {
+    Navigator.of(context).pop();
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) return;
+    await _openCoachMarket();
   }
 
   Future<void> _openRoutingAnalysisFromDrawer() async {
@@ -985,6 +1034,13 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.calendar_month_outlined,
           accent: const Color(0xFF4B61FF),
           onTap: _openAgenda,
+        ),
+      if (_showsCoachMarketModule)
+        _HomeShortcutData(
+          title: 'Coach Mercado',
+          icon: Icons.storefront_outlined,
+          accent: const Color(0xFFE0A000),
+          onTap: _openCoachMarket,
         ),
     ];
 
@@ -1842,6 +1898,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           onTap: _openAgendaFromDrawer,
+                        ),
+                      if (_showsCoachMarketModule)
+                        ListTile(
+                          leading: const Icon(Icons.storefront_outlined),
+                          title: const Text('Coach Mercado'),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          onTap: _openCoachMarketFromDrawer,
                         ),
                     ],
                   ),

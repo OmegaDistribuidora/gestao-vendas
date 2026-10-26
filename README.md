@@ -3,7 +3,7 @@
 Aplicativo Flutter para Android e iOS voltado à autenticação de usuários,
 acompanhamento comercial e gestão operacional integrada ao Supabase.
 
-Versão atual: `0.9.21+37`.
+Versão atual: `0.9.22+38`.
 
 ## Visão Geral
 

@@ -46,6 +46,7 @@ class AppProfile {
     othersSlug,
     managementSlug,
   }.contains(slug);
+  bool get canAccessCoachMarket => slug == boardSlug;
 
   factory AppProfile.fromJson(Map<String, dynamic> json) {
     return AppProfile(
