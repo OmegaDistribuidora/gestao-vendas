@@ -7,6 +7,14 @@
         android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!--
+          Evita falhas nativas do driver Vulkan MediaTek/PowerVR observadas
+          em producao durante a criacao de pipelines do Impeller. O iOS nao e
+          afetado por esta configuracao e continua usando o renderer padrao.
+        -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_stat_sales_notification" />

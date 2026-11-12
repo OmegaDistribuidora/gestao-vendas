@@ -57,18 +57,6 @@ class CoachMarketService {
     return CoachMarketCustomer.fromJson(_decode(response));
   }
 
-  Future<bool> canAccess() async {
-    final response = await _request(
-      () async => _client
-          .get(
-            Uri.parse('$_baseUrl/v1/coach-mercado/acesso'),
-            headers: await _headers(),
-          )
-          .timeout(const Duration(seconds: 10)),
-    );
-    return _decode(response)['enabled'] == true;
-  }
-
   Future<CoachMarketSubmitResult> submitOrQueue(
     CoachMarketSubmission submission, {
     bool requiresCustomerLookup = false,
